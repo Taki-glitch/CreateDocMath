@@ -3,21 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Générateur de Déroulement de Séance - Mathématiques</title>
+    <title>Générateur Avancé de Fiches de Séance - Mathématiques</title>
+    
+    <!-- KaTeX pour le rendu des formules mathématiques (LaTeX) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+    
+    <!-- html-docx.js pour l'export Word -->
+    <script src="https://cdn.jsdelivr.net/npm/html-docx-js@0.3.1/dist/html-docx.min.js"></script>
+
     <style>
         :root {
-            --primary-color: #2c3e50;
-            --secondary-color: #3498db;
-            --bg-color: #f4f7f6;
+            --primary-color: #1a365d;
+            --secondary-color: #2b6cb0;
+            --accent-color: #319795;
+            --bg-color: #f7fafc;
             --card-bg: #ffffff;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
             background-color: var(--bg-color);
             margin: 0;
             padding: 20px;
-            color: #333;
+            color: #2d3748;
         }
 
         .container {
@@ -26,13 +36,23 @@
             background: var(--card-bg);
             padding: 30px;
             border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
         }
 
         h1, h2 {
             color: var(--primary-color);
             border-bottom: 2px solid var(--secondary-color);
             padding-bottom: 8px;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            background: #edf2f7;
+            padding: 10px;
+            border-radius: 6px;
+            flex-wrap: wrap;
         }
 
         .form-section {
@@ -47,15 +67,15 @@
 
         label {
             display: block;
-            font-weight: bold;
+            font-weight: 600;
             margin-bottom: 5px;
-            color: #555;
+            color: #4a5568;
         }
 
-        input[type="text"], input[type="date"], textarea {
+        input[type="text"], input[type="date"], textarea, select {
             width: 100%;
             padding: 10px;
-            border: 1fr solid #ccc;
+            border: 1px solid #cbd5e0;
             border-radius: 4px;
             box-sizing: border-box;
             font-family: inherit;
@@ -64,39 +84,70 @@
 
         textarea {
             resize: vertical;
-            min-height: 80px;
+            min-height: 70px;
         }
 
-        .btn-submit {
-            background-color: var(--secondary-color);
-            color: white;
+        .checkbox-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+            background: #f8fafc;
+            padding: 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+        }
+
+        .checkbox-group label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: normal;
+            cursor: pointer;
+        }
+
+        /* Tableau dynamique du déroulement */
+        .phase-row {
+            display: grid;
+            grid-template-columns: 80px 150px 1fr 1fr 40px;
+            gap: 8px;
+            align-items: start;
+            margin-bottom: 10px;
+        }
+
+        .btn {
+            padding: 8px 15px;
             border: none;
-            padding: 12px 20px;
-            font-size: 16px;
             border-radius: 4px;
             cursor: pointer;
-            width: 100%;
-            margin-top: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            transition: background 0.2s;
         }
 
-        .btn-submit:hover {
-            background-color: #2980b9;
+        .btn-primary { background-color: var(--secondary-color); color: white; }
+        .btn-primary:hover { background-color: #2c5282; }
+        
+        .btn-success { background-color: #38a169; color: white; }
+        .btn-success:hover { background-color: #2f855a; }
+
+        .btn-secondary { background-color: #718096; color: white; }
+        .btn-danger { background-color: #e53e3e; color: white; padding: 8px; }
+
+        .total-time {
+            font-weight: bold;
+            text-align: right;
+            margin-top: 5px;
+            color: var(--primary-color);
         }
 
-        /* Style pour le document imprimable/généré */
+        /* Rendus d'impression et de document */
         #output {
             display: none;
             margin-top: 40px;
-            padding: 20px;
-            border: 1px solid #ccc;
+            padding: 25px;
+            border: 1px solid #e2e8f0;
             background: white;
-        }
-
-        .output-header {
-            text-align: center;
-            border-bottom: 2px solid var(--primary-color);
-            margin-bottom: 20px;
-            padding-bottom: 10px;
         }
 
         .output-table {
@@ -106,148 +157,147 @@
         }
 
         .output-table th, .output-table td {
-            border: 1px solid #333;
+            border: 1px solid #2d3748;
             padding: 10px;
             text-align: left;
             vertical-align: top;
         }
 
         .output-table th {
-            background-color: #f2f2f2;
-        }
-
-        .action-buttons {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-        }
-
-        .btn-print {
-            background-color: #27ae60;
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 4px;
-            cursor: pointer;
+            background-color: #edf2f7;
+            color: #1a202c;
         }
 
         @media print {
-            body * {
-                visibility: hidden;
-            }
-            #output, #output * {
-                visibility: visible;
-            }
+            body * { visibility: hidden; }
+            #output, #output * { visibility: visible; }
             #output {
                 display: block !important;
                 position: absolute;
                 left: 0;
                 top: 0;
                 width: 100%;
+                border: none;
+                padding: 0;
             }
-            .action-buttons {
-                display: none;
-            }
+            .toolbar, .action-buttons { display: none !important; }
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>Créateur de Fiche de Séance - Mathématiques</h1>
+    <h1>Générateur de Séance de Mathématiques</h1>
+
+    <!-- Barre d'outils Sauvegarde/Import/Export -->
+    <div class="toolbar">
+        <button class="btn btn-secondary" onclick="exportJSON()">💾 Exporter (JSON)</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">📂 Importer (JSON)</button>
+        <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
+        <button class="btn btn-secondary" onclick="resetForm()">🔄 Réinitialiser</button>
+        <span id="autoSaveStatus" style="margin-left: auto; align-self: center; font-size: 12px; color: #718096;"></span>
+    </div>
+
     <form id="seanceForm">
         
         <div class="form-section grid-2">
             <div>
                 <label for="sequence">Nom de la séquence :</label>
-                <input type="text" id="sequence" required placeholder="ex: Fractions et Partages">
+                <input type="text" id="sequence" placeholder="ex: Chapitre 3 - Fractions" oninput="autoSave()">
             </div>
             <div>
                 <label for="seanceNom">Nom de la séance :</label>
-                <input type="text" id="seanceNom" required placeholder="ex: Séance 1 - Égalité de fractions">
+                <input type="text" id="seanceNom" placeholder="ex: Séance 2 - Addition de fractions" oninput="autoSave()">
             </div>
         </div>
 
         <div class="form-section grid-2">
             <div>
                 <label for="seanceDate">Date de la séance :</label>
-                <input type="date" id="seanceDate">
+                <input type="date" id="seanceDate" oninput="autoSave()">
             </div>
             <div>
                 <label for="objectifs">Objectif(s) de la séance :</label>
-                <textarea id="objectifs" placeholder="ex: Comprendre la notion de fractions équivalentes"></textarea>
+                <textarea id="objectifs" placeholder="ex: Additionner deux fractions de même dénominateur" oninput="autoSave()"></textarea>
             </div>
         </div>
 
-        <h2>Programme et Bulletin Officiel (BO)</h2>
+        <h2>Cadre Institutionnel & BO</h2>
         <div class="form-section">
             <label for="boEcrits">Écrits du Bulletin Officiel (BO) :</label>
-            <textarea id="boEcrits" placeholder="Extrait du programme officiel..."></textarea>
+            <textarea id="boEcrits" placeholder="Extrait du programme..." oninput="autoSave()"></textarea>
 
             <label for="boCapacites">Contenu du BO et capacités attendues :</label>
-            <textarea id="boCapacites" placeholder="Capacité visée : Simplifier une fraction..."></textarea>
+            <textarea id="boCapacites" placeholder="Capacité visée..." oninput="autoSave()"></textarea>
 
-            <label for="competencesMaths">Lien avec les compétences mathématiques :</label>
-            <input type="text" id="competencesMaths" placeholder="Chercher, Modéliser, Représenter, Calculer, Raisonner, Communiquer[cite: 4]">
+            <label>Compétences Mathématiques travaillées :</label>
+            <div class="checkbox-group">
+                <label><input type="checkbox" name="comp" value="Chercher" onchange="autoSave()"> Chercher</label>
+                <label><input type="checkbox" name="comp" value="Modéliser" onchange="autoSave()"> Modéliser</label>
+                <label><input type="checkbox" name="comp" value="Représenter" onchange="autoSave()"> Représenter</label>
+                <label><input type="checkbox" name="comp" value="Calculer" onchange="autoSave()"> Calculer</label>
+                <label><input type="checkbox" name="comp" value="Raisonner" onchange="autoSave()"> Raisonner</label>
+                <label><input type="checkbox" name="comp" value="Communiquer" onchange="autoSave()"> Communiquer</label>
+            </div>
         </div>
 
         <h2>Pré-requis</h2>
         <div class="form-section grid-2">
             <div>
-                <label for="prerequisCognitifs">Pré-requis (Connaissances / Compétences) :</label>
-                <textarea id="prerequisCognitifs" placeholder="Tables de multiplication, division euclidienne..."></textarea>
+                <label for="prerequisCognitifs">Pré-requis (Connaissances/Compétences) :</label>
+                <textarea id="prerequisCognitifs" oninput="autoSave()"></textarea>
             </div>
             <div>
                 <label for="prerequisTice">Pré-requis TICE :</label>
-                <textarea id="prerequisTice" placeholder="Utilisation de la calculatrice, accès au tableur...[cite: 1, 4]"></textarea>
+                <textarea id="prerequisTice" placeholder="Calculatrice, Tableur, GeoGebra..." oninput="autoSave()"></textarea>
             </div>
         </div>
 
-        <h2>Déroulement & Mises en œuvre</h2>
+        <h2>Déroulement Dynamique de la Séance</h2>
         <div class="form-section">
-            <label for="deroulement">Déroulement envisagé (Minutage + Mise en œuvre en classe) :</label>
-            <textarea id="deroulement" style="min-height: 120px;" placeholder="0-10 min : Questions rapides / Rituel[cite: 1]&#10;10-30 min : Recherche individuelle[cite: 1]&#10;30-50 min : Mise en commun / Synthèse..."></textarea>
-
-            <label for="commentairesPhases">Commentaires sur chaque phase :</label>
-            <textarea id="commentairesPhases" placeholder="Remarques sur la gestion de la classe ou le rôle de l'enseignant lors des phases...[cite: 1]"></textarea>
+            <div id="phasesContainer">
+                <!-- Les phases s'afficheront ici -->
+            </div>
+            <button type="button" class="btn btn-secondary" onclick="addPhase()">+ Ajouter une phase</button>
+            <div class="total-time">Durée totale calculée : <span id="totalMinutes">0</span> min</div>
         </div>
 
-        <h2>Choix Pédagogiques & Différenciation</h2>
+        <h2>Analyse Didactique & Différenciation</h2>
         <div class="form-section">
-            <label for="choixProbleme">Choix pédagogiques/didactiques sur le problème proposé :</label>
-            <textarea id="choixProbleme" placeholder="Pourquoi ce problème ? Justification de la tâche..."></textarea>
+            <label for="choixProbleme">Choix pédagogiques / didactiques du problème :</label>
+            <textarea id="choixProbleme" oninput="autoSave()"></textarea>
 
-            <label for="difficultes">Difficultés rencontrées par les élèves (anticipées) :</label>
-            <textarea id="difficultes" placeholder="Blocages prévisibles, erreurs types..."></textarea>
+            <label for="difficultes">Difficultés prévisibles des élèves :</label>
+            <textarea id="difficultes" oninput="autoSave()"></textarea>
 
-            <label for="problemesSupplementaires">Problèmes supplémentaires (pour les élèves plus rapides) :</label>
-            <textarea id="problemesSupplementaires" placeholder="Activités d'approfondissement / Exercices supplémentaires...[cite: 1]"></textarea>
+            <label for="problemesSupplementaires">Problèmes supplémentaires (Élèves rapides) :</label>
+            <textarea id="problemesSupplementaires" placeholder="Formules LaTeX possibles ex: $x^2 + \frac{1}{2}$" oninput="autoSave()"></textarea>
 
-            <label for="choixTravailPersonnel">Choix didactiques concernant le travail personnel (Devoirs/Rituels) :</label>
-            <textarea id="choixTravailPersonnel" placeholder="Exercices d'entraînement à la maison, mémorisation...[cite: 2]"></textarea>
+            <label for="choixTravailPersonnel">Choix didactiques du travail personnel :</label>
+            <textarea id="choixTravailPersonnel" oninput="autoSave()"></textarea>
         </div>
 
-        <button type="button" class="btn-submit" onclick="generateDocument()">Générer la Fiche de Séance</button>
+        <button type="button" class="btn btn-primary" style="width: 100%; padding: 12px; font-size: 16px;" onclick="generateDocument()">📄 Générer la Fiche Mise en Page</button>
     </form>
 
-    <!-- Zone d'affichage et impression du document généré -->
+    <!-- Document rendu -->
     <div id="output">
-        <div class="output-header">
-            <h1 id="outTitle">Fiche de Séance</h1>
-            <p><strong id="outSeq">Séquence : </strong> | <strong id="outDate">Date : </strong></p>
+        <div style="text-align: center; border-bottom: 2px solid #1a365d; margin-bottom: 15px;">
+            <h1 id="outTitle" style="margin-bottom: 5px;">Fiche de Séance</h1>
+            <p><strong id="outSeq"></strong> | <strong id="outDate"></strong></p>
         </div>
 
         <table class="output-table">
             <tr>
-                <th width="30%">Bulletin Officiel (BO)</th>
+                <th width="25%">BO & Programme</th>
                 <td id="outBo"></td>
             </tr>
             <tr>
-                <th>Contenu & Capacités attendues</th>
+                <th>Capacités attendues</th>
                 <td id="outCapacites"></td>
             </tr>
             <tr>
-                <th>Compétences Mathématiques</th>
+                <th>Compétences travaillées</th>
                 <td id="outCompetences"></td>
             </tr>
             <tr>
@@ -255,22 +305,18 @@
                 <td id="outObjectifs"></td>
             </tr>
             <tr>
-                <th>Pré-requis (Généraux / TICE)</th>
+                <th>Pré-requis (Cognitifs / TICE)</th>
                 <td>
-                    <strong>Généraux :</strong> <span id="outPrerequis"></span><br><br>
+                    <strong>Généraux :</strong> <span id="outPrerequis"></span><br>
                     <strong>TICE :</strong> <span id="outTice"></span>
                 </td>
             </tr>
             <tr>
-                <th>Déroulement & Minutage</th>
-                <td id="outDeroulement" style="white-space: pre-line;"></td>
+                <th>Déroulement (<span id="outTotalTime"></span> min)</th>
+                <td id="outDeroulement"></td>
             </tr>
             <tr>
-                <th>Commentaires sur les phases</th>
-                <td id="outCommentaires" style="white-space: pre-line;"></td>
-            </tr>
-            <tr>
-                <th>Choix Didactiques (Problème)</th>
+                <th>Analyse du problème & Didactique</th>
                 <td id="outChoixProb"></td>
             </tr>
             <tr>
@@ -278,7 +324,7 @@
                 <td id="outDifficultes"></td>
             </tr>
             <tr>
-                <th>Problèmes supplémentaires (rapides)</th>
+                <th>Approfondissement (Élèves rapides)</th>
                 <td id="outSupp"></td>
             </tr>
             <tr>
@@ -287,38 +333,215 @@
             </tr>
         </table>
 
-        <div class="action-buttons">
-            <button class="btn-print" onclick="window.print()">Imprimer / Enregistrer en PDF</button>
+        <div class="action-buttons" style="display: flex; gap: 10px; margin-top: 20px;">
+            <button class="btn btn-success" onclick="window.print()">🖨️ Imprimer / Imprimer en PDF</button>
+            <button class="btn btn-primary" onclick="exportWord()">📝 Exporter au format Word (.docx)</button>
         </div>
     </div>
 </div>
 
 <script>
-    function generateDocument() {
-        // Récupération des données
-        document.getElementById('outTitle').innerText = document.getElementById('seanceNom').value || 'Sans Titre';
-        document.getElementById('outSeq').innerText = "Séquence : " + (document.getElementById('sequence').value || '-');
-        document.getElementById('outDate').innerText = "Date : " + (document.getElementById('seanceDate').value || '-');
-        
-        document.getElementById('outBo').innerText = document.getElementById('boEcrits').value;
-        document.getElementById('outCapacites').innerText = document.getElementById('boCapacites').value;
-        document.getElementById('outCompetences').innerText = document.getElementById('competencesMaths').value;
-        document.getElementById('outObjectifs').innerText = document.getElementById('objectifs').value;
-        
-        document.getElementById('outPrerequis').innerText = document.getElementById('prerequisCognitifs').value;
-        document.getElementById('outTice').innerText = document.getElementById('prerequisTice').value;
-        
-        document.getElementById('outDeroulement').innerText = document.getElementById('deroulement').value;
-        document.getElementById('outCommentaires').innerText = document.getElementById('commentairesPhases').value;
-        document.getElementById('outChoixProb').innerText = document.getElementById('choixProbleme').value;
-        document.getElementById('outDifficultes').innerText = document.getElementById('difficultes').value;
-        document.getElementById('outSupp').innerText = document.getElementById('problemesSupplementaires').value;
-        document.getElementById('outTravail').innerText = document.getElementById('choixTravailPersonnel').value;
+    let phases = [];
 
-        // Affichage du résultat
+    // Initialisation
+    window.onload = function() {
+        const savedData = localStorage.getItem('seance_maths_data');
+        if (savedData) {
+            loadFormData(JSON.parse(savedData));
+        } else {
+            // Phases par défaut
+            addPhase(10, "Rituel", "Questions rapides / Calcul mental", "Instaurer le rythme");
+            addPhase(25, "Recherche", "Travail en autonomie ou en groupes", "Observation des erreurs");
+            addPhase(15, "Mise en commun", "Synthèse au tableau", "Institutionnalisation");
+        }
+    };
+
+    function addPhase(duree = 10, nom = "", contenu = "", remarques = "") {
+        const container = document.getElementById('phasesContainer');
+        const index = phases.length;
+
+        const div = document.createElement('div');
+        div.className = 'phase-row';
+        div.id = `phase-${index}`;
+        div.innerHTML = `
+            <input type="number" placeholder="Min" value="${duree}" oninput="updatePhases(); autoSave();" class="p-duree">
+            <input type="text" placeholder="Type de phase" value="${nom}" oninput="updatePhases(); autoSave();" class="p-nom">
+            <textarea placeholder="Déroulement / Mise en œuvre" oninput="updatePhases(); autoSave();" class="p-contenu">${contenu}</textarea>
+            <textarea placeholder="Commentaires / Rôle enseignant" oninput="updatePhases(); autoSave();" class="p-remarques">${remarques}</textarea>
+            <button type="button" class="btn btn-danger" onclick="removePhase(${index})">✕</button>
+        `;
+        container.appendChild(div);
+        updatePhases();
+    }
+
+    function removePhase(index) {
+        document.getElementById(`phase-${index}`).remove();
+        updatePhases();
+        autoSave();
+    }
+
+    function updatePhases() {
+        let total = 0;
+        const rows = document.querySelectorAll('.phase-row');
+        rows.forEach(row => {
+            const duree = parseInt(row.querySelector('.p-duree').value) || 0;
+            total += duree;
+        });
+        document.getElementById('totalMinutes').innerText = total;
+    }
+
+    function getFormData() {
+        const comps = Array.from(document.querySelectorAll('input[name="comp"]:checked')).map(cb => cb.value);
+        
+        const phasesData = [];
+        document.querySelectorAll('.phase-row').forEach(row => {
+            phasesData.push({
+                duree: row.querySelector('.p-duree').value,
+                nom: row.querySelector('.p-nom').value,
+                contenu: row.querySelector('.p-contenu').value,
+                remarques: row.querySelector('.p-remarques').value
+            });
+        });
+
+        return {
+            sequence: document.getElementById('sequence').value,
+            seanceNom: document.getElementById('seanceNom').value,
+            seanceDate: document.getElementById('seanceDate').value,
+            objectifs: document.getElementById('objectifs').value,
+            boEcrits: document.getElementById('boEcrits').value,
+            boCapacites: document.getElementById('boCapacites').value,
+            competences: comps,
+            prerequisCognitifs: document.getElementById('prerequisCognitifs').value,
+            prerequisTice: document.getElementById('prerequisTice').value,
+            phases: phasesData,
+            choixProbleme: document.getElementById('choixProbleme').value,
+            difficultes: document.getElementById('difficultes').value,
+            problemesSupplementaires: document.getElementById('problemesSupplementaires').value,
+            choixTravailPersonnel: document.getElementById('choixTravailPersonnel').value
+        };
+    }
+
+    function loadFormData(data) {
+        document.getElementById('sequence').value = data.sequence || '';
+        document.getElementById('seanceNom').value = data.seanceNom || '';
+        document.getElementById('seanceDate').value = data.seanceDate || '';
+        document.getElementById('objectifs').value = data.objectifs || '';
+        document.getElementById('boEcrits').value = data.boEcrits || '';
+        document.getElementById('boCapacites').value = data.boCapacites || '';
+        document.getElementById('prerequisCognitifs').value = data.prerequisCognitifs || '';
+        document.getElementById('prerequisTice').value = data.prerequisTice || '';
+        document.getElementById('choixProbleme').value = data.choixProbleme || '';
+        document.getElementById('difficultes').value = data.difficultes || '';
+        document.getElementById('problemesSupplementaires').value = data.problemesSupplementaires || '';
+        document.getElementById('choixTravailPersonnel').value = data.choixTravailPersonnel || '';
+
+        // Compétences
+        document.querySelectorAll('input[name="comp"]').forEach(cb => {
+            cb.checked = (data.competences || []).includes(cb.value);
+        });
+
+        // Phases
+        document.getElementById('phasesContainer').innerHTML = '';
+        if (data.phases && data.phases.length > 0) {
+            data.phases.forEach(p => addPhase(p.duree, p.nom, p.contenu, p.remarques));
+        }
+    }
+
+    function autoSave() {
+        const data = getFormData();
+        localStorage.setItem('seance_maths_data', JSON.stringify(data));
+        const status = document.getElementById('autoSaveStatus');
+        status.innerText = "Modifications enregistrées";
+        setTimeout(() => status.innerText = "", 2000);
+    }
+
+    function exportJSON() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(getFormData(), null, 2));
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", `seance_${document.getElementById('seanceNom').value || 'fiche'}.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+    }
+
+    function importJSON(event) {
+        const fileReader = new FileReader();
+        fileReader.onload = function(e) {
+            const data = JSON.parse(e.target.result);
+            loadFormData(data);
+            autoSave();
+        };
+        fileReader.readAsText(event.target.files[0]);
+    }
+
+    function resetForm() {
+        if(confirm("Voulez-vous réinitialiser le formulaire ? Toutes les données non exportées seront perdues.")) {
+            localStorage.removeItem('seance_maths_data');
+            location.reload();
+        }
+    }
+
+    function generateDocument() {
+        const data = getFormData();
+
+        document.getElementById('outTitle').innerText = data.seanceNom || 'Fiche de Séance';
+        document.getElementById('outSeq').innerText = "Séquence : " + (data.sequence || '-');
+        document.getElementById('outDate').innerText = "Date : " + (data.seanceDate || '-');
+        
+        document.getElementById('outBo').innerText = data.boEcrits;
+        document.getElementById('outCapacites').innerText = data.boCapacites;
+        document.getElementById('outCompetences').innerText = data.competences.join(', ') || 'Aucune sélectionnée';
+        document.getElementById('outObjectifs').innerText = data.objectifs;
+        
+        document.getElementById('outPrerequis').innerText = data.prerequisCognitifs;
+        document.getElementById('outTice').innerText = data.prerequisTice;
+        
+        // Construction du tableau de déroulement
+        let deroulementHTML = `<table style="width:100%; border-collapse:collapse;" border="1">
+            <tr><th>Durée</th><th>Phase</th><th>Mise en œuvre</th><th>Commentaires</th></tr>`;
+        let totalMin = 0;
+        data.phases.forEach(p => {
+            deroulementHTML += `<tr>
+                <td>${p.duree} min</td>
+                <td><strong>${p.nom}</strong></td>
+                <td>${p.contenu.replace(/\n/g, '<br>')}</td>
+                <td>${p.remarques.replace(/\n/g, '<br>')}</td>
+            </tr>`;
+            totalMin += parseInt(p.duree) || 0;
+        });
+        deroulementHTML += `</table>`;
+
+        document.getElementById('outDeroulement').innerHTML = deroulementHTML;
+        document.getElementById('outTotalTime').innerText = totalMin;
+
+        document.getElementById('outChoixProb').innerText = data.choixProbleme;
+        document.getElementById('outDifficultes').innerText = data.difficultes;
+        document.getElementById('outSupp').innerText = data.problemesSupplementaires;
+        document.getElementById('outTravail').innerText = data.choixTravailPersonnel;
+
         const outputDiv = document.getElementById('output');
         outputDiv.style.display = 'block';
+
+        // Rendu des formules KaTeX ($...$)
+        renderMathInElement(outputDiv, {
+            delimiters: [
+                {left: '$$', right: '$$', display: true},
+                {left: '$', right: '$', display: false}
+            ],
+            throwOnError : false
+        });
+
         outputDiv.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function exportWord() {
+        const content = document.getElementById('output').innerHTML;
+        const converted = htmlDocx.asBlob(`<html><head><meta charset="utf-8"></head><body>${content}</body></html>`);
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(converted);
+        link.download = `seance_${document.getElementById('seanceNom').value || 'fiche'}.docx`;
+        link.click();
     }
 </script>
 
