@@ -1,41 +1,40 @@
-# Générateur de Fiches de Séance - Mathématiques
+# 📐 Fiches de Séance – Mathématiques (Cycle 4)
 
-Une application web légère, simple et rapide permettant aux enseignants de mathématiques de concevoir, structurer et générer des fiches de déroulement de séances conformes aux exigences pédagogiques et aux programmes du Bulletin Officiel (BO).
+Un outil web complet, rapide et autonome pour concevoir, structurer et gérer vos fiches de séquence et de séance en mathématiques au collège (5e, 4e, 3e).
 
-## 🚀 Fonctionnalités
+L'application intègre l'ensemble des programmes du **Bulletin Officiel (BO) du Cycle 4** (objectifs, automatismes, attendus de fin d'année) et propose un aperçu au format A4 mis à jour en temps réel.
 
-* **Saisie complète et guidée** : Formulaire reprenant l'ensemble des rubriques indispensables à la préparation de cours :
-  * Informations générales (séquence, séance, date, objectifs).
-  * Cadre institutionnel (extraits BO, capacités attendues, compétences mathématiques).
-  * Pré-requis (connaissances, compétences, outils TICE).
-  * Déroulement de séance (minutage étape par étape, mise en œuvre, commentaires par phase).
-  * Analyse didactique et différenciation (choix du problème, difficultés anticipées, activités pour élèves rapides, travail personnel).
-* **Mise en page automatique** : Génération immédiate d'un document récapitulatif sous forme de tableau structuré.
-* **Export PDF & Impression** : Bouton d'impression intégré avec une feuille de style optimisée (le formulaire est automatiquement masqué à l'impression).
-* **Sans dépendances ni installation** : Fonctionne directement dans n'importe quel navigateur web.
+---
 
-## 🛠️ Stack technique
+## ✨ Fonctionnalités principales
 
-* **HTML5** : Structure du formulaire et du document généré.
-* **CSS3** : Design responsive, variables CSS et styles `@media print` pour l'impression PDF.
-* **JavaScript (Vanilla)** : Gestion du rendu dynamique sans framework lourd.
+### 1. Organisation par Séquences & Séances
+* **Arborescence dynamique** : Gagnez du temps grâce à la gestion hiérarchique (une séquence regroupe plusieurs séances).
+* **Partage des données BO** : Les informations du B.O. saisies au niveau de la séquence s'appliquent automatiquement à toutes ses séances.
+* **Duplication & Gestion** : Dupliquez des séances en un clic pour créer des variantes ou de nouvelles étapes rapidement.
 
-## 💻 Installation et Utilisation
+### 2. Intégration du B.O. Cycle 4 (Moteur de recherche)
+* **Recherche intégrée** : Moteur de recherche par mot-clé (*ex: "Pythagore", "fractions", "boucle"*), par niveau (*5e, 4e, 3e*), par domaine ou par thème.
+* **Sélection en un clic** : Cochez les compétences, automatismes ou attendus souhaités et ajoutez-les directement dans les champs de votre fiche.
 
-1. **Télécharger le projet** :
-   * Cloner le dépôt ou télécharger le fichier `index.html`.
+### 3. Saisie & Ergonomie Enseignant
+* **Mise en forme Markdown** : Formatez facilement le texte (`**gras**`, `__souligné__`, `- puces`, `## sous-titres`).
+* **Barre de formules TeX/LaTeX** : Insertion rapide de symboles mathématiques ($\frac{a}{b}$, $\sqrt{x}$, $x^2$, $\pi$, $\leq$, etc.) via **KaTeX**.
+* **Templates de phases** : Modèles d'étapes pré-remplis (*Questions rapides, Recherche individuelle, Mise en commun, etc.*) et réordonnancement par flèches (↑/↓).
+* **Calculateur de minutage** : Vérification automatique de la durée totale de la séance avec alerte en cas de dépassement.
+* **Gestion des images** : Importation et compression automatique des schémas, figures GeoGebra ou énoncés.
 
-2. **Lancer l'application** :
-   * Double-cliquez simplement sur le fichier `index.html` pour l'ouvrir dans votre navigateur habituel (Chrome, Firefox, Edge, Safari, etc.). Aucune connexion serveur ni commande `npm` n'est requise.
+### 4. Rendu & Sauvegarde
+* **Aperçu A4 en temps réel** : La colonne de droite affiche le document final formaté façon "fiche Eduscol / Inspection" à chaque frappe.
+* **Auto-sauvegarde locale** : Vos données sont conservées dans le navigateur (`localStorage`).
+* **Import / Export JSON** : Sauvegardez l'ensemble de vos cours dans un fichier `.json` pour les partager ou les utiliser sur un autre ordinateur.
+* **Impression & PDF** : Feuille de style dédiée avec gestion anti-coupure des tableaux et images lors de l'export PDF.
 
-3. **Générer une fiche** :
-   1. Remplissez les champs du formulaire.
-   2. Cliquez sur **« Générer la Fiche de Séance »**.
-   3. Vérifiez le rendu dans le tableau qui s'affiche sous le formulaire.
-   4. Cliquez sur **« Imprimer / Enregistrer en PDF »** pour sauvegarder votre fiche.
+---
 
-## 📂 Structure du projet
+## 📁 Structure du projet
 
 ```text
 .
-└── index.html    # Fichier unique contenant le formulaire, le script JS et les styles CSS
+├── index.html        # Interface utilisateur (formulaire, aperçu A4, styles et scripts)
+└── bo_cycle4.js      # Base de données complète du programme officiel du Cycle 4
