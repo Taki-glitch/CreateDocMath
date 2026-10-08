@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Générateur de Déroulement de Séance - Mathématiques</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        h1, h2 {
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--secondary-color);
+            padding-bottom: 8px;
+        }
+
+        .form-section {
+            margin-bottom: 25px;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #555;
+        }
+
+        input[type="text"], input[type="date"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1fr solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-family: inherit;
+            margin-bottom: 10px;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .btn-submit {
+            background-color: var(--secondary-color);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .btn-submit:hover {
+            background-color: #2980b9;
+        }
+
+        /* Style pour le document imprimable/généré */
+        #output {
+            display: none;
+            margin-top: 40px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            background: white;
+        }
+
+        .output-header {
+            text-align: center;
+            border-bottom: 2px solid var(--primary-color);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+        }
+
+        .output-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .output-table th, .output-table td {
+            border: 1px solid #333;
+            padding: 10px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .output-table th {
+            background-color: #f2f2f2;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn-print {
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #output, #output * {
+                visibility: visible;
+            }
+            #output {
+                display: block !important;
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+            .action-buttons {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Créateur de Fiche de Séance - Mathématiques</h1>
+    <form id="seanceForm">
+        
+        <div class="form-section grid-2">
+            <div>
+                <label for="sequence">Nom de la séquence :</label>
+                <input type="text" id="sequence" required placeholder="ex: Fractions et Partages">
+            </div>
+            <div>
+                <label for="seanceNom">Nom de la séance :</label>
+                <input type="text" id="seanceNom" required placeholder="ex: Séance 1 - Égalité de fractions">
+            </div>
+        </div>
+
+        <div class="form-section grid-2">
+            <div>
+                <label for="seanceDate">Date de la séance :</label>
+                <input type="date" id="seanceDate">
+            </div>
+            <div>
+                <label for="objectifs">Objectif(s) de la séance :</label>
+                <textarea id="objectifs" placeholder="ex: Comprendre la notion de fractions équivalentes"></textarea>
+            </div>
+        </div>
+
+        <h2>Programme et Bulletin Officiel (BO)</h2>
+        <div class="form-section">
+            <label for="boEcrits">Écrits du Bulletin Officiel (BO) :</label>
+            <textarea id="boEcrits" placeholder="Extrait du programme officiel..."></textarea>
+
+            <label for="boCapacites">Contenu du BO et capacités attendues :</label>
+            <textarea id="boCapacites" placeholder="Capacité visée : Simplifier une fraction..."></textarea>
+
+            <label for="competencesMaths">Lien avec les compétences mathématiques :</label>
+            <input type="text" id="competencesMaths" placeholder="Chercher, Modéliser, Représenter, Calculer, Raisonner, Communiquer[cite: 4]">
+        </div>
+
+        <h2>Pré-requis</h2>
+        <div class="form-section grid-2">
+            <div>
+                <label for="prerequisCognitifs">Pré-requis (Connaissances / Compétences) :</label>
+                <textarea id="prerequisCognitifs" placeholder="Tables de multiplication, division euclidienne..."></textarea>
+            </div>
+            <div>
+                <label for="prerequisTice">Pré-requis TICE :</label>
+                <textarea id="prerequisTice" placeholder="Utilisation de la calculatrice, accès au tableur...[cite: 1, 4]"></textarea>
+            </div>
+        </div>
+
+        <h2>Déroulement & Mises en œuvre</h2>
+        <div class="form-section">
+            <label for="deroulement">Déroulement envisagé (Minutage + Mise en œuvre en classe) :</label>
+            <textarea id="deroulement" style="min-height: 120px;" placeholder="0-10 min : Questions rapides / Rituel[cite: 1]&#10;10-30 min : Recherche individuelle[cite: 1]&#10;30-50 min : Mise en commun / Synthèse..."></textarea>
+
+            <label for="commentairesPhases">Commentaires sur chaque phase :</label>
+            <textarea id="commentairesPhases" placeholder="Remarques sur la gestion de la classe ou le rôle de l'enseignant lors des phases...[cite: 1]"></textarea>
+        </div>
+
+        <h2>Choix Pédagogiques & Différenciation</h2>
+        <div class="form-section">
+            <label for="choixProbleme">Choix pédagogiques/didactiques sur le problème proposé :</label>
+            <textarea id="choixProbleme" placeholder="Pourquoi ce problème ? Justification de la tâche..."></textarea>
+
+            <label for="difficultes">Difficultés rencontrées par les élèves (anticipées) :</label>
+            <textarea id="difficultes" placeholder="Blocages prévisibles, erreurs types..."></textarea>
+
+            <label for="problemesSupplementaires">Problèmes supplémentaires (pour les élèves plus rapides) :</label>
+            <textarea id="problemesSupplementaires" placeholder="Activités d'approfondissement / Exercices supplémentaires...[cite: 1]"></textarea>
+
+            <label for="choixTravailPersonnel">Choix didactiques concernant le travail personnel (Devoirs/Rituels) :</label>
+            <textarea id="choixTravailPersonnel" placeholder="Exercices d'entraînement à la maison, mémorisation...[cite: 2]"></textarea>
+        </div>
+
+        <button type="button" class="btn-submit" onclick="generateDocument()">Générer la Fiche de Séance</button>
+    </form>
+
+    <!-- Zone d'affichage et impression du document généré -->
+    <div id="output">
+        <div class="output-header">
+            <h1 id="outTitle">Fiche de Séance</h1>
+            <p><strong id="outSeq">Séquence : </strong> | <strong id="outDate">Date : </strong></p>
+        </div>
+
+        <table class="output-table">
+            <tr>
+                <th width="30%">Bulletin Officiel (BO)</th>
+                <td id="outBo"></td>
+            </tr>
+            <tr>
+                <th>Contenu & Capacités attendues</th>
+                <td id="outCapacites"></td>
+            </tr>
+            <tr>
+                <th>Compétences Mathématiques</th>
+                <td id="outCompetences"></td>
+            </tr>
+            <tr>
+                <th>Objectif(s)</th>
+                <td id="outObjectifs"></td>
+            </tr>
+            <tr>
+                <th>Pré-requis (Généraux / TICE)</th>
+                <td>
+                    <strong>Généraux :</strong> <span id="outPrerequis"></span><br><br>
+                    <strong>TICE :</strong> <span id="outTice"></span>
+                </td>
+            </tr>
+            <tr>
+                <th>Déroulement & Minutage</th>
+                <td id="outDeroulement" style="white-space: pre-line;"></td>
+            </tr>
+            <tr>
+                <th>Commentaires sur les phases</th>
+                <td id="outCommentaires" style="white-space: pre-line;"></td>
+            </tr>
+            <tr>
+                <th>Choix Didactiques (Problème)</th>
+                <td id="outChoixProb"></td>
+            </tr>
+            <tr>
+                <th>Difficultés anticipées</th>
+                <td id="outDifficultes"></td>
+            </tr>
+            <tr>
+                <th>Problèmes supplémentaires (rapides)</th>
+                <td id="outSupp"></td>
+            </tr>
+            <tr>
+                <th>Travail Personnel</th>
+                <td id="outTravail"></td>
+            </tr>
+        </table>
+
+        <div class="action-buttons">
+            <button class="btn-print" onclick="window.print()">Imprimer / Enregistrer en PDF</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function generateDocument() {
+        // Récupération des données
+        document.getElementById('outTitle').innerText = document.getElementById('seanceNom').value || 'Sans Titre';
+        document.getElementById('outSeq').innerText = "Séquence : " + (document.getElementById('sequence').value || '-');
+        document.getElementById('outDate').innerText = "Date : " + (document.getElementById('seanceDate').value || '-');
+        
+        document.getElementById('outBo').innerText = document.getElementById('boEcrits').value;
+        document.getElementById('outCapacites').innerText = document.getElementById('boCapacites').value;
+        document.getElementById('outCompetences').innerText = document.getElementById('competencesMaths').value;
+        document.getElementById('outObjectifs').innerText = document.getElementById('objectifs').value;
+        
+        document.getElementById('outPrerequis').innerText = document.getElementById('prerequisCognitifs').value;
+        document.getElementById('outTice').innerText = document.getElementById('prerequisTice').value;
+        
+        document.getElementById('outDeroulement').innerText = document.getElementById('deroulement').value;
+        document.getElementById('outCommentaires').innerText = document.getElementById('commentairesPhases').value;
+        document.getElementById('outChoixProb').innerText = document.getElementById('choixProbleme').value;
+        document.getElementById('outDifficultes').innerText = document.getElementById('difficultes').value;
+        document.getElementById('outSupp').innerText = document.getElementById('problemesSupplementaires').value;
+        document.getElementById('outTravail').innerText = document.getElementById('choixTravailPersonnel').value;
+
+        // Affichage du résultat
+        const outputDiv = document.getElementById('output');
+        outputDiv.style.display = 'block';
+        outputDiv.scrollIntoView({ behavior: 'smooth' });
+    }
+</script>
+
+</body>
+</html>
