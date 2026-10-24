@@ -9,7 +9,7 @@ Tout fonctionne dans le navigateur : les données restent sur votre appareil.
 **Organisation**
 - Séquences et séances : liste dans le volet de gauche, création, duplication, suppression.
 - Les données de séquence (nom, référence du B.O., contenus, capacités attendues) sont saisies une seule fois et partagées par toutes les séances de la séquence.
-- Sauvegarde automatique dans le navigateur ; export / import de toute la bibliothèque en JSON.
+- Enregistrement automatique dans **IndexedDB** (plus de limite de 5 Mo), avec état visible en bas du volet de gauche ; sauvegarde complète en **.zip** (images binaires, sommes de contrôle) et import avec aperçu, détection des doublons, fusion ou remplacement. Voir *MIGRATION.md*.
 
 **Programme officiel (BO)**
 - Recherche dans les programmes : niveau, domaine, thème, mot-clé, type (contenus, objectifs / capacités, automatismes, attendus de fin d'année).
@@ -41,7 +41,7 @@ Tout fonctionne dans le navigateur : les données restent sur votre appareil.
 - **Modèles de séances** : menu « + Séance depuis un modèle… » (rituel / questions flash, évaluation, devoir maison, problème ouvert) et **★ Enregistrer comme modèle** pour créer les vôtres.
 
 **Sauvegarde et historique**
-- **📁 Dossier de sauvegarde** (Chrome et Edge) : choisissez un dossier (par exemple synchronisé avec votre cloud) ; l'application y écrit automatiquement `fiches_maths_auto.json` (toujours le plus récent) et `fiches_maths_AAAA-MM-JJ.json` (une copie par jour). Après une fermeture du navigateur, cliquez sur **« réactiver »** pour renouveler l'autorisation. Cette fonction compte comme un export pour le rappel de sauvegarde.
+- **📁 Dossier de sauvegarde** (Chrome et Edge) : choisissez un dossier (par exemple synchronisé avec votre cloud) ; l'application y écrit automatiquement `fiches_maths_auto.zip` (toujours le plus récent) et `fiches_maths_AAAA-MM-JJ.zip` (une copie par jour), au même format que l'export (version 2.0 : les anciens `.json` du dossier restent lisibles via « Importer »). Après une fermeture du navigateur, cliquez sur **« réactiver »** pour renouveler l'autorisation. Cette fonction compte comme un export pour le rappel de sauvegarde.
 - **↶ ↷ Annuler / Rétablir** (Ctrl + Z / Ctrl + Y) sur toutes les modifications des séquences et des séances (60 étapes, y compris suppressions, déplacements et images). L'historique est vidé quand la page est rechargée.
 
 **Impression pour les élèves**
@@ -57,7 +57,7 @@ Tout fonctionne dans le navigateur : les données restent sur votre appareil.
 
 **Confort et sécurité du stockage**
 - **Ctrl + S** : enregistre immédiatement (message de confirmation) ; **Ctrl + Maj + S** : exporte toutes les fiches. Le bouton **?** liste les raccourcis.
-- **Jauge de stockage** en bas du volet de gauche (estimation sur 5 Mo) et lien **« réduire les images »** (700 px, qualité moyenne) quand les images pèsent plus de 0,5 Mo.
+- **Jauge de stockage** en bas du volet de gauche (espace utilisé et quota estimé par le navigateur) et lien **« réduire les images »** (700 px, qualité moyenne) quand les images pèsent plus de 10 Mo.
 - **Mode sombre** (bouton 🌙) pour le formulaire ; l'aperçu reste blanc comme la feuille imprimée. Le choix est mémorisé.
 
 **Sécurité et finitions**
@@ -104,7 +104,7 @@ Tout fonctionne dans le navigateur : les données restent sur votre appareil.
 
 **Sorties**
 - Impression / PDF (mise en page A4).
-- Export **Word (.docx)** (formules exportées en texte `$…$`).
+- Export **Word (.docx)** généré directement (bibliothèque `docx` embarquée, **hors ligne**) : titres, tableaux avec en-têtes répétés, encadrés, listes, images (légende, alignement), en-tête et pied de page avec « Page X / Y », sauts de page entre séances. Les **formules courantes** (fractions, racines, puissances, indices, symboles grecs, ≤ ≥ ×…) deviennent de **vraies équations Word modifiables** ; les constructions non gérées (systèmes d'équations, matrices) sont insérées en texte lisible.
 - Option **Trame seule** : masque l'analyse didactique (commentaires, choix didactiques, difficultés, compétences, choix du travail personnel).
 - **Bilan de séquence** : tableau séances × 6 compétences, avec totaux, contenus et capacités ; imprimable ou exportable en Word.
 
@@ -122,6 +122,9 @@ Tout fonctionne dans le navigateur : les données restent sur votre appareil.
 | `bank_difficultes.js` | Banque d'obstacles classiques (modifiable) |
 | `bo_premiere.js` | 1re enseignement scientifique + bilan de compétences par chapitre |
 | `manifest.json`, `sw.js`, `icon-192.png`, `icon-512.png` | PWA (installation, hors-ligne) |
+| `vendor/` | KaTeX 0.16.45, JSZip 3.10.1 et docx 9.6.1 (tous MIT) embarqués, avec leurs licences |
+| `tests/` | Tests Playwright (`node tests/run.js`) |
+| `MIGRATION.md` | Migration depuis l'ancien stockage, sauvegarde / restauration, publication |
 
 Tous les fichiers doivent rester **dans le même dossier**.
 
@@ -142,7 +145,8 @@ Tous les fichiers doivent rester **dans le même dossier**.
 ## Hors connexion (PWA)
 
 - Les fichiers de l'application sont toujours rechargés depuis le réseau quand il est disponible, avec le cache en secours.
-- Les bibliothèques externes (KaTeX pour les formules, html-docx pour l'export Word) sont chargées depuis un CDN. Elles sont mises en cache **après une première visite en ligne** ; sans cette visite, les formules s'affichent en LaTeX brut et l'export Word est indisponible hors ligne.
+- **KaTeX (formules) et JSZip (sauvegardes) sont embarqués** dans `vendor/` et mis en cache à l'installation : formules et sauvegardes fonctionnent hors ligne dès la première installation.
+- **L'export Word (bibliothèque `docx`) est aussi embarqué** dans `vendor/` : plus aucune dépendance à un CDN, tout fonctionne hors ligne après installation.
 - Si vous ajoutez un fichier BO, ajoutez-le aussi à la liste `CORE` de `sw.js` pour le rendre disponible hors ligne.
 
 ## Ajouter un programme (niveau, discipline…)
@@ -166,17 +170,19 @@ Dans `bank_difficultes.js`, ajoutez des lignes `["Thème", "Titre", "Description
 
 ## Sauvegarde et données
 
-- Les données sont stockées dans le `localStorage` du navigateur : elles sont propres à un navigateur et à un appareil, et peuvent être effacées si l'on vide les données du site.
-- **Exportez régulièrement** la bibliothèque (💾 Exporter tout) ; le fichier JSON sert aussi à transférer vos fiches d'un ordinateur à un autre.
-- Les images sont réduites (900 px) pour limiter la taille ; en cas de stockage plein, un message invite à exporter.
+- Les données sont stockées dans **IndexedDB** du navigateur (base `cdm3db`) : elles sont propres à un navigateur et à un appareil, et peuvent être effacées si l'on vide les données du site. L'application demande au navigateur un stockage *persistant* ; le bouton **🛟 Stockage et sauvegardes** indique si c'est accordé.
+- Les données ne sont **pas chiffrées**.
+- Les premières ouvertures de cette version migrent automatiquement l'ancien stockage (`localStorage`, clé `cdm3`), sans le supprimer : voir **MIGRATION.md**.
+- **Exportez régulièrement** (💾 Exporter tout → fichier `.zip`). L'export est relu et vérifié avant d'être proposé.
+- Les images sont réduites (900 px) ; elles sont stockées en binaire.
 
 ## Limites connues
 
 - Les formules écrites en fractions dans les PDF officiels sont mal extraites pour deux lignes de 5e (« fractions simples comme… », « fractions égales ») : à corriger à la main après insertion.
 - Les « Automatismes » du programme de 6e ne sont pas inclus.
-- Dans l'export Word, les formules sont converties en texte lisible (x², a/b, ≤, √, systèmes d'équations, matrices simples…) et ne sont **pas** des équations Word modifiables.
-- L'export Word reprend le contenu mais pas toute la mise en page (images à droite du texte et formules en particulier) : vérifier le rendu dans Word.
-- L'alignement « à droite » des images est conçu pour l'impression A4 ; il n'est pas garanti en export Word.
+- Export Word : les équations non reconnues (systèmes `cases`, matrices, commandes LaTeX rares) sont converties en texte lisible, pas en équation modifiable. LibreOffice sans module Math n'affiche pas les équations Word : ouvrir avec Microsoft Word.
+- L'export Word reprend la structure et la mise en page principales, mais pas pixel pour pixel l'aperçu (polices de substitution possibles, mode « 2 par feuille » exporté en une seule fiche).
+- Le rendu Word n'a été vérifié ici que par analyse du fichier (XML, python-docx, conversion LibreOffice) : ouvrez un export dans Word pour valider sur vos documents.
 
 ## Sources
 
