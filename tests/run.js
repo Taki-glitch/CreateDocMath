@@ -24,8 +24,8 @@ const idbDump=p=>p.evaluate(()=>new Promise(res=>{const r=indexedDB.open('cdm3db
  for(const s of ['seqs','seances','kv','blobs','backups']){const[k,v]=await get(s);o[s]={keys:k,n:k.length,vals:s==='kv'||s==='backups'?v.map(x=>typeof x==='string'&&x.length>300?'…':(x&&x.raw?{kind:x.kind,counts:x.counts}:x&&x.kind?{kind:x.kind,counts:x.counts}:x)):null}}d.close();res(o)}}));
 const kvOf=async p=>{const d=await idbDump(p);const o={};d.kv.keys.forEach((k,i)=>o[k]=d.kv.vals[i]);return{d,kv:o}};
 const fp=p=>p.evaluate(()=>{const f=[];db.seances.forEach(s=>f.push(s.id+'|'+s.nom+'|'+s.seq+'|'+(s.imgs||[]).map(m=>sha256(d2b(m.u).data)).join(',')));return{seqs:db.seqs.map(q=>q.id+'|'+q.nom),seances:f,models:(db.models||[]).length}});
-async function modalText(p){await p.waitForSelector('.mdb');return p.$eval('.mdb',e=>e.innerText)}
-const clickBtn=(p,t)=>p.locator('.mdb button',{hasText:t}).first().click();
+async function modalText(p){await p.waitForSelector('.mdb');return p.locator('.mdb').last().innerText()}
+const clickBtn=(p,t)=>p.locator('.mdb').last().locator('button',{hasText:t}).first().click();
 
 T('sha256 JS = sha256 Node',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
  for(const n of [0,1,55,56,63,64,65,1000,100003]){const buf=crypto.randomBytes(n),h=n>2000?null:await p.evaluate(a=>sha256(new Uint8Array(a)),[...buf]);
@@ -141,14 +141,14 @@ T('repli : IndexedDB indisponible (et jamais migré) → ancien stockage fonctio
 T('formules KaTeX locales (aucune requête CDN pour KaTeX/JSZip) + non-régression des vues',async()=>{const c=await ctx(),p=await c.newPage(),ext=[];p.on('request',r=>{if(!r.url().startsWith(BASE)&&!r.url().startsWith('data:'))ext.push(r.url())});
  await booted(p);await p.evaluate(()=>{S().activite='Calculer $x^2+\\frac{1}{2}$';S().trace='- trace';changed()});await p.waitForSelector('#prev .katex');
  assert.ok(await p.evaluate(()=>!!window.katex&&!!window.JSZip));
- for(const a of ['seq','eleve','texte','annee','all','seq'])await p.evaluate(a=>document.querySelector('#side [data-a="'+a+'"]').click(),a);
+ for(const a of ['seq','eleve','texte','annee','all','seq'])await p.evaluate(a=>document.querySelector('#mbar [data-a="'+a+'"]').click(),a);
  await p.evaluate(()=>{bv='';preview()});await p.evaluate(()=>document.querySelector('[data-a=news]').click());await p.evaluate(()=>document.querySelector('[data-a=dup]').click());await p.evaluate(()=>hgo(-1));
  assert.deepStrictEqual(ext,[],'aucune requête externe attendue : '+ext.join(','));assert.ok(await p.evaluate(()=>!!window.docx&&!window.htmlDocx));assert.deepStrictEqual(c.errs,[]);await c.close()});
 
 T('PWA : fonctionne hors ligne après installation (KaTeX local, données IndexedDB)',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
  await p.evaluate(()=>navigator.serviceWorker.ready.then(()=>1));await p.reload();await p.waitForFunction(()=>navigator.serviceWorker.controller);
  const names=await p.evaluate(async()=>{const ks=await caches.keys(),c=await caches.open(ks.find(k=>k.startsWith('fiches-maths'))),r=await c.keys();return{ks,u:r.map(x=>new URL(x.url).pathname)}});
- assert.deepStrictEqual(names.ks,['fiches-maths-v12']);for(const f of ['/vendor/docx.iife.js','/vendor/katex/katex.min.js','/vendor/jszip.min.js','/vendor/katex/fonts/KaTeX_Main-Regular.woff2','/index.html','/bo_cycle4.js'])assert.ok(names.u.includes(f),f);
+ assert.deepStrictEqual(names.ks,['fiches-maths-v13']);for(const f of ['/vendor/docx.iife.js','/vendor/katex/katex.min.js','/vendor/jszip.min.js','/vendor/katex/fonts/KaTeX_Main-Regular.woff2','/index.html','/bo_cycle4.js'])assert.ok(names.u.includes(f),f);
  await p.evaluate(()=>{S().nom='Hors ligne ok';S().activite='$a^2$';changed()});await saved(p);await c.setOffline(true);await p.reload();await booted(p);assert.strictEqual(await p.evaluate(()=>S().nom),'Hors ligne ok');await p.waitForSelector('#prev .katex');
  assert.ok(await p.evaluate(()=>document.fonts.check('16px KaTeX_Main')||true));await c.close()});
 
@@ -182,6 +182,143 @@ T('export PDF (impression) : pagination, en-tête de tableau répété, formules
  const pages=txt.split('\f').filter(s=>s.trim());assert.ok(pages.length>=3,'pages : '+pages.length);assert.ok(cnt(txt,/Phase \/ Durée/g)>=2,'en-tête de tableau répété');
  for(let i=1;i<=9;i++)assert.ok(new RegExp('Phase '+i+'\\b').test(txt),'phase '+i);assert.ok(/Page 2 \/ \d+/.test(txt),'numéros de page');assert.ok(/Découverte longue/.test(txt)&&/Évaluation et bilan/.test(txt));
  await c.close()});
+
+/* ================= étape D : menus, recherche, couverture, banque, calendrier, compétences, mode classe, mobile ================= */
+const SEED2=()=>{const q=Q();q.nom='Théorème de Thalès';q.niveau='3e';q.classe='3A';q.bo='- Théorème de Thalès\n- Proportionnalité\n- Racine carrée';q.capacites='- Calculer une longueur';
+ const s=S();s.nom='Découverte';s.date='2026-10-20';s.activite='Utiliser GeoGebra pour conjecturer';s.objectifs='Voir $\\frac{AM}{AB}$';s.phases=[{duree:10,nom:'Rituel',contenu:'Calculer',comment:'',mode:'a'}];
+ for(const [n,d,a] of [['Réciproque','2026-10-22','Preuve de la réciproque'],['Évaluation','2026-10-26','Contrôle écrit']]){addSeance(q.id);const t=S();t.nom=n;t.date=d;t.activite=a}
+ db.seqs.push({id:'q2x',nom:'Statistiques',niveau:'4e',classe:'4B',boRef:'',bo:'',capacites:''});addSeance('q2x');S().nom='Moyenne';S().date='2026-10-21';S().activite='Calcul de moyenne avec tableur';db.cur=db.seances[0].id;changed();show()};
+
+T('menus : ouverture, clavier, actions, volet de gauche allégé, séquences repliables',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await p.evaluate(SEED2);
+ assert.strictEqual(await p.locator('#side button[data-a]').count(),0,'plus de boutons d’action dans le volet');
+ const f=p.locator('#mbar [data-menu=f]');assert.strictEqual(await f.getAttribute('aria-expanded'),'false');await f.click();assert.strictEqual(await f.getAttribute('aria-expanded'),'true');assert.ok(await p.locator('#mbar .mp:not([hidden])').count()===1);
+ await p.keyboard.press('Escape');assert.strictEqual(await f.getAttribute('aria-expanded'),'false');
+ await f.focus();await p.keyboard.press('ArrowDown');assert.ok(await p.evaluate(()=>document.activeElement.closest('.mp')!==null),'focus dans le menu');await p.keyboard.press('ArrowRight');assert.strictEqual(await p.locator('#mbar [data-menu=q]').getAttribute('aria-expanded'),'true');await p.keyboard.press('Escape');
+ assert.ok(await p.locator('#mbar .mp button.dng').count()>=2,'actions destructives distinguées');
+ const n0=await p.evaluate(()=>db.seqs.length);await p.click('#mbar [data-menu=q]');await p.click('#mbar [data-a=newq]');assert.strictEqual(await p.evaluate(()=>db.seqs.length),n0+1);assert.strictEqual(await p.locator('#mbar .mp:not([hidden])').count(),0,'menu refermé après action');
+ await p.click('#mbar [data-menu=v]');await p.click('#mbar [data-a=eleve]');assert.strictEqual(await p.evaluate(()=>bv),'eleve');await p.waitForSelector('#eopts:not([hidden])');assert.ok(await p.locator('#mbar .mp button.act').count()>=1);
+ await p.click('#mbar [data-menu=v]');await p.click('#mbar [data-a=vback]');assert.strictEqual(await p.evaluate(()=>bv),'');
+ await p.click('#mbar [data-menu=v]');await p.locator('#short').check();assert.strictEqual(await p.evaluate(()=>db.short),true);
+ // accordéon : seule la séquence courante est dépliée
+ const open=await p.evaluate(()=>[...document.querySelectorAll('#list [data-tg]')].map(x=>x.getAttribute('aria-expanded')));assert.ok(open.includes('true')&&open.includes('false'));
+ const nA=await p.locator('#list a').count();await p.locator('#list [data-tg][aria-expanded=false]').first().click();assert.ok(await p.locator('#list a').count()>nA,'dépliage');
+ assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('recherche globale / Ctrl+K : champs profonds, accents, plusieurs mots, filtres, extraits, ouverture, actions',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await p.evaluate(SEED2);
+ await p.keyboard.press('Control+k');await p.waitForSelector('#ck');await p.fill('#cki','THALES geogebra');await p.waitForSelector('.ckit');
+ let t=await p.$eval('#ckr',e=>e.innerText);assert.ok(/Découverte/.test(t)&&!/Réciproque/.test(t),t);assert.ok(await p.locator('#ckr mark').count()>=1,'mots surlignés');
+ await p.fill('#cki','réciproque');assert.ok(/S2/.test(await p.$eval('#ckr',e=>e.innerText)));
+ await p.fill('#cki','frac');assert.ok(/Objectifs/.test(await p.$eval('#ckr',e=>e.innerText)),'formule trouvée dans les objectifs');
+ await p.fill('#cki','tableur');t=await p.$eval('#ckr',e=>e.innerText);assert.ok(/Moyenne/.test(t));await p.selectOption('#ckc','3A');assert.ok(!/Moyenne/.test(await p.$eval('#ckr',e=>e.innerText)),'filtre classe');await p.selectOption('#ckc','');
+ await p.fill('#cki','');await p.selectOption('#ckn','4e');assert.ok(/Moyenne/.test(await p.$eval('#ckr',e=>e.innerText))&&!/Réciproque/.test(await p.$eval('#ckr',e=>e.innerText)),'filtre niveau seul');await p.selectOption('#ckn','');
+ await p.fill('#ckd1','2026-10-22');await p.fill('#ckd2','2026-10-26');await p.fill('#cki','e');t=await p.$eval('#ckr',e=>e.innerText);assert.ok(/Réciproque/.test(t)&&!/Découverte/.test(t),'filtre période');await p.fill('#ckd1','');await p.fill('#ckd2','');
+ await p.fill('#cki','zzzintrouvable');assert.ok(/Aucun contenu trouvé/.test(await p.$eval('#ckr',e=>e.innerText)));
+ await p.fill('#cki','évaluation');await p.waitForSelector('.ckit');await p.keyboard.press('ArrowDown');await p.keyboard.press('Enter');await p.waitForFunction(()=>!document.getElementById('ck'));
+ assert.ok(await p.evaluate(()=>/Évaluation|Contrôle/.test(S().nom+S().activite)));
+ await p.keyboard.press('Control+k');await p.fill('#cki','calendrier');await p.waitForSelector('.ckit');await p.keyboard.press('Enter');await p.waitForSelector('#cal');await p.keyboard.press('Escape');
+ // cohérence quand les données changent + performance (300 séances)
+ await p.evaluate(()=>{S().activite='Nouveau mot rarissime';changed()});await p.keyboard.press('Control+k');await p.fill('#cki','rarissime');assert.ok(/rarissime/.test(await p.$eval('#ckr',e=>e.innerText)));await p.keyboard.press('Escape');
+ const ms=await p.evaluate(()=>{const q=Q();for(let i=0;i<300;i++){db.seances.push({id:'p'+i,seq:q.id,numero:i+10,nom:'Perf '+i,duree:55,activite:'lorem ipsum '+i+' dolor thalès '+(i%7),phases:[{duree:5,nom:'P',contenu:'texte '+i,comment:''}],comp:[],imgs:[]})}idxV++;const t0=performance.now();const r=searchAll('thales dolor',{});const t1=performance.now();return[r.length,t1-t0]});
+ assert.ok(ms[0]>=300&&ms[1]<1500,'recherche sur 300 séances : '+ms.join(' / '));assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('couverture du B.O. : avertissements (pas d’erreurs), statuts, associations, aucune modification automatique',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await p.evaluate(SEED2);
+ const bo0=await p.evaluate(()=>Q().bo+'|'+Q().capacites);
+ await p.evaluate(()=>{const q=Q(),L=covLines(q);window.__L=L.map(x=>x.k);const ss=db.seances.filter(s=>s.seq===q.id).sort((a,b)=>a.numero-b.numero);ss[0].couv=[L[0].k,L[1].k];ss[1].couv=[L[0].k,'cleinconnue'];q.cov={};q.cov[L[3].k]='done';q.compPrev=['Chercher','Modéliser'];ss[0].comp=['Chercher'];changed();show()});
+ const R=await p.evaluate(()=>{const r=covReport(Q());return{rows:r.rows.map(x=>[x.t,x.l.map(s=>s.numero),x.st]),W:r.W,I:r.I}});
+ assert.strictEqual(R.rows.length,4);assert.deepStrictEqual(R.rows[0][1],[1,2]);assert.ok(R.W.some(w=>/Racine carrée/.test(w)&&/aucune séance/.test(w)),'non travaillé');assert.ok(R.W.some(w=>/Séance S3 : aucun contenu/.test(w)));assert.ok(R.W.some(w=>/association\(s\) vers un contenu absent/.test(w)));assert.ok(R.W.some(w=>/Modéliser/.test(w)),'compétence annoncée sans séance');
+ assert.ok(R.I.some(i=>/apparaît dans 2 séances/.test(i)));assert.ok(R.I.some(i=>/Traité » sans séance/.test(i)));assert.ok(!R.W.some(w=>/Calculer une longueur/.test(w)),'statut Traité : pas d’avertissement');
+ await p.evaluate(()=>{Q().cov[window.__L[2]]='na';changed()});assert.ok(!(await p.evaluate(()=>covReport(Q()).W)).some(w=>/Racine carrée/.test(w)),'non pertinent : plus d’avertissement');
+ // UI : formulaire (statuts + associations) et vue imprimable
+ assert.strictEqual(await p.locator('#covq select').count(),4);assert.strictEqual(await p.locator('#covs input').count(),4);await p.selectOption('#covq select >> nth=1','wip');assert.strictEqual(await p.evaluate(()=>Q().cov[window.__L[1]]),'wip');
+ await p.locator('#covs input >> nth=2').check();assert.ok(await p.evaluate(()=>S().couv.includes(window.__L[2])));
+ await p.click('#mbar [data-menu=q]');await p.click('#mbar [data-a=cov]');await p.waitForFunction(()=>/Couverture du B\.O\./.test(document.getElementById('prev').innerText));assert.ok(/Avertissements/.test(await p.$eval('#prev',e=>e.innerText)));
+ assert.strictEqual(await p.evaluate(()=>Q().bo+'|'+Q().capacites),bo0,'objectifs jamais modifiés automatiquement');
+ const {x}=await docxOf(p,'cov');assert.ok(/Avertissements/.test(x));assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('banque d’exercices : création, insertion au curseur sans écraser, correction, favoris, doublons, import/export, persistance',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
+ await p.evaluate(()=>{S().activite='Début du texte. Fin du texte.';const t=document.querySelector('[data-s=activite]');t.value=S().activite;t.setSelectionRange(16,16)});
+ await p.click('#mbar [data-menu=f]');await p.click('#mbar [data-a=bank]');await p.waitForSelector('#bk');await p.click('[data-bk=new]');
+ await p.fill('[data-bf=titre]','Fractions : addition');await p.fill('[data-bf=enonce]','1. Calculer $\\frac{1}{2}+\\frac{1}{3}$.');await p.fill('[data-bf=correction]','$\\frac{5}{6}$');await p.fill('[data-bf=notions]','fractions');await p.selectOption('[data-bf=type]','flash');await p.click('[data-bk=save]');
+ await p.waitForSelector('.bkit');assert.ok(/Fractions : addition/.test(await p.$eval('#bkbody',e=>e.innerText)));
+ await p.click('.bkit [data-bk^=ins]');let v=await p.evaluate(()=>S().activite);assert.ok(v.startsWith('Début du texte.')&&v.endsWith('Fin du texte.')&&v.includes('Calculer')&&v.includes('→ Correction : $\\frac{5}{6}$'),v);assert.ok(v.indexOf('Calculer')>v.indexOf('Début')&&v.indexOf('Calculer')<v.indexOf('Fin du'),'inséré au curseur');
+ await p.selectOption('[data-bs=pos]','end');await p.uncheck('[data-bs=corr]');await p.click('.bkit [data-bk^=ins]');v=await p.evaluate(()=>S().activite);assert.ok(v.endsWith('$\\frac{1}{2}+\\frac{1}{3}$.')&&v.split('Calculer').length===3);assert.ok(v.includes('Fin du texte.'),'rien d’écrasé');
+ await p.selectOption('[data-bs=target]','t');await p.click('.bkit [data-bk^=ins]');assert.ok(/Calculer/.test(await p.evaluate(()=>S().trace)));
+ await p.click('.bkit [data-bk^=fav]');assert.strictEqual(await p.evaluate(()=>BK()[0].fav),1);await p.click('.bkit [data-bk^=dup]');assert.strictEqual(await p.evaluate(()=>BK().length),2);
+ const [dl]=await Promise.all([p.waitForEvent('download'),p.click('[data-bk=exp]')]);const ef=path.join(os.tmpdir(),'bank-'+Date.now()+'.json');await dl.saveAs(ef);const exp=JSON.parse(fs.readFileSync(ef,'utf8'));assert.strictEqual(exp.items.length,2);
+ await p.locator('[data-bk^=del] >> nth=1').click();await p.waitForSelector('.mdb');await clickBtn(p,'Supprimer');await p.waitForFunction(()=>BK().length===1);
+ await p.setInputFiles('#bkf',ef);await p.waitForFunction(()=>BK().length===2);await p.setInputFiles('#bkf',ef);await p.waitForTimeout(300);assert.strictEqual(await p.evaluate(()=>BK().length),2,'import idempotent');
+ fs.writeFileSync(ef,'{"x":1}');await p.setInputFiles('#bkf',ef);await p.waitForSelector('.mdb');assert.ok(/pas une banque/.test(await modalText(p)));await clickBtn(p,'Fermer');
+ await p.fill('[data-bq]','fractions');assert.ok(await p.locator('.bkit').count()>=1);await p.click('[data-bk=close]');
+ await p.evaluate(()=>{bv='eleve';EL().c=1;preview()});assert.ok(!/Correction/.test(await p.$eval('#prev',e=>e.innerText)),'correction absente de la fiche élève');
+ await p.evaluate(()=>stFlush());await p.reload();await booted(p);assert.strictEqual(await p.evaluate(()=>BK().length),2);
+ await p.keyboard.press('Control+k');await p.fill('#cki','addition fractions');assert.ok(/exercices/i.test(await p.$eval('#ckr',e=>e.innerText)));assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('calendrier : dates sans décalage de fuseau, déplacement, cascade avec aperçu, week-ends, annulation',async()=>{
+ for(const tz of ['Pacific/Auckland','America/Los_Angeles','Europe/Paris']){const c=await ctx({timezoneId:tz}),p=await c.newPage();await booted(p);await p.evaluate(SEED2);
+  assert.strictEqual(await p.evaluate(()=>[addD('2026-03-27',3),addD('2026-10-24',2),addD('2026-12-31',1),addD('2028-02-28',1),dowM('2026-10-25'),dowM('2026-10-26')].join()),'2026-03-30,2026-10-26,2027-01-01,2028-02-29,6,0',tz);
+  await p.evaluate(()=>calOpen());await p.waitForSelector('#cal .cch');
+  assert.ok(await p.locator('#cal .cd[data-d="2026-10-20"] .cch').count()===1);
+  // sélection puis clic sur un jour : S1 (20/10) → 23/10 ; cascade « suivantes » + éviter week-end
+  await p.evaluate(()=>{cal.d='2026-10-20';calRender()});const s1=await p.evaluate(()=>db.seances.find(s=>s.nom==='Découverte').id);
+  await p.click('#cal .cch[data-id="'+s1+'"] span');await p.click('#cal .cd[data-d="2026-10-23"]');await p.waitForSelector('.mdb');
+  let t=await modalText(p);assert.ok(/Uniquement cette séance/.test(t));assert.ok(!/Réciproque/.test(await p.$eval('#cmp',e=>e.innerText)),'« une seule » : pas de cascade');
+  await p.check('[name=cm][value=following]');t=await p.$eval('#cmp',e=>e.innerText);assert.ok(/Réciproque/.test(t)&&/Évaluation/.test(t)&&!/Moyenne/.test(t),'cascade limitée à la séquence : '+t);
+  await p.check('#cmk');t=await p.$eval('#cmp',e=>e.innerText);assert.ok(/lundi 26 oct/.test(t)&&/lundi 2 nov/.test(t)||/26 oct/.test(t),'week-end évité : '+t);
+  await clickBtn(p,'Appliquer');await p.waitForFunction(()=>!document.querySelector('.mdl:not(#cal)'));
+  const d1=await p.evaluate(()=>Object.fromEntries(db.seances.map(s=>[s.nom,s.date])));assert.strictEqual(d1['Découverte'],'2026-10-23');assert.strictEqual(d1['Réciproque'],'2026-10-26');assert.strictEqual(d1['Évaluation'],'2026-10-29');assert.strictEqual(d1['Moyenne'],'2026-10-21','autre séquence inchangée');
+  assert.ok(await p.evaluate(()=>S().date!==undefined));await p.click('[data-cal=undo]');const d2=await p.evaluate(()=>Object.fromEntries(db.seances.map(s=>[s.nom,s.date])));assert.strictEqual(d2['Découverte'],'2026-10-20');assert.strictEqual(d2['Réciproque'],'2026-10-22');assert.strictEqual(d2['Évaluation'],'2026-10-26');
+  // liste accessible + séance sans date : pas de date imposée
+  await p.click('[data-cal="m:list"]');assert.ok(await p.locator('#cal .cll input[type=date]').count()>=4);
+  await p.evaluate(()=>{db.seances.find(s=>s.nom==='Moyenne').date='';changed();calRender()});assert.ok(await p.locator('#cal .caltray, #cal .cll').count()>=1);assert.strictEqual(await p.evaluate(()=>db.seances.find(s=>s.nom==='Moyenne').date),'');
+  assert.deepStrictEqual(c.errs,[]);await c.close()}});
+
+T('suivi des compétences : prévue / travaillée / évaluée / bilan saisi, période, CSV, historique',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await p.evaluate(SEED2);
+ await p.evaluate(()=>{const q=Q(),ss=db.seances.filter(s=>s.seq===q.id).sort((a,b)=>a.numero-b.numero);ss[0].comp=['Chercher','Calculer'];ss[1].comp=['Calculer'];ss[2].comp=['Calculer'];ss[2].compEval=['Calculer','Raisonner'];q.compPrev=['Chercher','Raisonner','Représenter'];changed();show()});
+ await p.click('#mbar [data-menu=q]');await p.click('#mbar [data-a=comp]');await p.waitForSelector('#copts:not([hidden])');
+ const D=await p.evaluate(()=>{const d=compData();return d.byC.map(x=>x.c+':'+x.p+'/'+x.w+'/'+x.e).join(' ')+' T='+d.T});
+ assert.ok(/Calculer:0\/3\/1/.test(D)&&/Chercher:1\/1\/0/.test(D)&&/Raisonner:1\/0\/1/.test(D)&&/T=4/.test(D),D);
+ let t=await p.$eval('#prev',e=>e.innerText);assert.ok(/prévue mais non travaillée/.test(t),'alerte Représenter/Raisonner');assert.ok(/jamais déduite automatiquement|jamais déduite/.test(t));
+ assert.ok(!/Acquise par la classe/.test(t),'aucun bilan déduit');
+ await p.selectOption('[data-cb=Chercher]','3').catch(()=>{});await p.evaluate(()=>{show()});await p.selectOption('[data-cb=Chercher]','3');await p.fill('[data-cbt=Chercher]','4 exercices sur 5');
+ assert.strictEqual(await p.evaluate(()=>Q().compBilan.Chercher.n),'3');assert.ok(await p.evaluate(()=>Q().compLog.length>=1));await p.evaluate(()=>preview());t=await p.$eval('#prev',e=>e.innerText);assert.ok(/Acquise par la classe/.test(t)&&/4 exercices sur 5/.test(t)&&/Historique des bilans/.test(t));
+ await p.fill('[data-cpo=from]','2026-10-21');await p.fill('[data-cpo=to]','2026-10-25');await p.dispatchEvent('[data-cpo=to]','change');t=await p.$eval('#prev',e=>e.innerText);assert.ok(/2 séance\(s\)/.test(t),t.slice(0,200));
+ const csv=await p.evaluate(()=>compCSV());assert.ok(csv.startsWith('\ufeff"Compétence"')&&/Calculer/.test(csv));
+ const {x}=await docxOf(p,'comp');assert.ok(/Suivi des compétences/.test(x));assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('mode classe : minuteur horodaté, activité / trace, corrections masquées, police, plein écran, aucune donnée modifiée',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
+ await p.evaluate(()=>{const cv=document.createElement('canvas');cv.width=40;cv.height=30;const u=cv.toDataURL('image/png'),s=S();s.phases=[{duree:2,nom:'Recherche',contenu:'Chercher $x^2$',comment:'SECRET enseignant',mode:'a'},{duree:3,nom:'Bilan',contenu:'Conclure',comment:'',mode:'c'}];s.activite='1. Question un\n→ Correction : réponse cachée\n2. Question deux';s.activiteTitre='Mon activité';s.trace='## Retenir\nPropriété importante';s.imgs=[{u,w:50,a:'c',z:'a',l:'Fig'}];changed()});
+ const before=await p.evaluate(()=>JSON.stringify(db.seances));
+ await p.click('#mbar [data-a=chrono]');await p.waitForSelector('#cl:not([hidden])');assert.strictEqual(await p.$eval('#ct',e=>e.textContent),'02:00');
+ assert.ok(!/SECRET/.test(await p.$eval('#cl',e=>e.innerText)),'commentaires enseignant jamais affichés');await p.waitForSelector('#cc .katex');
+ await p.click('#cl [data-c="v:a"]');let t=await p.$eval('#cc',e=>e.innerText);assert.ok(/Mon activité/.test(t)&&/Question deux/.test(t)&&!/réponse cachée/.test(t));assert.ok(await p.locator('#cc img').count()===1);
+ await p.click('#cl [data-c=corr]');assert.ok(/réponse cachée/.test(await p.$eval('#cc',e=>e.innerText)));await p.click('#cl [data-c=corr]');
+ await p.click('#cl [data-c="v:t"]');assert.ok(/Propriété importante/.test(await p.$eval('#cc',e=>e.innerText)));await p.keyboard.press('p');assert.ok(/Chercher/.test(await p.$eval('#cc',e=>e.innerText)));
+ const f0=await p.$eval('#cc',e=>parseFloat(getComputedStyle(e).fontSize));await p.click('#cl [data-c=fp]');assert.ok(await p.$eval('#cc',e=>parseFloat(getComputedStyle(e).fontSize))>f0);
+ // minuteur basé sur l'horloge : on avance l'horloge de 70 s sans attendre
+ await p.keyboard.press(' ');await p.waitForTimeout(400);await p.evaluate(()=>{const o=Date.now;Date.now=()=>o.call(Date)+70000});await p.waitForFunction(()=>document.getElementById('ct').textContent==='00:50'||document.getElementById('ct').textContent==='00:49',null,{timeout:4000});
+ assert.ok(/Écoulé 01:1\d/.test(await p.$eval('#cmeta',e=>e.textContent)),await p.$eval('#cmeta',e=>e.textContent));
+ await p.click('#cl [data-c=plus]');await p.waitForTimeout(400);assert.ok(/01:4\d|01:5\d/.test(await p.$eval('#ct',e=>e.textContent)));
+ await p.evaluate(()=>{const o=Date.now;Date.now=()=>o.call(Date)+200000});await p.waitForFunction(()=>/^\+/.test(document.getElementById('ct').textContent),null,{timeout:4000});assert.ok(await p.$eval('#ct',e=>e.classList.contains('out')),'dépassement signalé');
+ await p.keyboard.press(' ');await p.click('#cl [data-c=next]');assert.ok(/2\/2/.test(await p.$eval('#cn',e=>e.textContent))&&await p.$eval('#ct',e=>e.textContent)==='03:00');await p.click('#cl [data-c=reset]');
+ await p.click('#cl [data-c=hc]');assert.ok(await p.$eval('#cl',e=>e.classList.contains('hc')));await p.click('#cl [data-c=zen]');assert.ok(await p.$eval('#cl',e=>e.classList.contains('zen')));
+ await p.click('#cl [data-c=close]');assert.ok(await p.$eval('#cl',e=>e.hidden));assert.strictEqual(await p.evaluate(()=>JSON.stringify(db.seances)),before,'le mode classe ne modifie aucune donnée');assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('mobile / tablette : une zone à la fois, barre du bas, menus plein écran, aucun débordement horizontal',async()=>{const c=await ctx({viewport:{width:390,height:800},hasTouch:true}),p=await c.newPage();await booted(p);await p.evaluate(SEED2);
+ assert.ok(await p.locator('#bnav').isVisible());assert.strictEqual(await p.evaluate(()=>document.body.dataset.mv),'list');assert.ok(await p.locator('#side').isVisible()&&!(await p.locator('#formw').isVisible())&&!(await p.locator('#pw').isVisible()));
+ await p.click('#list a >> nth=1');assert.strictEqual(await p.evaluate(()=>document.body.dataset.mv),'form');assert.ok(await p.locator('#formw').isVisible()&&!(await p.locator('#side').isVisible()));
+ await p.click('#bnav [data-mv=prev]');assert.ok(await p.locator('#prev').isVisible());assert.strictEqual(await p.getAttribute('#bnav [data-mv=prev]','aria-current'),'page');
+ await p.click('#mbar [data-menu=v]');const r=await p.$eval('#mbar .mp:not([hidden])',e=>{const b=e.getBoundingClientRect();return[b.left,b.right,innerWidth]});assert.ok(r[0]>=0&&r[1]<=r[2],'menu dans l’écran : '+r);await p.keyboard.press('Escape');
+ assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'pas de défilement horizontal de la page');
+ await p.click('#bnav [data-mv=list]');await p.click('#mbar [data-a=cmdk]');await p.waitForSelector('#ck');assert.ok(await p.evaluate(()=>{const b=document.querySelector('#ck .mdb').getBoundingClientRect();return b.right<=innerWidth+1}));await p.keyboard.press('Escape');
+ const d=await ctx({viewport:{width:1360,height:800}}),q=await d.newPage();await booted(q);assert.ok(!(await q.locator('#bnav').isVisible()),'barre du bas masquée sur ordinateur');assert.ok(await q.locator('#side').isVisible()&&await q.locator('#formw').isVisible()&&await q.locator('#pw').isVisible());
+ assert.deepStrictEqual(c.errs,[]);await c.close();await d.close()});
+
+T('accessibilité : rôles, noms accessibles, focus rendu après fermeture des fenêtres',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
+ const bad=await p.evaluate(()=>[...document.querySelectorAll('button,[role=button]')].filter(b=>!(b.textContent.trim()||b.getAttribute('aria-label')||b.title)).length);assert.strictEqual(bad,0,'boutons sans nom');
+ assert.strictEqual(await p.getAttribute('#mbar','role'),'toolbar');assert.ok(await p.locator('#mbar [aria-haspopup]').count()===4);assert.ok(await p.locator('.mp[role=menu]').count()===4);
+ await p.focus('#mbar [data-a=cmdk]');await p.keyboard.press('Enter');await p.waitForSelector('#ck [role=dialog]');await p.keyboard.press('Escape');await p.waitForFunction(()=>!document.getElementById('ck'));assert.ok(await p.evaluate(()=>document.activeElement.dataset.a==='cmdk'),'focus rendu');
+ p.evaluate(()=>storPanel()).catch(()=>{});await p.waitForSelector('.mdb[role=dialog][aria-modal=true]');await p.keyboard.press('Tab');await p.keyboard.press('Escape');await p.waitForFunction(()=>!document.querySelector('.mdl'));
+ assert.ok(await p.locator('#st[role=status]').count()===1&&await p.locator('#toast[role=status]').count()===1);assert.deepStrictEqual(c.errs,[]);await c.close()});
 
 (async()=>{await new Promise(r=>srv.listen(0,'127.0.0.1',r));BASE='http://localhost:'+srv.address().port;browser=await chromium.launch();
  let fail=0;const only=process.argv[2];for(const t of results){if(only&&!t.name.includes(only))continue;const t0=Date.now();try{await Promise.race([t.fn(),new Promise((_,j)=>setTimeout(()=>j(new Error('délai dépassé (90 s)')),90000))]);console.log('  ✓',t.name,'('+(Date.now()-t0)+' ms)')}catch(e){fail++;console.log('  ✗',t.name,'\n     ',String(e.message).split('\n').slice(0,6).join('\n      '))}}
