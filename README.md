@@ -112,6 +112,41 @@ Tout fonctionne dans le navigateur : les données restent sur votre appareil.
 - **Mode classe** : minuteur par phase en plein écran (tablette, VPI), affichage de la mise en œuvre, phase suivante, +1 min, signal sonore à l'échéance, écran maintenu allumé. Raccourcis : Espace (démarrer / pause), ← →, Échap.
 - **PWA** : installable et utilisable hors connexion (voir ci-dessous).
 
+## Nouveautés de la version 2.1 : interface, recherche, suivi
+
+**Menu et navigation**
+- Une **barre de menus** remplace la pile de boutons : *Fichier*, *Séquence*, *Séance*, *Affichage*, plus **Mode classe**, **Word**, **PDF**, la recherche (🔎), annuler / rétablir, mode sombre et aide. Les actions destructrices (supprimer) sont en rouge, séparées. Utilisable au clavier (flèches, Échap).
+- Le **volet de gauche** ne garde que la navigation : filtre, séquences **repliables** (seule la séquence courante est dépliée), compétences et contrôle de la fiche repliés par défaut, état d'enregistrement.
+- Les **options propres à une vue** (fiche élève, cahier de textes, suivi des compétences) s'affichent au-dessus de l'aperçu, seulement dans la vue concernée.
+- **Ctrl + K** : palette de commandes **et** recherche globale (voir ci-dessous).
+- **Mobile et tablette** (écran ≤ 1000 px) : une zone à la fois (Liste / Fiche / Aperçu) avec une barre en bas ; menus en pleine largeur ; zones tactiles agrandies.
+
+**Recherche globale** (Ctrl + K) : titres, objectifs, pré-requis, phases (nom, activités, commentaire, support, modalités), activité, trace écrite, difficultés, aides, compétences, étiquettes, références du B.O. et exercices de la banque. Insensible aux majuscules et aux accents ; plusieurs mots (ils peuvent être dans des champs différents de la même séance) ; extraits avec mots surlignés ; résultats groupés (séances, séquences, exercices) ; filtres par niveau, classe, séquence et période ; ouverture directe du résultat. Les actions des menus sont aussi lançables depuis la palette.
+
+**Couverture du B.O.** (Séquence ▸ Couverture du B.O.)
+- Dans la séance : cases « Contenus du B.O. travaillés dans cette séance ». Dans la séquence : statut de chaque contenu (À traiter, En cours, Traité, Non pertinent).
+- Le rapport (imprimable, exportable en Word) distingue des **avertissements** (contenu travaillé dans aucune séance, séance sans contenu associé, association vers un contenu modifié, compétence annoncée mais cochée nulle part, compétences cochées sans activité) et des **informations** (contenu dans plusieurs séances, marqué « Traité » sans séance, séances liées toutes faites). Des **suggestions** d'association (mots communs) sont proposées mais **jamais appliquées automatiquement** ; les objectifs ne sont jamais modifiés.
+- Les associations sont rattachées au *texte* de la ligne du B.O. : modifier une ligne rompt son lien (signalé par un avertissement).
+
+**Banque d'exercices** (Fichier ▸ Banque d'exercices, ou 📚 dans la barre de formules)
+- Exercices, questions flash, calcul mental, problèmes, activités de découverte, consignes, exemples corrigés, traces écrites, questions diagnostiques, remédiation ; niveau, domaine, notions, compétences, énoncé, correction, difficulté, durée, mots-clés, source.
+- Recherche, filtres, favoris, duplication, modification, suppression avec confirmation, import / export JSON (doublons ignorés).
+- **Insertion en un clic** dans l'Activité ou la Trace écrite, **à la position du curseur** ou à la fin, sans rien écraser ; la correction est insérée sous la forme « → Correction : … » (donc masquée par l'option de la fiche élève). L'insertion crée une **copie indépendante**.
+- **★ enregistrer** : enregistre dans la banque le texte sélectionné dans un champ.
+
+**Calendrier** (Affichage ▸ Calendrier) : vues **mois**, **semaine** et **liste** (accessible, dates modifiables au clavier), filtre par classe, couleur par classe, statut visible. Déplacement par **glisser-déposer** ou, au tactile, en **sélectionnant** la séance puis en touchant le jour. En déplaçant une séance : *uniquement celle-ci*, *celle-ci et les suivantes de la séquence*, ou *celle-ci et les séances postérieures à une date choisie* ; **aperçu** avant / après, avertissement de conflit (même classe, même jour), option **éviter week-ends et jours non travaillés** (liste personnelle), bouton **Annuler le dernier déplacement**. Les dates sont manipulées en jours calendaires (aucun décalage lié au fuseau horaire ou à l'heure d'été). Les séances sans date restent sans date.
+
+**Suivi des compétences** (Séquence ▸ Suivi des compétences) : distingue **prévue** (par séquence), **travaillée** (cochée dans la séance), **évaluée** (nouvelle case dans la séance) et **bilan de la classe** saisi par l'enseignant avec un critère de maîtrise et un historique. Bilan sur une période et/ou une classe, alertes (« prévue mais non travaillée », « peu travaillée »), export CSV, impression / Word. La maîtrise n'est jamais déduite automatiquement et **aucune donnée individuelle d'élève** n'est enregistrée.
+
+**Mode classe** : trois affichages (**Phase**, **Activité**, **Trace écrite**) avec images et formules ; corrections masquées par défaut ; taille du texte réglable (A− / A+, touches + et −) ; **plein écran** (F) ; **contraste élevé** ; mode **sans distraction** ; minuteur calculé sur l'horloge (pas de dérive si l'onglet est suspendu) avec temps prévu / écoulé, +1 min, réinitialisation, dépassement signalé ; raccourcis Espace, ← →, P / A / T, Échap. Les commentaires de l'enseignant ne sont jamais affichés et le mode classe ne modifie aucune donnée.
+
+## Nouveautés de la version 2.0 : stockage et exports
+
+- **IndexedDB** (voir *Sauvegarde et données* et *MIGRATION.md*), sauvegarde **.zip** vérifiée, import avec aperçu.
+- **Export Word natif** (bibliothèque `docx` embarquée) : titres, tableaux, encadrés, images, en-tête / pied de page « Page X / Y » ; formules courantes en **équations Word modifiables**, repli en texte lisible pour les constructions non gérées.
+- **PDF** : en-tête du tableau de déroulement répété sur chaque page ; phases très longues autorisées à se couper.
+- Analyse didactique : champs **Aides et différenciation prévues** et **Évaluation et bilan de la séance** (absents de la fiche élève). Fiche élève : option **Lignes de réponse**.
+
 ## Fichiers
 
 | Fichier | Rôle |
@@ -180,6 +215,9 @@ Dans `bank_difficultes.js`, ajoutez des lignes `["Thème", "Titre", "Description
 
 - Les formules écrites en fractions dans les PDF officiels sont mal extraites pour deux lignes de 5e (« fractions simples comme… », « fractions égales ») : à corriger à la main après insertion.
 - Les « Automatismes » du programme de 6e ne sont pas inclus.
+- La banque d'exercices ne gère pas encore les images (texte et formules uniquement).
+- Pas de tableau de bord annuel complet (la *Progression annuelle* existante est conservée) ni de suivi individuel d'élèves (volontaire).
+- Le calendrier ne connaît pas les jours fériés officiels : saisissez vos jours non travaillés.
 - Export Word : les équations non reconnues (systèmes `cases`, matrices, commandes LaTeX rares) sont converties en texte lisible, pas en équation modifiable. LibreOffice sans module Math n'affiche pas les équations Word : ouvrir avec Microsoft Word.
 - L'export Word reprend la structure et la mise en page principales, mais pas pixel pour pixel l'aperçu (polices de substitution possibles, mode « 2 par feuille » exporté en une seule fiche).
 - Le rendu Word n'a été vérifié ici que par analyse du fichier (XML, python-docx, conversion LibreOffice) : ouvrez un export dans Word pour valider sur vos documents.
