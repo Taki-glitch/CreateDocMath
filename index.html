@@ -157,6 +157,7 @@ body.dark .ckit.on,body.dark .ckit:hover{background:#243342}body.dark .cke,body.
 /* ---- banque ---- */
 .bkb{max-width:860px}.bkh,.calt{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.bkh h3,.calt h3{margin:0;flex:1}.bkt{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;margin:6px 0}.bkt input[data-bq]{flex:1;min-width:200px;margin:0}.bkt select{width:auto;margin:0}
 .bkt .inl{display:flex;gap:4px;align-items:center;margin:0;font-weight:400}.bkt .inl input{width:auto;margin:0}.bki{background:#eef4f6;border-radius:6px;padding:6px 8px}.bkc{font-size:12px;color:#5b6b7a}
+.bkth{max-height:48px;float:right;margin-left:8px;border:1px solid var(--line)}
 .bkit{border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin:6px 0}.bkit.on{outline:2px solid #4fb3c8}.bke{font-size:12.5px;color:#4a5a73;margin:3px 0 6px}.bka{display:flex;gap:6px;flex-wrap:wrap}.bka .btn{padding:4px 9px}
 body.dark .bki{background:#14202b}body.dark .bkc,body.dark .bke{color:#9db0c2}
 /* ---- calendrier ---- */
@@ -200,11 +201,11 @@ body.dark .cd{background:#17212b}body.dark .cd.wkd{background:#131c25}body.dark 
   <hr><button role="menuitem" data-a="bank">📚 Banque d’exercices…</button><button role="menuitem" data-a="stor" title="État du stockage, sauvegardes, import, copies de sécurité">🛟 Stockage et sauvegardes…</button>
   <div id="fsbox"><button role="menuitem" data-a="fspick" title="Chrome / Edge : copie automatique dans un dossier de votre choix">📁 Dossier de sauvegarde automatique…</button><div id="fsst" style="font-size:11px;color:#5b6b7a;padding:0 12px 4px"></div></div></div></div>
  <div class="mm"><button class="mb" data-menu="q" aria-haspopup="true" aria-expanded="false">Séquence ▾</button><div class="mp" role="menu" hidden>
-  <button role="menuitem" data-a="newq">+ Nouvelle séquence</button><button role="menuitem" data-a="dupq" title="Copier la séquence et toutes ses séances (réutilisation l’an prochain)">⧉ Dupliquer la séquence</button><button role="menuitem" data-a="clone" title="Copier la séquence et ses séances pour une autre classe, avec décalage des dates">🏫 Copier pour une autre classe…</button><button role="menuitem" data-a="renum" title="Renuméroter les séances de la séquence de 1 à N, dans l’ordre actuel">1…N Renuméroter les séances</button>
+  <button role="menuitem" data-a="newq">+ Nouvelle séquence</button><button role="menuitem" data-a="dupq" title="Copier la séquence et toutes ses séances (réutilisation l’an prochain)">⧉ Dupliquer la séquence</button><button role="menuitem" data-a="clone" title="Copier la séquence et ses séances pour une autre classe, avec décalage des dates">🏫 Copier pour une autre classe…</button><button role="menuitem" data-a="saveseqmodel">★ Enregistrer la séquence comme modèle…</button><button role="menuitem" data-a="renum" title="Renuméroter les séances de la séquence de 1 à N, dans l’ordre actuel">1…N Renuméroter les séances</button>
   <hr><button role="menuitem" data-a="cov">📊 Couverture du B.O.</button><button role="menuitem" data-a="comp">🎯 Suivi des compétences</button>
   <hr><button role="menuitem" class="dng" data-a="delq">🗑 Supprimer la séquence…</button></div></div>
  <div class="mm"><button class="mb" data-menu="s" aria-haspopup="true" aria-expanded="false">Séance ▾</button><div class="mp" role="menu" hidden>
-  <button role="menuitem" data-a="news">+ Nouvelle séance</button><div id="mtpl"></div><button role="menuitem" data-a="dup">⧉ Dupliquer la séance</button><button role="menuitem" data-a="savemodel" title="Enregistrer la séance courante comme modèle">★ Enregistrer comme modèle…</button>
+  <button role="menuitem" data-a="news">+ Nouvelle séance</button><div id="mtpl"></div><button role="menuitem" data-a="dup">⧉ Dupliquer la séance</button><button role="menuitem" data-a="models">📚 Bibliothèque de modèles…</button><button role="menuitem" data-a="savemodel" title="Enregistrer la séance courante comme modèle">★ Enregistrer comme modèle…</button>
   <hr><button role="menuitem" data-a="mup">↑ Monter la séance</button><button role="menuitem" data-a="mdn">↓ Descendre la séance</button>
   <hr><button role="menuitem" class="dng" data-a="dels">🗑 Supprimer la séance…</button></div></div>
  <div class="mm"><button class="mb" data-menu="v" aria-haspopup="true" aria-expanded="false">Affichage ▾</button><div class="mp" role="menu" hidden>
@@ -306,21 +307,23 @@ function blobKey(u){if(!isData(u)||u.length<1500)return null;let k=sv.kc.get(u);
 function sameImg(a,b){if(a===b)return true;if(!isData(a)||!isData(b))return false;const x=d2b(a).data,y=d2b(b).data;if(x.length!==y.length)return false;for(let i=0;i<x.length;i++)if(x[i]!==y[i])return false;return true}
 
 /* --- validation / normalisation / comparaison --- */
+const IDOK=v=>typeof v==='string'&&/^[\w-]{1,64}$/.test(v);
 function validateDb(d){const E=[],W=[];
  if(!d||typeof d!=='object'||Array.isArray(d))return{E:['structure inattendue (objet attendu)'],W};
  if(!Array.isArray(d.seqs))E.push('liste des séquences absente ou invalide');
  if(!Array.isArray(d.seances))E.push('liste des séances absente ou invalide');
  if(E.length)return{E,W};
  const qi=new Set(),si=new Set();
- d.seqs.forEach((q,i)=>{if(!q||typeof q!=='object'||!q.id){E.push('séquence n°'+(i+1)+' sans identifiant');return}if(qi.has(q.id))E.push('identifiant de séquence en double : '+q.id);qi.add(q.id)});
- d.seances.forEach((s,i)=>{if(!s||typeof s!=='object'||!s.id){E.push('séance n°'+(i+1)+' sans identifiant');return}if(si.has(s.id))E.push('identifiant de séance en double : '+s.id);si.add(s.id);if(!qi.has(s.seq))W.push('séance « '+(s.nom||s.id)+' » rattachée à une séquence inconnue')});
+ d.seqs.forEach((q,i)=>{if(!q||typeof q!=='object'||!q.id){E.push('séquence n°'+(i+1)+' sans identifiant');return}if(!IDOK(q.id)){E.push('identifiant de séquence invalide (n°'+(i+1)+')');return}if(qi.has(q.id))E.push('identifiant de séquence en double : '+q.id);qi.add(q.id)});
+ d.seances.forEach((s,i)=>{if(!s||typeof s!=='object'||!s.id){E.push('séance n°'+(i+1)+' sans identifiant');return}if(!IDOK(s.id)){E.push('identifiant de séance invalide (n°'+(i+1)+')');return}if(si.has(s.id))E.push('identifiant de séance en double : '+s.id);si.add(s.id);if(!qi.has(s.seq))W.push('séance « '+(s.nom||s.id)+' » rattachée à une séquence inconnue')});
  return{E,W}}
+const IMGOK=u=>typeof u==='string'&&(u===''||/^data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+\/=\s]*$/.test(u));
 function normalizeDb(d){d.v=SCHEMA;if('models'in d&&!Array.isArray(d.models))d.models=[];
- d.seances.forEach(s=>{s.phases=(Array.isArray(s.phases)?s.phases:[]).filter(p=>p&&typeof p==='object');if(!Array.isArray(s.comp))s.comp=[];s.imgs=(Array.isArray(s.imgs)?s.imgs:[]).map(x=>typeof x==='string'?{u:x,w:100,a:'c',z:'c'}:x).filter(x=>x&&typeof x==='object')});
+ d.seances.forEach(s=>{s.phases=(Array.isArray(s.phases)?s.phases:[]).filter(p=>p&&typeof p==='object');if(!Array.isArray(s.comp))s.comp=[];s.imgs=(Array.isArray(s.imgs)?s.imgs:[]).map(x=>typeof x==='string'?{u:x,w:100,a:'c',z:'c'}:x).filter(x=>x&&typeof x==='object').map(m=>({...m,u:IMGOK(m.u)?m.u:'',w:Math.max(5,Math.min(100,+m.w||100)),a:m.a==='r'?'r':'c',z:['a','t','c'].includes(m.z)?m.z:'c'}))});
  if(!d.seances.some(s=>s.id===d.cur))d.cur=(d.seances[0]||{}).id||null;return d}
 const countsOf=d=>({seqs:d.seqs.length,seances:d.seances.length,models:(d.models||[]).length,images:d.seances.reduce((a,s)=>a+(s.imgs||[]).filter(m=>m&&m.u).length,0)});
 function diffDb(a,b){const D=[],ca=countsOf(a),cb=countsOf(b);for(const k in ca)if(ca[k]!==cb[k])D.push(k+' : '+ca[k]+' attendu(es), '+cb[k]+' trouvé(es)');
- const rest=d=>{const{seqs,seances,...r}=d;return cj(r)};if(rest(a)!==rest(b))D.push('paramètres différents');
+ const rest=d=>{const{seqs,seances,...r}=d;if(Array.isArray(r.bank))r.bank=r.bank.map(x=>x&&typeof x==='object'?{...x,img:x.img?1:0}:x);return cj(r)};if(rest(a)!==rest(b))D.push('paramètres différents');(a.bank||[]).forEach((x,i)=>{const y=(b.bank||[])[i];if(x&&x.img&&!(y&&sameImg(x.img,y.img)))D.push('image de la banque « '+x.titre+' » différente')});
  if(a.seqs.map(q=>q.id).join()!==b.seqs.map(q=>q.id).join())D.push('ordre ou liste des séquences différent');
  if(a.seances.map(s=>s.id).join()!==b.seances.map(s=>s.id).join())D.push('ordre ou liste des séances différent');
  const bq=new Map(b.seqs.map(q=>[q.id,q])),bs=new Map(b.seances.map(s=>[s.id,s]));
@@ -340,7 +343,7 @@ async function putBackup(rec){const t=idbh.transaction('backups','readwrite'),o=
 function sSer(d){const imgs=new Map(),ext=m=>{if(!m||typeof m!=='object')return m;const k=blobKey(m.u);if(!k)return m;imgs.set(k,m.u);return{...m,u:'idb:'+k}},cur=new Map();
  d.seqs.forEach(q=>cur.set('q:'+q.id,['seqs',q.id,JSON.stringify(q)]));
  d.seances.forEach(s=>cur.set('s:'+s.id,['seances',s.id,JSON.stringify({...s,imgs:(s.imgs||[]).map(ext)})]));
- const{seqs,seances,...rest}=d;rest.v=SCHEMA;
+ const{seqs,seances,...rest}=d;rest.v=SCHEMA;if(Array.isArray(rest.bank))rest.bank=rest.bank.map(x=>{if(!x||typeof x!=='object')return x;const k=blobKey(x.img);if(!k)return x;imgs.set(k,x.img);return{...x,img:'idb:'+k}});
  return{cur,imgs,set:JSON.stringify(rest),ord:JSON.stringify({q:d.seqs.map(q=>q.id),s:d.seances.map(s=>s.id)})}}
 const toBuf=u=>{const b=d2b(u);return{type:b.type,data:b.data.buffer}};
 async function stReadDb(){
@@ -348,10 +351,11 @@ async function stReadDb(){
  const set=K.settings?JSON.parse(K.settings):{},ord=K.order?JSON.parse(K.order):{q:[],s:[]};
  const ix=(arr,o)=>{const m=new Map(o.map((id,i)=>[id,i]));return arr.sort((a,b)=>(m.has(a.id)?m.get(a.id):1e9)-(m.has(b.id)?m.get(b.id):1e9))};
  const seqs=ix(qs.map(x=>JSON.parse(x[1])),ord.q),seances=ix(ss.map(x=>JSON.parse(x[1])),ord.s),keys=new Set();
- seances.forEach(s=>(s.imgs||[]).forEach(m=>{if(m&&typeof m.u==='string'&&m.u.startsWith('idb:'))keys.add(m.u.slice(4))}));
+ seances.forEach(s=>(s.imgs||[]).forEach(m=>{if(m&&typeof m.u==='string'&&m.u.startsWith('idb:'))keys.add(m.u.slice(4))}));(Array.isArray(set.bank)?set.bank:[]).forEach(x=>{if(x&&typeof x.img==='string'&&x.img.startsWith('idb:'))keys.add(x.img.slice(4))});
  const bt=idbh.transaction('blobs').objectStore('blobs'),got=new Map();let missing=0;
  await Promise.all([...keys].map(async k=>{const r=await rq(bt.get(k));if(r)got.set(k,b2d(r.type,r.data))}));
  seances.forEach(s=>{s.imgs=(s.imgs||[]).map(m=>{if(m&&typeof m.u==='string'&&m.u.startsWith('idb:')){const k=m.u.slice(4);if(got.has(k))return{...m,u:got.get(k)};missing++;return{...m,u:''}}return m})});
+ if(Array.isArray(set.bank))set.bank=set.bank.map(x=>{if(x&&typeof x.img==='string'&&x.img.startsWith('idb:')){const k=x.img.slice(4);if(got.has(k))return{...x,img:got.get(k)};missing++;return{...x,img:''}}return x});
  return{d:{...set,seqs,seances},missing}}
 async function stVerify(){const r=await stReadDb(),D=diffDb(db,r.d);if(r.missing)D.push(r.missing+' image(s) introuvable(s) dans le stockage');return D}
 async function stCommitFull(d,extra){const S=sSer(d),B=[...S.imgs].map(([k,u])=>[k,toBuf(u)]);
@@ -380,7 +384,7 @@ async function stWrite(){
    let werr=null;g.onsuccess=()=>{if((g.result||0)!==sv.rev){conflict=true;t.abort();return}
     try{put.forEach(([st,id,j])=>t.objectStore(st).put(j,id));del.forEach(([st,id])=>t.objectStore(st).delete(id));
     const bs=t.objectStore('blobs');newB.forEach(([k,v])=>bs.put(v,k));oldB.forEach(k=>bs.delete(k));
-    kv.put(S.set,'settings');kv.put(S.ord,'order');kv.put(SCHEMA,'schema');kv.put(sv.rev+1,'rev');kv.put(Date.now(),'lastSave')}catch(e){werr=e;try{t.abort()}catch(_){}}};
+    kv.put(S.set,'settings');kv.put(S.ord,'order');kv.put(sv.rev+1,'rev');kv.put(Date.now(),'lastSave')}catch(e){werr=e;try{t.abort()}catch(_){}}};
    try{await done}catch(e){if(conflict){sv.stale=true;sv.dirty=true;return}throw werr||e}
    sv.rev++;sv.ser=new Map([...S.cur].map(([k,v])=>[k,v[2]]));sv.blobs=new Set(S.imgs.keys());sv.set=S.set;sv.ord=S.ord;sv.last=Date.now();sv.kc=new Map([...S.imgs].map(([k,u])=>[u,k]));
    if(bc)try{bc.postMessage({t:'saved',tab:TAB})}catch(e){}}
@@ -473,7 +477,7 @@ async function stSync(){if(STORE!=='idb')return;if(sv.busy||(sv.dirty&&pending()
 const shaC=new Map(),EXT={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif'};
 async function buildZip(d){if(!window.JSZip)throw new Error('bibliothèque JSZip absente');
  const Z=new JSZip(),used=new Map(),ref=m=>{if(!m||typeof m!=='object'||!isData(m.u))return m;let r=shaC.get(m.u);if(!r){const b=d2b(m.u);r={h:sha256(b.data),type:b.type,size:b.data.length};r.name='img/'+r.h+'.'+(EXT[b.type]||'bin');shaC.set(m.u,r)}used.set(r.name,{r,u:m.u});return{...m,u:r.name}};
- const{seqs,seances,...settings}=d,data={seqs,seances:seances.map(s=>({...s,imgs:(s.imgs||[]).map(ref)})),settings},dj=JSON.stringify(data),dh=sha256(new TextEncoder().encode(dj));
+ const{seqs,seances,...settings}=d;if(Array.isArray(settings.bank))settings.bank=settings.bank.map(x=>x&&isData(x.img)?{...x,img:ref({u:x.img}).u}:x);const data={seqs,seances:seances.map(s=>({...s,imgs:(s.imgs||[]).map(ref)})),settings},dj=JSON.stringify(data),dh=sha256(new TextEncoder().encode(dj));
  const man={format:'createdocmath-backup',formatVersion:1,schema:SCHEMA,app:APP_V,created:new Date().toISOString(),counts:countsOf(d),data:{name:'data.json',sha256:dh,size:dj.length},images:[...used.values()].map(({r})=>({name:r.name,sha256:r.h,size:r.size,type:r.type}))};
  Z.file('manifest.json',JSON.stringify(man,null,1));Z.file('data.json',dj);
  Z.file('LISEZMOI.txt','Sauvegarde CreateDocMath (format 1).\nNe modifiez pas ces fichiers : ouvrez l’archive avec « Importer » dans l’application.\nmanifest.json = description et sommes de contrôle ; data.json = séquences et séances ; img/ = images.\n');
@@ -495,6 +499,7 @@ async function readZip(src){if(!window.JSZip)throw new Error('bibliothèque JSZi
  for(const x of man.images||[]){if(!/^img\/[0-9a-f]{64}\.[a-z]+$/.test(x.name||'')||!/^image\/(jpeg|png|webp|gif)$/.test(x.type||'')){R.errors.push('image invalide dans le manifeste : '+String(x.name).slice(0,60));continue}
   const f=Z.file(x.name);if(!f){R.errors.push('image manquante : '+x.name);continue}const b=await f.async('uint8array');if(sha256(b)!==x.sha256){R.errors.push('image altérée : '+x.name);continue}im.set(x.name,b2d(x.type,b))}
  const d={...(data.settings||{}),seqs:data.seqs,seances:Array.isArray(data.seances)?data.seances.map(s=>({...s,imgs:(Array.isArray(s.imgs)?s.imgs:[]).map(m=>{if(m&&typeof m.u==='string'&&m.u.startsWith('img/')){if(im.has(m.u))return{...m,u:im.get(m.u)};return{...m,u:''}}return m})})):data.seances};
+ if(Array.isArray(d.bank))d.bank=d.bank.map(x=>x&&typeof x.img==='string'&&x.img.startsWith('img/')?{...x,img:im.has(x.img)?im.get(x.img):''}:x);
  const v=validateDb(d);if(v.E.length){R.errors.push(...v.E);R.imgOnly=false}R.warnings.push(...v.W);if(v.E.length)throw Object.assign(new Error('Données invalides : '+v.E.slice(0,3).join(' · ')),{R});
  normalizeDb(d);const c=countsOf(d);if(man.counts&&(man.counts.seqs!==c.seqs||man.counts.seances!==c.seances))R.warnings.push('les effectifs ne correspondent pas au manifeste');
  R.man=man;return{d,R}}
@@ -524,7 +529,7 @@ async function importFlow(d,o){const R=o.R||{errors:[],warnings:[]};
  if(c==='merge'){let a=0,cp=0,sk2=n.same;const uS=new Set(db.seances.map(s=>s.id)),uQ=new Set(db.seqs.map(q=>q.id));let first=null;
   for(const p of plan){if(p.st==='same')continue;const keep=p.st==='new'&&!uQ.has(p.q.id),nq=keep?p.q.id:uid(),q={...JSON.parse(JSON.stringify(p.q)),id:nq};if(!keep)q.nom=(q.nom||'')+' (importée)';db.seqs.push(q);uQ.add(nq);
    p.ss.forEach(s=>{const x=JSON.parse(JSON.stringify(s));x.seq=nq;if(uS.has(x.id))x.id=uid();uS.add(x.id);db.seances.push(x);first=first||x.id});keep?a++:cp++}
-  (d.models||[]).forEach(m=>{if(!(db.models||[]).some(x=>x.label===m.label))(db.models=db.models||[]).push(m)});
+  (d.models||[]).forEach(m=>{if(!(db.models||[]).some(x=>x.label===m.label))(db.models=db.models||[]).push(m)});(d.seqModels||[]).forEach(m=>{if(!SM().some(x=>x.label===m.label))SM().push(m)});{const sg=x=>nmap((x.titre||'')+'|'+(x.enonce||'')).n,bs=new Set(BK().map(x=>x.id)),sgs=new Set(BK().map(sg));(d.bank||[]).forEach(x=>{if(x&&x.id&&!bs.has(x.id)&&!sgs.has(sg(x))){BK().push(JSON.parse(JSON.stringify(x)));bs.add(x.id)}})}
   if(first)db.cur=first;bv='';show();rep='<p>Fusion terminée : <b>'+a+'</b> séquence(s) ajoutée(s), <b>'+cp+'</b> ajoutée(s) en copie, <b>'+sk2+'</b> ignorée(s) car déjà présente(s).</p>'}
  else{const ok=await modal('Remplacer toutes vos fiches ?','<p>Vos <b>'+db.seqs.length+' séquence(s)</b> et <b>'+db.seances.length+' séance(s)</b> actuelles seront remplacées par le contenu de la source. Une copie de sécurité interne est créée d’abord (récupérable dans « Stockage et sauvegardes »).</p>',[['go','Remplacer','dng'],['cancel','Annuler','pri']],{esc:'cancel'});if(ok!=='go')return;
   try{await snapshotBackup('pre-restore')}catch(e){await info('Remplacement annulé','<p>La copie de sécurité n’a pas pu être créée ('+esc(errMsg(e))+'). Vos fiches n’ont pas été modifiées.</p>');return}
@@ -581,14 +586,14 @@ function build(){
   <b>Contenus du B.O. travaillés dans cette séance</b><div id="covs"></div></details>
  <details open><summary>Déroulement envisagé</summary>
   <div id="ph"></div>
-  <select id="tpl"><option value="">+ Ajouter une phase…</option>${Object.keys(TPL).map(k=>`<option>${k}</option>`).join('')}<option value="_">Phase vide</option></select>
+  <select id="tpl" aria-label="Ajouter une phase"><option value="">+ Ajouter une phase…</option>${Object.keys(TPL).map(k=>`<option>${k}</option>`).join('')}<option value="_">Phase vide</option></select>
   <p>Durée totale : <span id="tot"></span></p>
   ${fld('s','travail','Travail personnel donné (ligne du tableau)',3,'Exercice 7 pour le mardi 15 novembre…')}
   ${fld('s','objFin','Objectifs de fin de séance',3)}${fld('s','activiteTitre','Titre du focus sur l’activité',0,'Focus sur l’activité de découverte : « … »')}${fld('s','activite','Focus sur l’activité (énoncé, questions, corrections)',6)}${fld('s','trace','Contenu de la trace écrite (bilan à retenir)',6)}<b>Impression : saut de page avant…</b><div class="cc"><label><input type="checkbox" data-s="sautActivite">le focus sur l’activité</label><label><input type="checkbox" data-s="sautTrace">la trace écrite</label><label><input type="checkbox" data-s="sautAnalyse">l’analyse didactique</label></div></details>
  <details open><summary>Analyse didactique</summary>
   ${fld('s','choixProbleme','Choix pédagogiques et didactiques sur le problème proposé',6)}
   <label>Énoncé / documents (images)<input type="file" id="imgf" accept="image/*"></label><div class="th" id="th"></div>
-  <details id="dfd" class="bo"><summary>💡 Banque d’obstacles classiques (un clic pour ajouter)</summary><input id="dfs" placeholder="Rechercher : fraction, priorité, Thalès…" style="margin-bottom:6px"><select id="dft"></select><div id="dfl"></div></details>
+  <details id="dfd" class="bo"><summary>💡 Banque d’obstacles classiques (un clic pour ajouter)</summary><input id="dfs" placeholder="Rechercher : fraction, priorité, Thalès…" style="margin-bottom:6px"><select id="dft" aria-label="Thème des difficultés"></select><label style="display:flex;gap:6px;font-weight:400;margin:6px 0"><input type="checkbox" id="dfn" checked style="width:auto;margin:0">Adapter au niveau de la séquence</label><div id="dfl"></div></details>
   ${fld('s','difficultes','Difficultés potentielles rencontrées par les élèves',6)}
   ${fld('s','supp','Problème supplémentaire pour les élèves les plus rapides',4)}
   ${fld('s','aides','Aides et différenciation prévues (étayage, outils, groupes de besoin…)',4)}
@@ -606,7 +611,7 @@ function fill(){const s=S(),q=Q();s.imgs=(s.imgs||[]).map(x=>typeof x==='string'
  document.querySelectorAll('[data-s]').forEach(e=>e.type==='checkbox'?e.checked=!!s[e.dataset.s]:e.value=s[e.dataset.s]??'');
  document.querySelectorAll('[data-q]').forEach(e=>e.value=q[e.dataset.q]??'');
  document.querySelectorAll('[data-c]').forEach(e=>e.checked=s.comp.includes(e.dataset.c));
- phases();imgs();covUI();cpUI();document.querySelectorAll('[data-ce]').forEach(e=>e.checked=(s.compEval||[]).includes(e.dataset.ce))}
+ phases();imgs();if($('dfl'))dfList();covUI();cpUI();document.querySelectorAll('[data-ce]').forEach(e=>e.checked=(s.compEval||[]).includes(e.dataset.ce))}
 function phases(){const box=$('ph');box.innerHTML='';
  S().phases.forEach((p,i)=>{const d=document.createElement('div');d.className='ph';
   d.innerHTML=`<div class="r"><input type="number" min="0" data-i="${i}" data-f="duree" placeholder="min"><input data-i="${i}" data-f="nom" placeholder="Nom de la phase"><select data-i="${i}" data-f="mode" title="Qui est actif ?"><option value="a">Élèves actifs</option><option value="c">Collectif</option></select><button data-a="up" data-i="${i}" title="Monter">↑</button><button data-a="dn" data-i="${i}" title="Descendre">↓</button><button data-a="rm" data-i="${i}" title="Supprimer">✕</button></div><input data-i="${i}" data-f="support" placeholder="Support (diaporama, fiche…)" style="margin:0 0 4px"><input data-i="${i}" data-f="modalites" placeholder="Modalités (travail individuel puis correction collective…)" style="margin:0 0 4px"><textarea rows="3" data-i="${i}" data-f="contenu" placeholder="Description des activités des élèves"></textarea><textarea rows="4" data-i="${i}" data-f="comment" placeholder="Commentaires sur cette phase (objectifs, difficultés…)"></textarea>`;
@@ -615,7 +620,7 @@ function total(){const s=S(),t=s.phases.reduce((a,p)=>a+(+p.duree||0),0),e=$('to
  const ac=s.phases.reduce((a,p)=>a+(p.mode==='c'?0:+p.duree||0),0);
  e.textContent=t+' min sur '+(s.duree||'?')+' min'+(s.duree&&t>s.duree?' ⚠ dépasse la durée de la séance':'')+(t?' · élèves actifs : '+ac+' min ('+Math.round(100*ac/t)+' %) · collectif : '+(t-ac)+' min':'');
  e.className=s.duree&&t>s.duree?'warn':''}
-function imgs(){$('th').innerHTML=S().imgs.map((m,i)=>`<div style="border:1px solid var(--line);padding:4px;background:#fff"><img src="${m.u}" alt=""><button data-a="rmimg" data-i="${i}">✕</button><br><select data-j="${i}" data-p="w" style="width:auto"><option value="25">25 %</option><option value="50">50 %</option><option value="75">75 %</option><option value="100">100 %</option></select> <select data-j="${i}" data-p="a" style="width:auto"><option value="c">Centrée</option><option value="r">À droite</option></select> <select data-j="${i}" data-p="z" style="width:auto" title="Où placer l’image"><option value="a">Activité</option><option value="t">Trace écrite</option><option value="c">Analyse</option></select> <button data-a="crop" data-i="${i}" title="Recadrer">✂</button><br><input data-j="${i}" data-p="l" placeholder="Légende" style="margin-top:4px"></div>`).join('');
+function imgs(){$('th').innerHTML=S().imgs.map((m,i)=>`<div style="border:1px solid var(--line);padding:4px;background:#fff"><img src="${esc(m.u)}" alt=""><button data-a="rmimg" data-i="${i}">✕</button><br><select data-j="${i}" data-p="w" style="width:auto"><option value="25">25 %</option><option value="50">50 %</option><option value="75">75 %</option><option value="100">100 %</option></select> <select data-j="${i}" data-p="a" style="width:auto"><option value="c">Centrée</option><option value="r">À droite</option></select> <select data-j="${i}" data-p="z" style="width:auto" title="Où placer l’image"><option value="a">Activité</option><option value="t">Trace écrite</option><option value="c">Analyse</option></select> <button data-a="crop" data-i="${i}" title="Recadrer">✂</button><br><input data-j="${i}" data-p="l" placeholder="Légende" style="margin-top:4px"></div>`).join('');
  document.querySelectorAll('#th [data-j]').forEach(e=>e.value=S().imgs[+e.dataset.j][e.dataset.p]??(e.dataset.p==='z'?'c':''))}
 function addImg(f){if(!f)return;const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{
  const k=Math.min(1,900/im.width),c=document.createElement('canvas');c.width=im.width*k;c.height=im.height*k;
@@ -672,7 +677,7 @@ function seqHTML(q){const ss=db.seances.filter(x=>x.seq===q.id).sort((a,b)=>a.nu
  </td></tr></tbody></table>`}
 function ficheHTML(s,q){const A=!db.short;
  const dt=s.date?new Date(s.date+'T12:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}):'',niv=(q.niveau||'').trim(),tx=v=>(v||'').trim();
- const fig=m=>`<figure style="margin:0;width:${m.w}%;${m.a==='r'?'float:right;margin:0 0 6pt 10pt':'margin:6pt auto'}"><img src="${m.u}" alt="" style="width:100%;margin:0">${m.l?`<figcaption style="font-size:8.5pt;font-style:italic;text-align:center">${esc(m.l)}</figcaption>`:''}</figure>`;
+ const fig=m=>`<figure style="margin:0;width:${m.w}%;${m.a==='r'?'float:right;margin:0 0 6pt 10pt':'margin:6pt auto'}"><img src="${esc(m.u)}" alt="" style="width:100%;margin:0">${m.l?`<figcaption style="font-size:8.5pt;font-style:italic;text-align:center">${esc(m.l)}</figcaption>`:''}</figure>`;
  const figs=z=>(s.imgs||[]).map(m=>typeof m==='string'?{u:m,w:100,a:'c'}:m).filter(m=>(m.z||'c')===z).map(fig).join(''),clr='<div style="clear:both"></div>';
  let n=0;const H=(t,pb)=>`<h2${pb?PB:''}>${++n}. ${t}</h2>`,kv=(k,v)=>tx(v)?`<tr><td class="k">${k}</td><td>${v}</td></tr>`:'';
  const T=s.phases.reduce((a,p)=>a+(+p.duree||0),0),comps=s.comp.length?`<p><b>${COMP.filter(c=>s.comp.includes(c)).join(', ')}</b></p>`:'';
@@ -681,7 +686,7 @@ function ficheHTML(s,q){const A=!db.short;
  const PB=' class="pb" style="break-before:page;page-break-before:always"',blk=(t,c,pb)=>`<h3${pb?PB:''}>${t}</h3><div class="box">${c}${clr}</div>`;
  const focus=(tx(s.activite)||figs('a'))?blk(esc(s.activiteTitre||'Focus sur l’activité'),figs('a')+fmt(s.activite),s.sautActivite):'',
   trace=(tx(s.trace)||figs('t'))?blk('Contenu de la trace écrite (bilan à retenir)',figs('t')+fmt(s.trace),s.sautTrace):'';
- const AN=[];s.phases.filter(p=>tx(p.comment)).forEach(p=>AN.push([p.nom||'Phase',fmt(p.comment)]));
+ const AN=[];s.phases.filter(p=>tx(p.comment)).forEach(p=>AN.push([esc(p.nom||'Phase'),fmt(p.comment)]));
  if(tx(s.choixProbleme)||figs('c'))AN.push(['Choix pédagogiques et didactiques concernant le problème proposé',figs('c')+fmt(s.choixProbleme)+clr]);
  if(tx(s.difficultes))AN.push(['Difficultés rencontrées par les élèves',fmt(s.difficultes)]);
  if(tx(s.aides))AN.push(['Aides et différenciation prévues',fmt(s.aides)]);
@@ -890,7 +895,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b
  else if(a==='exps'){dl('seance_'+s.nom,{seqs:[Q()],seances:[s]})}
  else if(a==='expq'){const q=Q();dl('sequence_'+q.nom,{seqs:[q],seances:db.seances.filter(x=>x.seq===q.id)})}
  else if(a==='reload')location.reload();
- else if(a==='cmdk')cmdk();else if(a==='cal')calOpen();else if(a==='bank')bankOpen();
+ else if(a==='models')modelsOpen();else if(a==='saveseqmodel')saveSeqModel();else if(a==='cmdk')cmdk();else if(a==='cal')calOpen();else if(a==='bank')bankOpen();
  else if(a==='bksel'){const e2=last;const t=e2&&e2.tagName==='TEXTAREA'?e2.value.slice(e2.selectionStart,e2.selectionEnd).trim():'';if(!t){toast('Sélectionnez d’abord du texte dans un champ de la fiche')}else{bankOpen();bkS.draft={...bkBlank(),enonce:t,titre:shortT(t.split('\n')[0])};bkS.mode='edit';bkRender()}}
  else if(a==='compcsv')dlBytes(compCSV(),'suivi_competences_'+stamp()+'.csv','text/csv;charset=utf-8');
  else if(a==='retrysave'){sv.dirty=true;stFlush()}
@@ -911,7 +916,7 @@ function boInit(){
   <label>Domaine<select id="bd"></select></label><label>Thème<select id="bt"></select></label></div>
   <input id="bs" placeholder="Mot-clé : fractions égales, Pythagore, suites…">
   <div class="cc" style="margin-top:6px">${Object.entries(KL).map(([k,v])=>`<label><input type="checkbox" data-k="${k}" checked>${v}</label>`).join('')}</div>
-  <div id="bl"></div><small id="bc"></small></details>`;
+  <label style="display:flex;gap:6px;font-weight:400;margin:4px 0"><input type="checkbox" id="bsus" style="width:auto;margin:0">Afficher aussi les fragments incomplets (extraction ratée)</label><div id="bl"></div><small id="bc"></small><details id="bom" style="margin-top:6px"><summary>Sources et vérification des programmes</summary><div id="bomc"></div></details></details>`;
  bodState();const b=$('bop');$('bod').addEventListener('toggle',()=>{if($('bod').open)boLoad()});
  b.addEventListener('change',e=>{const t=e.target;if(t.id==='bs')return;if(t.id==='bn'||t.id==='bd')boOpts();boList()});
  b.addEventListener('input',e=>{if(e.target.id==='bs')boList()});
@@ -922,23 +927,27 @@ function boLoad(){if(boReady)return;boReady=true;$('bc').textContent='Chargement
   if(typeof BO_DATA==='undefined'){$('bc').textContent='⚠ Fichiers BO introuvables : placez '+BO_FILES.join(', ')+' à côté de index.html.';return}
   const nv=uniq(BO_DATA.map(x=>x[0])).sort((a,b)=>NIV.findIndex(n=>a.startsWith(n))-NIV.findIndex(n=>b.startsWith(n)));
   $('bn').innerHTML='<option value="">Tous</option>'+nv.map(n=>`<option>${esc(n)}</option>`).join('');
-  boOpts();boList();const miss=m.filter(Boolean);if(miss.length)$('bc').textContent+=' · manquant(s) : '+miss.join(', ')})}
+  boOpts();boList();bomRender();const miss=m.filter(Boolean);if(miss.length)$('bc').textContent+=' · manquant(s) : '+miss.join(', ')})}
 function setOpts(id,arr){const e=$(id),v=e.value;e.innerHTML='<option value="">Tous</option>'+arr.map(a=>`<option>${esc(a)}</option>`).join('');if(arr.includes(v))e.value=v}
 function boOpts(){if(typeof BO_DATA==='undefined')return;const n=$('bn').value,it=BO_DATA.filter(x=>!n||x[0]===n);
  setOpts('bd',uniq(it.map(x=>x[1])));const d=$('bd').value;setOpts('bt',uniq(it.filter(x=>!d||x[1]===d).map(x=>x[2])))}
+const boBad=t=>{t=(t||'').trim();return t.length<6||!/[a-zà-ÿ]{3}/i.test(t)};
+const boSus=t=>{t=(t||'').trim();return /;\s*;|\bet\s*;|[=:]\s*[;.]|[+–-]\s*[;.]|[×÷]\s*[=)]|\bcomme\s*[:.]?\s*$|\ble\s+de\b|\s\.$|\(\s*\)/.test(t)||/(?:^|\s)(?:à|de|du|des|les|la|le|un|une|et|ou|en|par)\s*$/i.test(t)};
+function bomRender(){const e=$('bomc');if(!e||typeof BO_META==='undefined')return;const cnt=n=>{const L=BO_DATA.filter(x=>n.split(', ').some(k=>x[0].startsWith(k.split(' ')[0])));return[L.filter(x=>boBad(x[4])).length,L.filter(x=>!boBad(x[4])&&boSus(x[4])).length]};
+ e.innerHTML='<table>'+'<tr><th>Fichier</th><th>Niveaux</th><th>Source</th><th>Vérification</th></tr>'+BO_META.map(m=>{const[b,s2]=cnt(m.niveaux);return'<tr><td>'+esc(m.fichier)+'</td><td>'+esc(m.niveaux)+'</td><td>'+esc(m.source)+'<br><small>Publication : '+esc(m.publie||'à renseigner')+' · URL : '+esc(m.url||'à renseigner')+' · version : '+esc(m.version||'à renseigner')+'</small></td><td><b>'+esc(m.statut||'non vérifié')+'</b>'+(m.verifie?'<br><small>le '+esc(m.verifie)+'</small>':'')+'<br><small>'+esc(m.remarque||'')+'</small><br><small>'+b+' fragment(s) masqué(s), '+s2+' ligne(s) « à vérifier »</small></td></tr>'}).join('')+'</table><small>Aucune référence n’est inventée : les champs vides sont à renseigner dans <code>BO_META</code> (en fin de chaque fichier <code>bo_*.js</code>) après contrôle sur le texte officiel.</small>'}
 function boList(){if(typeof BO_DATA==='undefined')return;const n=$('bn').value,d=$('bd').value,t=$('bt').value,w=norm($('bs').value).split(/\s+/).filter(Boolean),
  ks=[...document.querySelectorAll('[data-k]:checked')].map(e=>e.dataset.k);
- const r=BO_DATA.map((x,i)=>[x,i]).filter(([x])=>(!n||x[0]===n)&&(!d||x[1]===d)&&(!t||x[2]===t)&&ks.includes(x[3])&&w.every(m=>norm(x[2]+' '+x[4]).includes(m)));
- $('bl').innerHTML=r.slice(0,60).map(([x,i])=>`<div class="it"><button class="btn" data-add="${i}" title="Ajouter au BO">+</button><div><small>${esc(x[0])} · ${esc(x[2])} · ${KS[x[3]]}</small><br>${esc(x[4]).replace(/\n/g,'<br>')}</div></div>`).join('')||'<p><i>Aucun résultat.</i></p>';
- $('bc').textContent=r.length>60?r.length+' résultats (60 affichés) : affinez la recherche':r.length+' résultat(s)'}
-function boAdd(i){const q=Q(),x=BO_DATA[i];if(!q)return;
+ const all=BO_DATA.map((x,i)=>[x,i]).filter(([x])=>(!n||x[0]===n)&&(!d||x[1]===d)&&(!t||x[2]===t)&&ks.includes(x[3])&&w.every(m=>norm(x[2]+' '+x[4]).includes(m))),showS=$('bsus')&&$('bsus').checked,r=all.filter(([x])=>showS||!boBad(x[4])),hid=all.length-r.length;
+ $('bl').innerHTML=r.slice(0,60).map(([x,i])=>`<div class="it"><button class="btn" data-add="${i}" title="Ajouter au BO" aria-label="Ajouter au B.O.">+</button><div><small>${esc(x[0])} · ${esc(x[2])} · ${KS[x[3]]}</small>${boBad(x[4])?' <span class="tg" style="background:#8a94a6">fragment</span>':boSus(x[4])?' <span class="tg" style="background:#b3261e">⚠ extraction à vérifier</span>':''}<br>${esc(x[4]).replace(/\n/g,'<br>')}</div></div>`).join('')||'<p><i>Aucun résultat.</i></p>';
+ $('bc').textContent=(r.length>60?r.length+' résultats (60 affichés) : affinez la recherche':r.length+' résultat(s)')+(hid?' · '+hid+' fragment(s) incomplet(s) masqué(s)':'')}
+function boAdd(i){const q=Q(),x=BO_DATA[i];if(!q)return;if(boBad(x[4])){toast('Fragment incomplet : non ajouté. Saisissez la ligne à la main après contrôle sur le texte officiel.');return}
  const add=(c,l)=>c.split('\n').includes(l)?c:(c.trim()?c.replace(/\s+$/,'')+'\n':'')+l;
  const pre={a:'Automatisme : ',e:'Attendu de fin d’année : '}[x[3]]||'';
  if(x[3]==='c')q.bo=add(q.bo,'- '+x[4]);else{q.bo=add(q.bo,'- '+x[0]+' · '+x[2]);q.capacites=add(q.capacites,'- '+pre+x[4])}
  if(!(q.niveau||'').trim())q.niveau=x[0];
  if(!q.boRef.trim())q.boRef=/^6e/.test(x[0])?'Programme de mathématiques du cycle 3':/^1re/.test(x[0])?'Programme de mathématiques intégré à l’enseignement scientifique – 1re générale':'Programme de mathématiques du cycle 4 (annexe 2)';
  ['bo','capacites','boRef','niveau'].forEach(k=>document.querySelector('[data-q="'+k+'"]').value=q[k]);
- const bt=document.querySelector('[data-add="'+i+'"]');if(bt)bt.textContent='✓';changed();covUI()}
+ const bt=document.querySelector('[data-add="'+i+'"]');if(bt)bt.textContent='✓';if(boSus(x[4]))toast('⚠ Ligne signalée « extraction à vérifier » : contrôlez-la avant usage.');changed();covUI()}
 
 /* ---------- ordre des séances, fusion, export de séquence, titre d'impression ---------- */
 function moveSeance(id,tid,after){const d=db.seances.find(x=>x.id===id),t=db.seances.find(x=>x.id===tid);if(!d||!t||d===t||d.seq!==t.seq)return;
@@ -976,7 +985,7 @@ function eUI(){const o=EL();document.querySelectorAll('[data-e]').forEach(c=>{c.
 $('eopts').addEventListener('change',e=>{const k=e.target.dataset.e;if(k){EL()[k]=e.target.checked?1:0;preview();save()}});
 function stripCorr(t){let skip=false;return(t||'').split('\n').filter(l=>{if(/^\s*[-•]?\s*(→|->)?\s*Correction\b/i.test(l)){skip=true;return false}if(skip&&/^\s*(\d+[.)]\s|##\s|\*\*)/.test(l))skip=false;return!skip}).join('\n')}
 function eleveHTML(s,q){const o=EL(),tx=v=>(v||'').trim(),niv=tx(q.niveau),clr='<div style="clear:both"></div>',
- fig=m=>`<figure style="margin:0;width:${m.w}%;${m.a==='r'?'float:right;margin:0 0 6pt 10pt':'margin:6pt auto'}"><img src="${m.u}" alt="" style="width:100%;margin:0">${m.l?`<figcaption style="font-size:8.5pt;font-style:italic;text-align:center">${esc(m.l)}</figcaption>`:''}</figure>`,
+ fig=m=>`<figure style="margin:0;width:${m.w}%;${m.a==='r'?'float:right;margin:0 0 6pt 10pt':'margin:6pt auto'}"><img src="${esc(m.u)}" alt="" style="width:100%;margin:0">${m.l?`<figcaption style="font-size:8.5pt;font-style:italic;text-align:center">${esc(m.l)}</figcaption>`:''}</figure>`,
  figs=z=>(s.imgs||[]).map(m=>typeof m==='string'?{u:m,w:100,a:'c'}:m).filter(m=>(m.z||'c')===z).map(fig).join('');
  const blocks=(o.a&&(tx(s.activite)||figs('a'))?`<h3>${esc(s.activiteTitre||'Activité')}</h3><div class="box">${figs('a')}${fmt(o.c?stripCorr(s.activite):s.activite)}${clr}</div>`+(o.l?'<div style="margin:4pt 0 8pt">'+'<div style="border-bottom:1px dotted #555;height:20pt"></div>'.repeat(10)+'</div>':''):'')
   +(o.t&&(tx(s.trace)||figs('t'))?`<h3>Trace écrite</h3><div class="box">${figs('t')}${fmt(s.trace)}${clr}</div>`:'');
@@ -1049,10 +1058,10 @@ const MODELS={
  eval:{label:'Évaluation',s:{nom:'Évaluation',type:'eval',duree:55,objectifs:'Évaluer l’acquisition des capacités de la séquence.',tags:'Évaluation, DS',comp:['Calculer','Raisonner','Communiquer'],phases:[PH(5,'Distribution et consignes','Rappel des consignes, du barème et du matériel autorisé.','c'),PH(45,'Évaluation individuelle','','a','Travail individuel, silence'),PH(5,'Ramassage et correction rapide','','c')]}},
  dm:{label:'Devoir maison (DM)',s:{nom:'Devoir maison',duree:10,objectifs:'Réinvestir en autonomie les notions de la séquence.',tags:'DM',travail:'DM à rendre le …',choixTravail:'Fixer les notions et travailler la rédaction.',phases:[PH(10,'Présentation du DM','Lecture du sujet, date de rendu, critères de réussite.','c','Collectif')]}},
  po:{label:'Problème ouvert / tâche complexe',s:{nom:'Résolution de problème',duree:55,objectifs:'Résoudre un problème ouvert et produire une trace écrite.',tags:'Problème ouvert',comp:['Chercher','Modéliser','Raisonner','Communiquer'],phases:[PH(5,'Appropriation de l’énoncé','Lecture, reformulation, question 1 d’accroche.','c'),PH(20,'Recherche individuelle puis en binômes','','a','Travail individuel puis échanges entre voisins'),PH(15,'Mise en commun et débat','','c','Plénière'),PH(15,'Production de la trace écrite','','a','Rédaction individuelle')]}}};
-function tplUI(){const e=$('mtpl');if(!e)return;const u=db.models||[],k=JSON.stringify(u.map(m=>m.label));if(e.dataset.k===k)return;e.dataset.k=k;
- e.innerHTML='<div class="mh">Nouvelle séance depuis un modèle</div>'+Object.entries(MODELS).map(([i,m])=>'<button role="menuitem" data-model="b:'+i+'">'+esc(m.label)+'</button>').join('')+(u.length?'<div class="mh">Mes modèles</div>'+u.map((m,i)=>'<button role="menuitem" data-model="u:'+i+'">'+esc(m.label)+'</button>').join(''):'')}
-function addFromModel(v){const[t,k]=v.split(':'),m=t==='b'?MODELS[k]:(db.models||[])[+k];if(!m)return;addSeance(S().seq);Object.assign(S(),JSON.parse(JSON.stringify(m.s)));bv='';show();toast('Séance créée depuis « '+m.label+' »')}
-function saveModel(){const n=prompt('Nom du modèle :',S().nom);if(!n)return;const c=JSON.parse(JSON.stringify(S()));['id','seq','numero','date','statut','imgs'].forEach(k=>delete c[k]);(db.models=db.models||[]).push({label:n,s:c});tplUI();save();toast('Modèle « '+n+' » enregistré')}
+function tplUI(){const e=$('mtpl');if(!e)return;const u=db.models||[],k=JSON.stringify(u.map(m=>[m.label,m.fav]));if(e.dataset.k===k)return;e.dataset.k=k;const U=u.map((m,i)=>[m,i]).sort((a,b)=>(b[0].fav?1:0)-(a[0].fav?1:0));
+ e.innerHTML='<div class="mh">Nouvelle séance depuis un modèle</div>'+Object.entries(MODELS).map(([i,m])=>'<button role="menuitem" data-model="b:'+i+'">'+esc(m.label)+'</button>').join('')+(u.length?'<div class="mh">Mes modèles</div>'+U.map(([m,i])=>'<button role="menuitem" data-model="u:'+i+'">'+(m.fav?'★ ':'')+esc(m.label)+'</button>').join(''):'')}
+function addFromModel(v){const[t,k]=v.split(':'),m=t==='b'?MODELS[k]:(db.models||[])[+k];if(!m)return;addSeance(S().seq);Object.assign(S(),cleanSeanceModel(m.s));bv='';show();toast('Séance créée depuis « '+m.label+' »')}
+function saveModel(){const n=prompt('Nom du modèle :',S().nom);if(!n)return;const c=cleanSeanceModel(S());MD().push({label:n,niv:(Q().niveau||'').trim(),dom:'',tags:'',fav:0,s:c});tplUI();save();toast('Modèle « '+n+' » enregistré (copie sans date, statut ni images)')}
 
 /* ---------- numérotation, corbeille ---------- */
 const trash=[];
@@ -1074,11 +1083,14 @@ function autoSyn(){const s=S(),tx=v=>(v||'').trim(),o={coursS:[],entrS:[],introS
  s.phases.forEach(p=>{const k=K.find(x=>x[1].test(p.nom||''));if(k)o[k[0]].push(tx(p.nom)+(tx(p.contenu)?' : '+tx(p.contenu).split('\n')[0].replace(/^[-•]\s*/,'').slice(0,80):''))});
  Object.keys(o).forEach(k=>{if(!tx(s[k])&&o[k].length){s[k]=(o[k].length>1?'- ':'')+o[k].join('\n- ');document.querySelector('[data-s="'+k+'"]').value=s[k]}});changed()}
 function dfInit(){if(typeof DIFF_DATA==='undefined'||!$('dft'))return;$('dft').innerHTML='<option value="">Tous les thèmes</option>'+uniq(DIFF_DATA.map(x=>x[0])).map(t=>'<option>'+esc(t)+'</option>').join('');dfList()}
-function dfList(){const t=$('dft').value,w=norm($('dfs').value).split(/\s+/).filter(Boolean);
- $('dfl').innerHTML=DIFF_DATA.map((x,i)=>[x,i]).filter(([x])=>(!t||x[0]===t)&&w.every(m=>norm(x[0]+' '+x[1]+' '+x[2]).includes(m))).map(([x,i])=>'<div class="it"><button class="btn" data-df="'+i+'">+</button><div><small>'+esc(x[0])+'</small><br><b>'+esc(x[1])+'</b> : '+esc(x[2])+'</div></div>').join('')||'<p><i>Aucun résultat.</i></p>'}
+const nivIdx=t=>{t=String(t||'').toLowerCase();const m=t.match(/(?:^|\D)(6|5|4|3)\s*(?:e|è|ème|eme|°)/);if(m)return NIV.indexOf(m[1]+'e');if(/2(?:de|nde)|seconde/.test(t))return 4;if(/1(?:re|ère|ere)|premi/.test(t))return 5;return -1};
+function dfList(){if(!$('dft'))return;const t=$('dft').value,w=norm($('dfs').value).split(/\s+/).filter(Boolean),ni=$('dfn')&&$('dfn').checked&&Q()?nivIdx(Q().niveau):-1;
+ $('dfl').innerHTML=DIFF_DATA.map((x,i)=>[x,i]).filter(([x])=>(!t||x[0]===t)&&(ni<0||!x[3]||!x[3].niv||(NIV.indexOf(x[3].niv[0])<=ni&&ni<=NIV.indexOf(x[3].niv[1])))&&w.every(m=>norm(x[0]+' '+x[1]+' '+x[2]).includes(m))).map(([x,i])=>'<div class="it"><button class="btn" data-df="'+i+'" title="Ajouter l’obstacle dans « Difficultés potentielles »" aria-label="Ajouter l’obstacle">+</button>'+(x[3]?'<button class="btn" data-df2="'+i+'" title="Ajouter l’obstacle ET les aides (question diagnostique, aide progressive, remédiation, prolongement, critère de réussite) dans « Aides et différenciation prévues »">＋ aides</button>':'')+'<div><small>'+esc(x[0])+(x[3]&&x[3].niv?' · '+esc(x[3].niv[0])+'–'+esc(x[3].niv[1]):'')+'</small><br><b>'+esc(x[1])+'</b> : '+esc(x[2])+'</div></div>').join('')||'<p><i>Aucun résultat.</i></p>'}
 function dfAdd(i){const s=S(),x=DIFF_DATA[i],l='- **'+x[1]+' :** '+x[2],c=s.difficultes||'';if(!c.split('\n').includes(l))s.difficultes=(c.trim()?c.replace(/\s+$/,'')+'\n':'')+l;document.querySelector('[data-s="difficultes"]').value=s.difficultes;changed()}
 $('form').addEventListener('click',e=>{const b=e.target.closest('[data-df]');if(b){dfAdd(+b.dataset.df);b.textContent='✓'}});
-$('form').addEventListener('change',e=>{if(e.target.id==='dft')dfList()});
+$('form').addEventListener('change',e=>{if(e.target.id==='dft'||e.target.id==='dfn')dfList()});
+function dfAdd2(i){dfAdd(i);const s=S(),x=DIFF_DATA[i],d=x[3];if(!d)return;const h='**'+x[1]+' – aides prévues :**';if((s.aides||'').includes(h))return;const L=[h];[['diag','Question diagnostique'],['aide','Aide progressive'],['remed','Remédiation'],['prolong','Prolongement'],['crit','Critère de réussite']].forEach(([k,l])=>{if(d[k])L.push('- '+l+' : '+d[k])});s.aides=((s.aides||'').trim()?s.aides.replace(/\s+$/,'')+'\n\n':'')+L.join('\n');const t=document.querySelector('[data-s="aides"]');if(t)t.value=s.aides;changed()}
+$('form').addEventListener('click',e=>{const b=e.target.closest('[data-df2]');if(b){dfAdd2(+b.dataset.df2);b.textContent='✓';toast('Obstacle et aides ajoutés')}});
 $('form').addEventListener('input',e=>{if(e.target.id==='dfs')dfList()});
 function tex2txt(s){const R=[['\\mathbb{R}','ℝ'],['\\mathbb{N}','ℕ'],['\\mathbb{Z}','ℤ'],['\\mathbb{Q}','ℚ'],['\\times','×'],['\\cdot','·'],['\\div','÷'],['\\leqslant','≤'],['\\geqslant','≥'],['\\leq','≤'],['\\geq','≥'],['\\neq','≠'],['\\approx','≈'],['\\mapsto','↦'],['\\rightarrow','→'],['\\Rightarrow','⇒'],['\\Leftrightarrow','⇔'],['\\to','→'],['\\pi','π'],['\\in','∈'],['\\infty','∞'],['\\pm','±'],['\\ldots','…'],['\\dots','…'],['\\circ','°'],['\\alpha','α'],['\\beta','β'],['\\theta','θ'],['\\lambda','λ'],['\\Delta','Δ'],['\\left',''],['\\right',''],['\\%','%'],['\\quad',' '],['\\,',' '],['\\;',' '],['\\!','']].sort((a,b)=>b[0].length-a[0].length),
  w=x=>/^[\w.,]+$/.test(x)?x:'('+x+')',S='⁰¹²³⁴⁵⁶⁷⁸⁹';let t=s;
@@ -1224,7 +1236,7 @@ $('copts').addEventListener('change',e=>{const k=e.target.dataset.cpo;if(k){CP()
 const BK=()=>db.bank||(db.bank=[]);
 const BK_T={exercice:'Exercice',flash:'Question flash',calcul:'Calcul mental',probleme:'Problème',decouverte:'Activité de découverte',consigne:'Consigne',exemple:'Exemple corrigé',trace:'Trace écrite',diag:'Question diagnostique',remed:'Exercice de remédiation'};
 let bkS={q:'',t:'',n:'',f:0,mode:'list',id:null,target:'a',pos:'cursor',corr:1,draft:null};
-const bkBlank=()=>({id:'',type:'exercice',titre:'',niveau:(Q()||{}).niveau||'',domaine:'',notions:'',comp:[],enonce:'',correction:'',diff:'2',duree:'',mots:'',source:'',fav:0});
+const bkBlank=()=>({img:'',id:'',type:'exercice',titre:'',niveau:(Q()||{}).niveau||'',domaine:'',notions:'',comp:[],enonce:'',correction:'',diff:'2',duree:'',mots:'',source:'',fav:0});
 function bankOpen(id){if($('bk'))return;const el=document.createElement('div');el.id='bk';el.className='mdl';el.innerHTML='<div class="mdb bkb" role="dialog" aria-modal="true" aria-label="Banque d’exercices"><div class="bkh"><h3>📚 Banque d’exercices</h3><button class="btn" data-bk="close">Fermer</button></div><div id="bkbody"></div></div>';
  el._prev=document.activeElement;document.body.append(el);el.addEventListener('click',bkClick);el.addEventListener('input',bkInput);el.addEventListener('change',bkInput);document.addEventListener('keydown',bkKey,true);bkS.mode='list';bkS.id=id||null;bkS.draft=null;bkRender()}
 function bankClose(){const el=$('bk');if(!el)return;document.removeEventListener('keydown',bkKey,true);el.remove();try{el._prev&&el._prev.focus&&el._prev.focus()}catch(e){}}
@@ -1234,17 +1246,17 @@ function bkRender(){const B=$('bkbody');if(!B)return;
  if(bkS.mode==='edit'){const d=bkS.draft,f=(k,l,r,ph)=>`<label>${l}${r?`<textarea rows="${r}" data-bf="${k}" placeholder="${ph||''}">${esc(d[k])}</textarea>`:`<input data-bf="${k}" value="${esc(d[k])}" placeholder="${ph||''}">`}</label>`;
   B.innerHTML=`<h4>${d.id?'Modifier':'Nouvel'} élément</h4>${f('titre','Titre',0)}<div class="g"><label>Type<select data-bf="type">${Object.entries(BK_T).map(([k,v])=>`<option value="${k}"${d.type===k?' selected':''}>${v}</option>`).join('')}</select></label><label>Niveau<select data-bf="niveau"><option value="">—</option>${NIV.concat(d.niveau&&!NIV.includes(d.niveau)?[d.niveau]:[]).map(n=>`<option${d.niveau===n?' selected':''}>${esc(n)}</option>`).join('')}</select></label><label>Difficulté<select data-bf="diff">${[['1','1 – facile'],['2','2 – moyen'],['3','3 – difficile']].map(([v,l])=>`<option value="${v}"${d.diff===v?' selected':''}>${l}</option>`).join('')}</select></label><label>Durée (min)<input type="number" min="0" data-bf="duree" value="${esc(d.duree)}"></label></div>
   ${f('domaine','Domaine mathématique',0,'Nombres et calculs, Géométrie…')}${f('notions','Notions',0,'fractions, Thalès…')}<b>Compétences</b><div class="cc">${COMP.map(c=>`<label><input type="checkbox" data-bfc="${c}"${(d.comp||[]).includes(c)?' checked':''}>${c}</label>`).join('')}</div>
-  ${f('enonce','Énoncé (balisage léger et formules $…$ acceptés)',6)}${f('correction','Correction',4)}${f('mots','Mots-clés',0)}${f('source','Source',0)}
+  ${f('enonce','Énoncé (balisage léger et formules $…$ acceptés)',6)}${f('correction','Correction',4)}<label>Figure (image, facultatif)<input type="file" id="bki" accept="image/*"></label>${d.img?`<div><img src="${esc(d.img)}" alt="Aperçu de la figure" style="max-height:90px;border:1px solid var(--line)"> <button class="btn" data-bk="rmimg">Retirer l’image</button></div>`:''}${f('mots','Mots-clés',0)}${f('source','Source',0)}
   <div class="mda"><button class="btn pri" data-bk="save">Enregistrer</button><button class="btn" data-bk="cancel">Annuler</button></div>`;return}
  const L=bkFiltered(),ti='<option value="">Tous types</option>'+Object.entries(BK_T).map(([k,v])=>`<option value="${k}"${bkS.t===k?' selected':''}>${v}</option>`).join(''),ni='<option value="">Tous niveaux</option>'+uniq(BK().map(x=>x.niveau).filter(Boolean)).map(n=>`<option${bkS.n===n?' selected':''}>${esc(n)}</option>`).join('');
  B.innerHTML=`<div class="bkt"><input data-bq placeholder="🔎 Rechercher (titre, énoncé, notions, mots-clés…)" aria-label="Rechercher dans la banque" value="${esc(bkS.q)}"><select data-bs="t" aria-label="Type">${ti}</select><select data-bs="n" aria-label="Niveau">${ni}</select><label class="inl"><input type="checkbox" data-bs="f"${bkS.f?' checked':''}>★ Favoris</label></div>
  <div class="bkt"><button class="btn pri" data-bk="new">+ Nouvel élément</button><button class="btn" data-bk="imp">📂 Importer</button><button class="btn" data-bk="exp">💾 Exporter</button><input type="file" id="bkf" accept=".json" hidden></div>
  <div class="bkt bki"><b>Insérer dans :</b><select data-bs="target" aria-label="Zone"><option value="a"${bkS.target==='a'?' selected':''}>Activité</option><option value="t"${bkS.target==='t'?' selected':''}>Trace écrite</option></select><select data-bs="pos" aria-label="Position"><option value="cursor"${bkS.pos==='cursor'?' selected':''}>à la position du curseur</option><option value="end"${bkS.pos==='end'?' selected':''}>à la fin du texte</option></select><label class="inl"><input type="checkbox" data-bs="corr"${bkS.corr?' checked':''}>avec la correction</label></div>
  <p class="bkc">${L.length} élément(s) sur ${BK().length}${S()?'':' — aucune séance ouverte'}. L’insertion crée une <b>copie indépendante</b> dans la séance (modifier la banque ne change pas les séances).</p>
- ${L.map(x=>`<div class="bkit${x.id===bkS.id?' on':''}" data-id="${x.id}"><div class="bkm"><b>${esc(x.titre||'(sans titre)')}</b> <span class="tg" style="background:#4a5a73">${esc(BK_T[x.type]||'Exercice')}</span>${x.niveau?` <span class="tg" style="background:#0f5e73">${esc(x.niveau)}</span>`:''}${x.duree?` <small>${esc(x.duree)} min</small>`:''} <small>${'★'.repeat(+x.diff||0)}${'☆'.repeat(3-(+x.diff||0))}</small>${x.notions?` <small>· ${esc(x.notions)}</small>`:''}</div><div class="bke">${esc((x.enonce||'').replace(/\s+/g,' ').slice(0,180))}</div><div class="bka"><button class="btn pri" data-bk="ins:${x.id}">➕ Insérer</button><button class="btn" data-bk="fav:${x.id}" aria-label="${x.fav?'Retirer des favoris':'Ajouter aux favoris'}">${x.fav?'★':'☆'}</button><button class="btn" data-bk="edit:${x.id}">✎ Modifier</button><button class="btn" data-bk="dup:${x.id}">⧉ Dupliquer</button><button class="btn" data-bk="del:${x.id}">🗑 Supprimer</button></div></div>`).join('')||'<p><i>Aucun élément. Créez-en un avec « + Nouvel élément », ou sélectionnez du texte dans un champ puis cliquez sur « ★ banque ».</i></p>'}`;
+ ${L.map(x=>`<div class="bkit${x.id===bkS.id?' on':''}" data-id="${x.id}"><div class="bkm"><b>${esc(x.titre||'(sans titre)')}</b> <span class="tg" style="background:#4a5a73">${esc(BK_T[x.type]||'Exercice')}</span>${x.niveau?` <span class="tg" style="background:#0f5e73">${esc(x.niveau)}</span>`:''}${x.duree?` <small>${esc(x.duree)} min</small>`:''} <small>${'★'.repeat(+x.diff||0)}${'☆'.repeat(3-(+x.diff||0))}</small>${x.notions?` <small>· ${esc(x.notions)}</small>`:''}</div><div class="bke">${x.img?`<img class="bkth" alt="" src="${esc(x.img)}">`:''}${esc((x.enonce||'').replace(/\s+/g,' ').slice(0,180))}</div><div class="bka"><button class="btn pri" data-bk="ins:${x.id}">➕ Insérer</button><button class="btn" data-bk="fav:${x.id}" aria-label="${x.fav?'Retirer des favoris':'Ajouter aux favoris'}">${x.fav?'★':'☆'}</button><button class="btn" data-bk="edit:${x.id}">✎ Modifier</button><button class="btn" data-bk="dup:${x.id}">⧉ Dupliquer</button><button class="btn" data-bk="del:${x.id}">🗑 Supprimer</button></div></div>`).join('')||'<p><i>Aucun élément. Créez-en un avec « + Nouvel élément », ou sélectionnez du texte dans un champ puis cliquez sur « ★ banque ».</i></p>'}`;
  const on=B.querySelector('.bkit.on');if(on)on.scrollIntoView({block:'center'});const bf=$('bkf');if(bf)bf.onchange=bkImport}
 function bkInsert(id){const x=BK().find(y=>y.id===id);if(!x||!S()){toast('Ouvrez d’abord une séance');return}const ta=document.querySelector('[data-s="'+(bkS.target==='t'?'trace':'activite')+'"]');if(!ta)return;
- let txt=(x.enonce||'').trim();if(bkS.corr&&(x.correction||'').trim())txt+='\n→ Correction : '+x.correction.trim();if(!txt)return;
+ let txt=(x.enonce||'').trim();if(bkS.corr&&(x.correction||'').trim())txt+='\n→ Correction : '+x.correction.trim();if(!txt&&!x.img)return;if(x.img&&isData(x.img)){S().imgs.push({u:x.img,w:60,a:'c',z:bkS.target==='t'?'t':'a',l:''});imgs();changed()}if(!txt){toast('Image insérée');return}
  const v=ta.value,pos=bkS.pos==='end'?v.length:Math.min(ta.selectionStart==null?v.length:ta.selectionStart,v.length),be=v.slice(0,pos),af=v.slice(pos);
  const pre=!be?'':be.endsWith('\n\n')?'':be.endsWith('\n')?'\n':'\n\n',post=!af?'':af.startsWith('\n\n')?'':af.startsWith('\n')?'\n':'\n\n';
  ta.setRangeText(pre+txt+post,pos,pos,'end');ta.dispatchEvent(new Event('input',{bubbles:true}));toast('Inséré dans « '+(bkS.target==='t'?'Trace écrite':'Activité')+' »')}
@@ -1252,6 +1264,7 @@ async function bkClick(e){const b=e.target.closest('[data-bk]');if(!b){if(e.targ
  if(a==='close')bankClose();
  else if(a==='new'){bkS.draft=bkBlank();bkS.mode='edit';bkRender()}
  else if(a==='cancel'){bkS.mode='list';bkRender()}
+ else if(a==='rmimg'){bkS.draft.img='';bkRender()}
  else if(a==='save'){const d=bkS.draft;if(!(d.titre||'').trim()&&!(d.enonce||'').trim()){toast('Saisissez au moins un titre ou un énoncé');return}if(!d.titre.trim())d.titre=shortT(d.enonce.trim().split('\n')[0]);
   if(d.id){const i=BK().findIndex(x=>x.id===d.id);if(i>=0)BK()[i]={...d}}else{d.id=uid();BK().push({...d})}bkS.id=d.id;bkS.mode='list';save();idxV++;bkRender();toast('Enregistré dans la banque')}
  else if(a==='ins')bkInsert(id);
@@ -1263,10 +1276,12 @@ async function bkClick(e){const b=e.target.closest('[data-bk]');if(!b){if(e.targ
  else if(a==='imp')$('bkf').click()}
 async function bkImport(){const f=$('bkf');const file=f.files[0];f.value='';if(!file)return;try{const d=JSON.parse(await file.text());if(!d||d.format!=='createdocmath-bank'||!Array.isArray(d.items))throw new Error('Ce fichier n’est pas une banque CreateDocMath.');
    let n=0,s2=0;const have=new Set(BK().map(x=>x.id)),sig=x=>nmap((x.titre||'')+'|'+(x.enonce||'')).n;const sg=new Set(BK().map(sig));
-   d.items.slice(0,5000).forEach(r=>{if(!r||typeof r!=='object')return;const x=bkBlank();x.niveau='';for(const k of ['titre','niveau','domaine','notions','enonce','correction','mots','source','duree'])x[k]=String(r[k]==null?'':r[k]).slice(0,20000);x.type=BK_T[r.type]?r.type:'exercice';x.diff=['1','2','3'].includes(String(r.diff))?String(r.diff):'2';x.comp=(Array.isArray(r.comp)?r.comp:[]).filter(c=>COMP.includes(c));x.fav=r.fav?1:0;
+   d.items.slice(0,5000).forEach(r=>{if(!r||typeof r!=='object')return;const x=bkBlank();x.niveau='';for(const k of ['titre','niveau','domaine','notions','enonce','correction','mots','source','duree'])x[k]=String(r[k]==null?'':r[k]).slice(0,20000);x.type=BK_T[r.type]?r.type:'exercice';x.img=/^data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+\/=]*$/.test(r.img||'')&&String(r.img).length<4e6?r.img:'';x.diff=['1','2','3'].includes(String(r.diff))?String(r.diff):'2';x.comp=(Array.isArray(r.comp)?r.comp:[]).filter(c=>COMP.includes(c));x.fav=r.fav?1:0;
     if(sg.has(sig(x))||(r.id&&have.has(r.id)&&BK().some(y=>y.id===r.id&&sig(y)===sig(x)))){s2++;return}x.id=r.id&&!have.has(r.id)&&/^[\w-]{3,40}$/.test(r.id)?r.id:uid();have.add(x.id);sg.add(sig(x));BK().push(x);n++});
    save();idxV++;bkRender();toast(n+' élément(s) importé(s), '+s2+' doublon(s) ignoré(s)')}catch(x){await info('Import impossible','<p>'+esc(errMsg(x))+'</p>')}}
-function bkInput(e){const t=e.target;
+function bkImg(f){if(!f)return;const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,900/im.width),c=document.createElement('canvas');c.width=Math.max(1,im.width*k);c.height=Math.max(1,im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);bkS.draft.img=c.toDataURL('image/jpeg',.8);bkRender()};im.src=r.result};r.readAsDataURL(f)}
+function bkInput(e){const t=e.target;if(t.id==='bki'){bkImg(t.files[0]);return}
+ 
  if(t.dataset.bf!==undefined){bkS.draft[t.dataset.bf]=t.value;return}
  if(t.dataset.bfc){const d=bkS.draft;d.comp=(d.comp||[]).filter(c=>c!==t.dataset.bfc);if(t.checked)d.comp.push(t.dataset.bfc);return}
  if(t.dataset.bq!==undefined){bkS.q=t.value;const p=t.selectionStart;bkRender();const n=document.querySelector('[data-bq]');n.focus();n.setSelectionRange(p,p);return}
@@ -1331,7 +1346,7 @@ async function calMove(id,nd){const s=db.seances.find(x=>x.id===id);cal.sel=null
 /* ---------- mode classe : minuteur horodaté, activité / trace en grand, plein écran ---------- */
 let cph=0,crem=0,ctim=null,cwl=null,cEnd=0,cView='p',cBeep=false,cCorr=false,cf=+(function(){try{return localStorage.getItem('cdm3cf')}catch(e){return 0}})()||26,cmv=0;
 const mmss=s=>{const a=Math.abs(s);return(s<0?'+':'')+String(Math.floor(a/60)).padStart(2,'0')+':'+String(a%60).padStart(2,'0')};
-const cImgs=(s,z)=>(s.imgs||[]).filter(m=>(m.z||'c')===z&&m.u).map(m=>`<figure style="margin:8px auto;width:${m.w||100}%;text-align:center"><img src="${m.u}" alt="" style="max-width:100%;max-height:60vh">${m.l?'<figcaption style="font-size:.6em;font-style:italic">'+esc(m.l)+'</figcaption>':''}</figure>`).join('');
+const cImgs=(s,z)=>(s.imgs||[]).filter(m=>(m.z||'c')===z&&m.u).map(m=>`<figure style="margin:8px auto;width:${m.w||100}%;text-align:center"><img src="${esc(m.u)}" alt="" style="max-width:100%;max-height:60vh">${m.l?'<figcaption style="font-size:.6em;font-style:italic">'+esc(m.l)+'</figcaption>':''}</figure>`).join('');
 function clGo(i){const P=S().phases;if(!P.length)return;cph=Math.max(0,Math.min(P.length-1,i));crem=(+P[cph].duree||0)*60;cBeep=false;if(ctim)cEnd=Date.now()+crem*1000;clRender()}
 function clTime(){const P=S().phases,p=P[cph],tot=(+p.duree||0)*60;$('ct').textContent=mmss(crem);$('ct').className=crem<0?'out':crem<=60?'low':'';
  $('cbar').style.width=tot?Math.max(0,Math.min(100,100*(tot-crem)/tot))+'%':'0';$('cmeta').textContent='Prévu '+mmss(tot)+' · Écoulé '+mmss(tot-crem)}
@@ -1372,7 +1387,61 @@ if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol))navigator.s
 try{(JSON.parse(localStorage.getItem('cdm3v'))||[]).forEach(c=>document.body.classList.add(c))}catch(e){}
 function fit(){$('pw').style.setProperty('--z',Math.max(.4,Math.min(1,($('pw').clientWidth-36)/($('prev').classList.contains('land')?1123:794))).toFixed(3))}
 if(window.ResizeObserver)new ResizeObserver(fit).observe($('pw'));addEventListener('resize',fit);fit();
-async function boot(){await load();build();show();boInit();dfInit();fsInit();$('boot').hidden=true;if(smallScr())mvGo('list');stAfterBoot()}
+/* ---------- bibliothèque de modèles (séances et séquences) ---------- */
+const MD=()=>db.models||(db.models=[]),SM=()=>db.seqModels||(db.seqModels=[]);
+let mlS={q:'',n:'',f:0,edit:null};
+const FORBID=['id','seq','numero','date','statut','imgs','couv'];
+function cleanSeanceModel(s){const c=JSON.parse(JSON.stringify(s&&typeof s==='object'?s:{}));FORBID.forEach(k=>delete c[k]);c.phases=(Array.isArray(c.phases)?c.phases:[]).filter(p=>p&&typeof p==='object');c.comp=(Array.isArray(c.comp)?c.comp:[]).filter(x=>COMP.includes(x));return c}
+function seqFromModel(i){const m=SM()[i];if(!m)return;const q={...JSON.parse(JSON.stringify(m.q)),id:uid(),classe:'',cov:{},compBilan:{},compLog:[]};db.seqs.push(q);let first=null;
+ m.s.forEach((s,k)=>{const c={...JSON.parse(JSON.stringify(s)),id:uid(),seq:q.id,numero:k+1,date:'',statut:'',imgs:[]};db.seances.push(c);first=first||c.id});if(!first){addSeance(q.id);first=db.cur}
+ db.cur=first;bv='';show();toast('Séquence créée depuis « '+m.label+' » (dates, statuts et suivi remis à zéro)')}
+function saveSeqModel(){const q=Q();if(!q)return;const n=prompt('Nom du modèle de séquence :',q.nom);if(!n)return;const c=JSON.parse(JSON.stringify(q));['id','classe','cov','compBilan','compLog'].forEach(k=>delete c[k]);
+ const ss=db.seances.filter(s=>s.seq===q.id).sort((a,b)=>a.numero-b.numero).map(s=>{const x=JSON.parse(JSON.stringify(s));['id','seq','date','statut','imgs'].forEach(k=>delete x[k]);return x});
+ SM().push({label:n,niv:(q.niveau||'').trim(),dom:'',tags:'',fav:0,q:c,s:ss});save();toast('Modèle de séquence « '+n+' » enregistré (sans images ni dates)')}
+function modelsOpen(){if($('ml'))return;const el=document.createElement('div');el.id='ml';el.className='mdl';el.innerHTML='<div class="mdb bkb" role="dialog" aria-modal="true" aria-label="Bibliothèque de modèles"><div class="bkh"><h3>📚 Bibliothèque de modèles</h3><button class="btn" data-ml="close">Fermer</button></div><div id="mlbody"></div></div>';
+ el._prev=document.activeElement;document.body.append(el);el.addEventListener('click',mlClick);el.addEventListener('input',mlInput);el.addEventListener('change',mlInput);document.addEventListener('keydown',mlKey,true);mlS.edit=null;mlRender()}
+function modelsClose(){const el=$('ml');if(!el)return;document.removeEventListener('keydown',mlKey,true);el.remove();try{el._prev&&el._prev.focus&&el._prev.focus()}catch(e){}}
+const mlKey=e=>{if(e.key==='Escape'){e.stopPropagation();if(mlS.edit){mlS.edit=null;mlRender()}else modelsClose()}};
+function mlItems(){const o=[];MD().forEach((m,i)=>o.push({k:'u:'+i,kind:'s',label:m.label,niv:m.niv||'',dom:m.dom||'',tags:m.tags||'',fav:m.fav,n:(m.s.phases||[]).length}));SM().forEach((m,i)=>o.push({k:'q:'+i,kind:'q',label:m.label,niv:m.niv||'',dom:m.dom||'',tags:m.tags||'',fav:m.fav,n:m.s.length}));
+ Object.entries(MODELS).forEach(([k,m])=>o.push({k:'b:'+k,kind:'s',label:m.label,niv:'',dom:'',tags:'modèle intégré',fav:0,builtin:1,n:m.s.phases.length}));return o}
+function mlRender(){const B=$('mlbody');if(!B)return;
+ if(mlS.edit){const d=mlS.edit.d,f=(k,l,ph)=>`<label>${l}<input data-mf="${k}" value="${esc(d[k])}" placeholder="${ph||''}"></label>`;B.innerHTML=`<h4>Propriétés du modèle</h4>${f('label','Nom')}${f('niv','Niveau','3e, 2de…')}${f('dom','Domaine','Géométrie, Fonctions…')}${f('tags','Mots-clés (séparés par des virgules)')}<div class="mda"><button class="btn pri" data-ml="save">Enregistrer</button><button class="btn" data-ml="cancel">Annuler</button></div>`;return}
+ const w=nmap(mlS.q).n.split(/\s+/).filter(Boolean),all=mlItems(),L=all.filter(x=>(!mlS.n||x.niv===mlS.n)&&(!mlS.f||x.fav)&&w.every(k=>nmap(x.label+' '+x.niv+' '+x.dom+' '+x.tags).n.includes(k))).sort((a,b)=>(b.fav?1:0)-(a.fav?1:0)||a.label.localeCompare(b.label,'fr'));
+ const ni='<option value="">Tous niveaux</option>'+uniq(all.map(x=>x.niv).filter(Boolean)).map(n=>`<option${mlS.n===n?' selected':''}>${esc(n)}</option>`).join('');
+ const grp=(t,f)=>{const g=L.filter(f);return g.length?`<h4>${t} (${g.length})</h4>`+g.map(x=>`<div class="bkit"><div class="bkm"><b>${x.fav?'★ ':''}${esc(x.label)}</b>${x.niv?` <span class="tg" style="background:#0f5e73">${esc(x.niv)}</span>`:''}${x.dom?` <small>· ${esc(x.dom)}</small>`:''}${x.tags?` <small>· ${esc(x.tags)}</small>`:''} <small>(${x.n} ${x.kind==='q'?'séance(s)':'phase(s)'})</small></div><div class="bka"><button class="btn pri" data-ml="use:${x.k}">➕ Créer ${x.kind==='q'?'une séquence':'une séance'}</button>${x.builtin?'':`<button class="btn" data-ml="fav:${x.k}" aria-label="${x.fav?'Retirer des favoris':'Ajouter aux favoris'}">${x.fav?'★':'☆'}</button><button class="btn" data-ml="edit:${x.k}">✎ Propriétés</button><button class="btn" data-ml="dup:${x.k}">⧉ Dupliquer</button><button class="btn" data-ml="del:${x.k}">🗑 Supprimer</button>`}</div></div>`).join(''):''};
+ B.innerHTML=`<div class="bkt"><input data-mq placeholder="🔎 Rechercher un modèle (nom, niveau, domaine, mots-clés…)" aria-label="Rechercher un modèle" value="${esc(mlS.q)}" style="flex:1;min-width:200px;margin:0"><select data-ms="n" aria-label="Niveau" style="width:auto;margin:0">${ni}</select><label class="inl"><input type="checkbox" data-ms="f"${mlS.f?' checked':''}>★ Favoris</label></div>
+ <div class="bkt"><button class="btn" data-ml="exp">💾 Exporter mes modèles</button><button class="btn" data-ml="imp">📂 Importer</button><input type="file" id="mlf" accept=".json" hidden></div>
+ <p class="bkc"><b>Un modèle est une copie de départ</b> : créer une séance ou une séquence à partir d’un modèle produit une <b>copie indépendante</b> (modifier le modèle ne change jamais les fiches déjà créées, et inversement). Les modèles de séquence n’emportent ni dates, ni statuts, ni suivi, ni images. Pour enregistrer : <i>Séance ▸ Enregistrer comme modèle</i> ou <i>Séquence ▸ Enregistrer la séquence comme modèle</i>.</p>
+ ${grp('Modèles de séquence',x=>x.kind==='q')}${grp('Mes modèles de séance',x=>x.kind==='s'&&!x.builtin)}${grp('Modèles intégrés',x=>x.builtin)}${L.length?'':'<p><i>Aucun modèle ne correspond.</i></p>'}`;const f=$('mlf');if(f)f.onchange=mlImport}
+function mlParse(k){const[t,i]=k.split(':');return[t,t==='b'?i:+i]}
+async function mlClick(e){const b=e.target.closest('[data-ml]');if(!b){if(e.target===$('ml'))modelsClose();return}const s=b.dataset.ml,ix=s.indexOf(':'),a=ix<0?s:s.slice(0,ix),k=ix<0?'':s.slice(ix+1);
+ if(a==='close')modelsClose();
+ else if(a==='use'){const[t,i]=mlParse(k);modelsClose();if(t==='q')seqFromModel(i);else addFromModel(t+':'+i)}
+ else if(a==='fav'){const[t,i]=mlParse(k),m=(t==='u'?MD():SM())[i];if(m){m.fav=m.fav?0:1;tplUI();save();mlRender()}}
+ else if(a==='edit'){const[t,i]=mlParse(k),m=(t==='u'?MD():SM())[i];if(m){mlS.edit={t,i,d:{label:m.label||'',niv:m.niv||'',dom:m.dom||'',tags:m.tags||''}};mlRender()}}
+ else if(a==='cancel'){mlS.edit=null;mlRender()}
+ else if(a==='save'){const E=mlS.edit,m=(E.t==='u'?MD():SM())[E.i];if(m&&E.d.label.trim()){Object.assign(m,{label:E.d.label.trim(),niv:E.d.niv.trim(),dom:E.d.dom.trim(),tags:E.d.tags.trim()});tplUI();save();idxV++}mlS.edit=null;mlRender()}
+ else if(a==='dup'){const[t,i]=mlParse(k),A=t==='u'?MD():SM(),m=A[i];if(m){const c=JSON.parse(JSON.stringify(m));c.label+=' (copie)';c.fav=0;A.push(c);tplUI();save();mlRender()}}
+ else if(a==='del'){const[t,i]=mlParse(k),A=t==='u'?MD():SM(),m=A[i];if(!m)return;const c=await modal('Supprimer ce modèle ?','<p>« '+esc(m.label)+' » sera supprimé de la bibliothèque. Les fiches déjà créées avec ce modèle ne changent pas.</p>',[['go','Supprimer','dng'],['cancel','Annuler','pri']],{esc:'cancel'});if(c==='go'){A.splice(i,1);tplUI();save();mlRender()}}
+ else if(a==='exp')dlBytes(JSON.stringify({format:'createdocmath-models',v:1,models:MD(),seqModels:SM()},null,1),'modeles_'+stamp()+'.json','application/json');
+ else if(a==='imp')$('mlf').click()}
+async function mlImport(){const f=$('mlf'),file=f.files[0];f.value='';if(!file)return;
+ try{const d=JSON.parse(await file.text());if(!d||d.format!=='createdocmath-models')throw new Error('Ce fichier n’est pas une bibliothèque de modèles CreateDocMath.');let n=0,s2=0;
+  const meta=r=>({label:String(r.label||'').slice(0,200),niv:String(r.niv||'').slice(0,40),dom:String(r.dom||'').slice(0,80),tags:String(r.tags||'').slice(0,200),fav:r.fav?1:0});
+  (Array.isArray(d.models)?d.models:[]).slice(0,500).forEach(r=>{if(!r||!String(r.label||'').trim())return;const m={...meta(r),s:cleanSeanceModel(r.s)};if(MD().some(x=>x.label===m.label&&cj(x.s)===cj(m.s))){s2++;return}MD().push(m);n++});
+  (Array.isArray(d.seqModels)?d.seqModels:[]).slice(0,200).forEach(r=>{if(!r||!String(r.label||'').trim()||!r.q||typeof r.q!=='object'||!Array.isArray(r.s))return;const q=JSON.parse(JSON.stringify(r.q));['id','classe','cov','compBilan','compLog'].forEach(k=>delete q[k]);const m={...meta(r),q,s:r.s.slice(0,200).map(cleanSeanceModel)};if(SM().some(x=>x.label===m.label&&cj(x.q)===cj(m.q)&&cj(x.s)===cj(m.s))){s2++;return}SM().push(m);n++});
+  tplUI();save();mlRender();toast(n+' modèle(s) importé(s), '+s2+' doublon(s) ignoré(s)')}catch(x){await info('Import impossible','<p>'+esc(errMsg(x))+'</p>')}}
+function mlInput(e){const t=e.target;if(t.dataset.mf){mlS.edit.d[t.dataset.mf]=t.value;return}
+ if(t.dataset.mq!==undefined){mlS.q=t.value;const p=t.selectionStart;mlRender();const n=document.querySelector('[data-mq]');n.focus();n.setSelectionRange(p,p);return}
+ if(t.dataset.ms){const k=t.dataset.ms;mlS[k]=t.type==='checkbox'?(t.checked?1:0):t.value;mlRender()}}
+
+/* ---------- accessibilité : noms accessibles automatiques pour les champs sans étiquette ---------- */
+const A11M={w:'Largeur de l’image',a:'Alignement de l’image',z:'Zone de l’image',l:'Légende de l’image'},A11F={duree:'Durée en minutes',nom:'Nom de la phase',mode:'Mode : élèves actifs ou collectif',support:'Support',modalites:'Modalités',contenu:'Description des activités des élèves',comment:'Commentaire sur la phase'};
+function a11y(){document.querySelectorAll('input,select,textarea,button,[role=button]').forEach(e=>{if(e.type==='hidden'||e.getAttribute('aria-label')||e.getAttribute('aria-labelledby'))return;if(e.closest('label')||(e.id&&document.querySelector('label[for="'+e.id+'"]')))return;if(e.tagName==='BUTTON'&&e.textContent.trim())return;
+ const n=e.title||e.placeholder||(e.dataset.p&&A11M[e.dataset.p])||(e.dataset.f&&A11F[e.dataset.f])||(e.dataset.k&&'Type de programme');if(n)e.setAttribute('aria-label',n)})}
+let a11T=0;new MutationObserver(()=>{if(!a11T)a11T=setTimeout(()=>{a11T=0;a11y()},80)}).observe(document.body,{childList:true,subtree:true});
+
+async function boot(){await load();build();show();boInit();dfInit();fsInit();$('boot').hidden=true;if(smallScr())mvGo('list');a11y();stAfterBoot()}
 boot();
 window.addEventListener('load',()=>{if(S())preview()});
 </script>
