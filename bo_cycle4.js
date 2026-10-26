@@ -529,3 +529,4 @@
 ["3e", "Attendus de fin d’année", "Écrire, mettre au point, exécuter un programme", "e", "Il utilise simultanément les boucles « Répéter … fois » et « Répéter jusqu’à … » ainsi que les instructions conditionnelles pour réaliser des figures, des programmes de calculs, des déplacements, des simulations d’expérience aléatoire."],
 ["3e", "Attendus de fin d’année", "Écrire, mettre au point, exécuter un programme", "e", "Il écrit plusieurs scripts fonctionnant en parallèle pour gérer des interactions et créer des jeux."]
 );
+(self.BO_META=self.BO_META||[]).push({fichier:'bo_cycle4.js',niveaux:'5e, 4e, 3e',source:'Programme de mathématiques du cycle 4 (annexe 2) et attendus de fin d’année',version:'',url:'',publie:'',verifie:'',statut:'non vérifié',remarque:'Extraction automatique à partir des PDF officiels ; des fractions ont été perdues dans certaines lignes (signalées « extraction à vérifier »).'});

@@ -92,3 +92,4 @@
 ["1re (ens. scientifique)", "Mon bilan par chapitre", "Chap D1 : Variations instantanées › II. Nombre dérivé", "o", "faire le lien entre nombre dérivé, coefficient directeur de tangente et vitesse instantanée"],
 ["1re (ens. scientifique)", "Mon bilan par chapitre", "Chap D1 : Variations instantanées › II. Nombre dérivé", "o", "déterminer l’équation réduite d’une tangente."]
 );
+(self.BO_META=self.BO_META||[]).push({fichier:'bo_premiere.js',niveaux:'1re (enseignement scientifique)',source:'Programme de mathématiques intégré à l’enseignement scientifique (1re générale) + bilan de compétences personnel de l’auteur',version:'',url:'',publie:'',verifie:'',statut:'non vérifié',remarque:'Les lignes « Mon bilan par chapitre » ne sont pas un texte officiel.'});

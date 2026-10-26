@@ -1,4 +1,4 @@
-# Migration, sauvegarde et publication (version 2.1)
+# Migration, sauvegarde et publication (version 2.2)
 
 ## 1. Ce qui change
 - Les fiches sont désormais enregistrées dans **IndexedDB** (base `cdm3db`, schéma de données **v2**), plus dans `localStorage`.
@@ -65,3 +65,6 @@ node tests/run.js migration  # tests dont le nom contient « migration »
 
 ## 8. Nouveaux champs de données (version 2.1)
 Tous optionnels, avec valeur par défaut : séquence `cov`, `compPrev`, `compBilan`, `compLog` ; séance `couv`, `compEval`, `aides`, `evalBilan` ; base `bank` (banque d'exercices), `cal` (jours non travaillés), `cp` (filtres du suivi). Ils sont enregistrés dans IndexedDB et inclus dans les sauvegardes `.zip` ; les anciennes fiches s'ouvrent sans modification.
+
+## 9. Version 2.2
+Nouveaux champs optionnels : base `seqModels` (modèles de séquence), modèles de séance enrichis (`niv`, `dom`, `tags`, `fav`), éléments de banque avec `img`. Les images de la banque sont stockées comme celles des séances (binaire) et incluses dans le `.zip`. Le champ `schema` n'est plus réécrit à chaque enregistrement (il n'est écrit que lors de la création de la base ou d'une migration), ce qui empêche toute rétrogradation accidentelle.

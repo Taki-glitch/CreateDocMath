@@ -100,3 +100,4 @@
 ["6e", "Initiation à la pensée informatique", "Initiation à la pensée informatique", "o", "Répéter à la main une séquence d’instructions pour accomplir une tâche imposée"],
 ["6e", "Initiation à la pensée informatique", "Initiation à la pensée informatique", "o", "Programmer la construction d’un chemin simple"]
 );
+(self.BO_META=self.BO_META||[]).push({fichier:'bo_cycle3.js',niveaux:'6e',source:'Programme de mathématiques du cycle 3 (Bulletin officiel)',version:'',url:'',publie:'',verifie:'',statut:'non vérifié',remarque:'Extraction automatique à partir des PDF officiels ; les automatismes de 6e ne sont pas inclus.'});

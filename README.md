@@ -112,6 +112,24 @@ Tout fonctionne dans le navigateur : les données restent sur votre appareil.
 - **Mode classe** : minuteur par phase en plein écran (tablette, VPI), affichage de la mise en œuvre, phase suivante, +1 min, signal sonore à l'échéance, écran maintenu allumé. Raccourcis : Espace (démarrer / pause), ← →, Échap.
 - **PWA** : installable et utilisable hors connexion (voir ci-dessous).
 
+## Nouveautés de la version 2.2 : différenciation, modèles, données, sécurité
+
+**Différenciation enrichie** : la banque d'obstacles propose, pour 15 notions courantes (fractions, priorités, relatifs, puissances, identités remarquables, équations, pourcentages, proportionnalité, Pythagore, Thalès, moyenne pondérée, image/antécédent…), une **question diagnostique**, une **aide progressive**, une **remédiation**, un **prolongement** et un **critère de réussite**, adaptés à une fourchette de niveaux. Le bouton **＋ aides** ajoute l'obstacle dans « Difficultés potentielles » *et* le bloc d'aides dans « Aides et différenciation prévues » (sans doublon, modifiable ensuite). La case « Adapter au niveau de la séquence » filtre les propositions. Ce sont des **hypothèses pédagogiques** à valider par l'enseignant, jamais des caractéristiques d'un élève. Pour enrichir : quatrième élément facultatif `{niv:[min,max], diag, aide, remed, prolong, crit}` dans `bank_difficultes.js`.
+
+**Bibliothèque de modèles** (Séance ▸ Bibliothèque de modèles) : modèles de **séance** et de **séquence**, avec niveau, domaine, mots-clés, favoris (en tête du menu), recherche, propriétés modifiables, duplication, suppression avec confirmation, import / export. Définitions :
+- **Séance réelle / séquence réelle** : vos fiches.
+- **Modèle** : copie de départ. Créer à partir d'un modèle produit une **copie indépendante** (modifier l'un ne change jamais l'autre). Un modèle n'emporte ni date, ni statut, ni suivi, ni images ni associations propres à une séquence.
+- **Banque d'exercices** : l'insertion dans une séance est aussi une copie indépendante. Il n'existe pas de ressource « partagée » qui se modifierait silencieusement partout.
+
+**Banque d'exercices : images** : une figure (facultative) par élément, redimensionnée, stockée en binaire (IndexedDB) et dans les sauvegardes `.zip` ; insérée dans la séance (zone Activité ou Trace écrite) en même temps que le texte.
+
+**Données du B.O.** : les lignes dont l'extraction est **manifestement incomplète** (fragments sans texte, fractions perdues, phrases coupées) sont **signalées** « ⚠ extraction à vérifier » ; les simples fragments (« 1 », « 100 »…) sont **masqués** par défaut (case pour les afficher) et ne peuvent pas être ajoutés. Un panneau **Sources et vérification** indique, par fichier, la source, le statut (« non vérifié ») et le nombre de lignes douteuses. **Aucune référence n'est inventée** : URL, date de publication, version et date de vérification sont à renseigner dans `BO_META` (en fin de chaque `bo_*.js`) après contrôle sur le texte officiel. Les lignes dont des fractions ont été perdues doivent être corrigées à la main à partir du texte officiel. Non fait : recherche par compétence dans le programme (les données n'ont pas ce champ), conservation de plusieurs versions d'un même programme.
+
+**Sécurité et accessibilité**
+- Un test d'injection (HTML et gestionnaires d'événements dans tous les champs, imports JSON, banque, modèles) couvre toutes les vues, fenêtres et exports. Il a révélé et fait corriger une faille ancienne : le **nom d'une phase** n'était pas échappé dans l'analyse didactique. Les identifiants importés sont désormais validés, et les images importées (type, largeur, alignement, zone) normalisées.
+- Une écriture ne peut plus **rétrograder** la version du schéma des données.
+- Tous les champs et boutons visibles ont un nom accessible (vérifié dans la page et dans les fenêtres) ; les champs sans étiquette reçoivent automatiquement un nom.
+
 ## Nouveautés de la version 2.1 : interface, recherche, suivi
 
 **Menu et navigation**
@@ -215,7 +233,7 @@ Dans `bank_difficultes.js`, ajoutez des lignes `["Thème", "Titre", "Description
 
 - Les formules écrites en fractions dans les PDF officiels sont mal extraites pour deux lignes de 5e (« fractions simples comme… », « fractions égales ») : à corriger à la main après insertion.
 - Les « Automatismes » du programme de 6e ne sont pas inclus.
-- La banque d'exercices ne gère pas encore les images (texte et formules uniquement).
+- La banque d'exercices accepte une seule image par élément.
 - Pas de tableau de bord annuel complet (la *Progression annuelle* existante est conservée) ni de suivi individuel d'élèves (volontaire).
 - Le calendrier ne connaît pas les jours fériés officiels : saisissez vos jours non travaillés.
 - Export Word : les équations non reconnues (systèmes `cases`, matrices, commandes LaTeX rares) sont converties en texte lisible, pas en équation modifiable. LibreOffice sans module Math n'affiche pas les équations Word : ouvrir avec Microsoft Word.
