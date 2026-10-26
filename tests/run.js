@@ -93,6 +93,7 @@ T('deux onglets : synchronisation si inactif, conflit détecté sinon (rien d’
 
 T('schéma plus récent que l’application : ouverture refusée sans modification',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
  await p.evaluate(()=>new Promise(r=>{const q=indexedDB.open('cdm3db');q.onsuccess=()=>{const t=q.result.transaction('kv','readwrite');t.objectStore('kv').put(3,'schema');t.oncomplete=()=>{q.result.close();r()}}}));
+ await p.evaluate(()=>{S().nom='modif';clearTimeout(t2);save();return stFlush()});assert.strictEqual((await kvOf(p)).kv.schema,3,'une écriture ne rétrograde jamais le schéma');
  await p.reload();await p.waitForSelector('.mdb');assert.ok(/version plus récente/.test(await modalText(p)));const {kv}=await kvOf(p);assert.strictEqual(kv.schema,3);await c.close()});
 
 T('sauvegarde .zip : export vérifié, restauration dans une installation propre, doublons, fichiers altérés',async()=>{
@@ -148,7 +149,7 @@ T('formules KaTeX locales (aucune requête CDN pour KaTeX/JSZip) + non-régressi
 T('PWA : fonctionne hors ligne après installation (KaTeX local, données IndexedDB)',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
  await p.evaluate(()=>navigator.serviceWorker.ready.then(()=>1));await p.reload();await p.waitForFunction(()=>navigator.serviceWorker.controller);
  const names=await p.evaluate(async()=>{const ks=await caches.keys(),c=await caches.open(ks.find(k=>k.startsWith('fiches-maths'))),r=await c.keys();return{ks,u:r.map(x=>new URL(x.url).pathname)}});
- assert.deepStrictEqual(names.ks,['fiches-maths-v13']);for(const f of ['/vendor/docx.iife.js','/vendor/katex/katex.min.js','/vendor/jszip.min.js','/vendor/katex/fonts/KaTeX_Main-Regular.woff2','/index.html','/bo_cycle4.js'])assert.ok(names.u.includes(f),f);
+ assert.deepStrictEqual(names.ks,['fiches-maths-v14']);for(const f of ['/vendor/docx.iife.js','/vendor/katex/katex.min.js','/vendor/jszip.min.js','/vendor/katex/fonts/KaTeX_Main-Regular.woff2','/index.html','/bo_cycle4.js'])assert.ok(names.u.includes(f),f);
  await p.evaluate(()=>{S().nom='Hors ligne ok';S().activite='$a^2$';changed()});await saved(p);await c.setOffline(true);await p.reload();await booted(p);assert.strictEqual(await p.evaluate(()=>S().nom),'Hors ligne ok');await p.waitForSelector('#prev .katex');
  assert.ok(await p.evaluate(()=>document.fonts.check('16px KaTeX_Main')||true));await c.close()});
 
@@ -319,6 +320,113 @@ T('accessibilité : rôles, noms accessibles, focus rendu après fermeture des f
  await p.focus('#mbar [data-a=cmdk]');await p.keyboard.press('Enter');await p.waitForSelector('#ck [role=dialog]');await p.keyboard.press('Escape');await p.waitForFunction(()=>!document.getElementById('ck'));assert.ok(await p.evaluate(()=>document.activeElement.dataset.a==='cmdk'),'focus rendu');
  p.evaluate(()=>storPanel()).catch(()=>{});await p.waitForSelector('.mdb[role=dialog][aria-modal=true]');await p.keyboard.press('Tab');await p.keyboard.press('Escape');await p.waitForFunction(()=>!document.querySelector('.mdl'));
  assert.ok(await p.locator('#st[role=status]').count()===1&&await p.locator('#toast[role=status]').count()===1);assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+/* ================= phase E : différenciation, modèles, données du B.O., images de la banque, sécurité, accessibilité ================= */
+const PNG1=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==','base64');
+
+T('différenciation : aides structurées, adaptation au niveau, insertion sans doublon',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
+ assert.deepStrictEqual(await p.evaluate(()=>['3ème','3e','6e','2de','Seconde','1re','Première','4eme','n/a'].map(nivIdx)),[3,3,0,4,4,5,5,2,-1]);
+ const n=await p.evaluate(()=>DIFF_DATA.filter(x=>x[3]&&x[3].niv&&x[3].diag&&x[3].aide&&x[3].remed&&x[3].prolong&&x[3].crit).length);assert.ok(n>=15,'entrées enrichies : '+n);
+ await p.evaluate(()=>{Q().niveau='6e';fill()});await p.evaluate(()=>{document.getElementById('dfd').open=true});await p.evaluate(()=>dfList());
+ let t=await p.$eval('#dfl',e=>e.innerText);assert.ok(/Addition de fractions/.test(t)&&!/Théorème de Thalès/.test(t)&&!/Développer \(a \+ b\)/.test(t),'6e : pas de Thalès ni identités');
+ await p.evaluate(()=>{Q().niveau='3ème';fill()});t=await p.$eval('#dfl',e=>e.innerText);assert.ok(/Théorème de Thalès/.test(t)&&!/Addition de fractions/.test(t));
+ await p.uncheck('#dfn');assert.ok(/Addition de fractions/.test(await p.$eval('#dfl',e=>e.innerText)),'sans adaptation : tout');await p.check('#dfn');
+ await p.fill('#dfs','pythagore');await p.click('#dfl [data-df2]');let v=await p.evaluate(()=>[S().difficultes,S().aides]);assert.ok(/Pythagore/.test(v[0])&&/aides prévues/.test(v[1])&&(v[1].match(/^- /gm)||[]).length===5,v[1]);
+ await p.click('#dfl [data-df2]');v=await p.evaluate(()=>[S().difficultes,S().aides]);assert.strictEqual((v[1].match(/aides prévues/g)||[]).length,1,'pas de doublon');assert.strictEqual((v[0].match(/Pythagore/g)||[]).length,1);
+ await p.evaluate(()=>{bv='';preview()});assert.ok(/Aides et différenciation prévues/.test(await p.$eval('#prev',e=>e.innerText))&&/Question diagnostique/.test(await p.$eval('#prev',e=>e.innerText)));
+ await p.evaluate(()=>{bv='eleve';preview()});assert.ok(!/Question diagnostique/.test(await p.$eval('#prev',e=>e.innerText)),'pas dans la fiche élève');assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('bibliothèque de modèles : séance et séquence, copies indépendantes, favoris, import nettoyé',async()=>{const c=await ctx(),p=await c.newPage();p.on('dialog',d=>d.accept('Mon modèle'));await booted(p);await p.evaluate(SEED2);
+ await p.evaluate(()=>{const s=db.seances.find(x=>x.nom==='Découverte');db.cur=s.id;s.statut='faite';s.imgs=[{u:'data:image/png;base64,AAAA',w:50,a:'c',z:'a'}];s.couv=['k1'];Q().cov={k1:'done'};Q().compBilan={Chercher:{n:'3',d:'2026-01-01'}};show()});
+ await p.click('#mbar [data-menu=s]');await p.click('#mbar [data-a=savemodel]');await p.waitForFunction(()=>MD().length===1);
+ const m=await p.evaluate(()=>MD()[0]);assert.ok(m.label==='Mon modèle'&&m.niv==='3e'&&!('id'in m.s)&&!('seq'in m.s)&&!('date'in m.s)&&!('statut'in m.s)&&!('imgs'in m.s)&&!('couv'in m.s));
+ await p.click('#mbar [data-menu=q]');await p.click('#mbar [data-a=saveseqmodel]');await p.waitForFunction(()=>SM().length===1);
+ const sm=await p.evaluate(()=>SM()[0]);assert.ok(sm.s.length===3&&sm.s.every(s=>!('id'in s)&&!('seq'in s)&&!('date'in s)&&!('statut'in s)&&!('imgs'in s))&&!('classe'in sm.q)&&!('cov'in sm.q)&&!('compBilan'in sm.q)&&!('id'in sm.q));
+ // bibliothèque
+ await p.click('#mbar [data-menu=s]');await p.click('#mbar [data-a=models]');await p.waitForSelector('#ml');let t=await p.$eval('#mlbody',e=>e.innerText);assert.ok(/Modèles de séquence \(1\)/i.test(t)&&/Mes modèles de séance \(1\)/i.test(t)&&/Modèles intégrés/i.test(t)&&/copie indépendante/.test(t));
+ await p.fill('[data-mq]','intégré');assert.ok(!/Mon modèle/.test(await p.$eval('#mlbody',e=>e.innerText)));await p.fill('[data-mq]','');
+ await p.click('[data-ml^="fav:u"]');assert.strictEqual(await p.evaluate(()=>MD()[0].fav),1);
+ await p.click('[data-ml^="edit:u"]');await p.fill('[data-mf=dom]','Géométrie');await p.fill('[data-mf=niv]','4e');await p.click('[data-ml=save]');assert.ok(await p.evaluate(()=>MD()[0].dom==='Géométrie'&&MD()[0].niv==='4e'));
+ // création d'une séquence : nouveaux ids, remise à zéro
+ const nq=await p.evaluate(()=>db.seqs.length),ns=await p.evaluate(()=>db.seances.length);await p.click('[data-ml^="use:q"]');await p.waitForFunction(n=>db.seqs.length===n+1,nq);
+ const r=await p.evaluate(()=>{const q=db.seqs[db.seqs.length-1],ss=db.seances.filter(s=>s.seq===q.id);return{nom:q.nom,classe:q.classe,cov:q.cov,n:ss.length,dates:ss.map(s=>s.date),st:ss.map(s=>s.statut),imgs:ss.map(s=>s.imgs.length),nums:ss.map(s=>s.numero),ids:new Set(db.seances.map(s=>s.id)).size===db.seances.length&&new Set(db.seqs.map(x=>x.id)).size===db.seqs.length}});
+ assert.strictEqual(r.n,3);assert.deepStrictEqual(r.nums,[1,2,3]);assert.ok(r.dates.every(d=>d==='')&&r.st.every(x=>x==='')&&r.imgs.every(x=>x===0)&&r.classe===''&&Object.keys(r.cov).length===0&&r.ids);
+ // indépendance : modifier la copie ne touche pas le modèle
+ await p.evaluate(()=>{db.seances[db.seances.length-1].nom='MODIFIÉE';changed()});assert.ok(await p.evaluate(()=>!SM()[0].s.some(s=>s.nom==='MODIFIÉE')));
+ p.evaluate(()=>modelsOpen()).catch(()=>{});await p.waitForSelector('#ml');
+ // création d'une séance depuis un modèle importé malveillant : id/seq jamais écrasés
+ const evil={format:'createdocmath-models',v:1,models:[{label:'Piégé',niv:'3e',s:{id:'HACK',seq:'HACK',numero:99,date:'2020-01-01',statut:'faite',imgs:[{u:'x'}],nom:'Séance piégée',phases:[{duree:5,nom:'P'},null,'x'],comp:['Chercher','Inconnue']}}],seqModels:[{label:'Seq',q:{nom:'Q'},s:'pas un tableau'}]};
+ const ef=path.join(os.tmpdir(),'models-evil-'+Date.now()+'.json');fs.writeFileSync(ef,JSON.stringify(evil));await p.setInputFiles('#mlf',ef);await p.waitForFunction(()=>MD().some(x=>x.label==='Piégé'));
+ const em=await p.evaluate(()=>MD().find(x=>x.label==='Piégé').s);assert.ok(!('id'in em)&&!('seq'in em)&&!('imgs'in em)&&em.phases.length===1&&em.comp.length===1);assert.strictEqual(await p.evaluate(()=>SM().length),1,'séquence modèle invalide ignorée');
+ await p.setInputFiles('#mlf',ef);await p.waitForTimeout(300);assert.strictEqual(await p.evaluate(()=>MD().filter(x=>x.label==='Piégé').length),1,'import idempotent');
+ fs.writeFileSync(ef,'{"x":1}');await p.setInputFiles('#mlf',ef);await p.waitForSelector('.mdb >> nth=1');assert.ok(/pas une bibliothèque/.test(await modalText(p)));await clickBtn(p,'Fermer');
+ const[dl]=await Promise.all([p.waitForEvent('download'),p.click('[data-ml=exp]')]);const xf=path.join(os.tmpdir(),'models-'+Date.now()+'.json');await dl.saveAs(xf);assert.ok(JSON.parse(fs.readFileSync(xf,'utf8')).models.length>=2);
+ await p.click('[data-ml^="del:u"] >> nth=0');await clickBtn(p,'Supprimer');await p.waitForFunction(()=>MD().length===1);await p.click('[data-ml=close]');
+ await p.evaluate(()=>{const s=db.seances.find(x=>x.id===db.cur);bv='';preview()});await p.evaluate(()=>{addFromModel('u:0')});assert.ok(await p.evaluate(()=>{const s=S();return s.id&&s.seq===Q().id&&s.numero>0}),'identité de la séance créée intacte');
+ assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('données du B.O. : fragments masqués, lignes douteuses signalées, sources non inventées',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
+ await p.evaluate(()=>{document.getElementById('bod').open=true});await p.waitForFunction(()=>typeof BO_DATA!=='undefined'&&document.getElementById('bomc').textContent.length>50);
+ const met=await p.$eval('#bomc',e=>e.textContent);assert.ok(/bo_cycle3\.js/.test(met)&&/bo_cycle4\.js/.test(met)&&/bo_premiere\.js/.test(met)&&/non vérifié/.test(met)&&/à renseigner/.test(met));assert.ok(!/https?:\/\//.test(met),'aucune URL inventée');
+ assert.deepStrictEqual(await p.evaluate(()=>[boBad('1'),boBad('100'),boBad(''),boBad('Calculer une aire'),boSus('fractions simples comme ; ; ; .'),boSus('Reconnaitre des fractions égales : = ; = .'),boSus('produit de facteurs premiers inférieurs à'),boSus('Additionner et soustraire des fractions.'),boSus('Comparer deux fractions : et ; et .')]),[true,true,true,false,true,true,true,false,true]);
+ await p.selectOption('#bn','6e');await p.selectOption('#bt','Les aires');let t=await p.$eval('#bl',e=>e.innerText);assert.ok(/Calculer l’aire d’un carré/.test(t));assert.ok(!/^\s*1\s*$/m.test(t),'fragments masqués');assert.ok(/masqué/.test(await p.$eval('#bc',e=>e.textContent)));
+ await p.check('#bsus');assert.ok(/fragment/.test(await p.$eval('#bl',e=>e.innerText)));await p.uncheck('#bsus');await p.selectOption('#bt','');await p.selectOption('#bn','5e');await p.fill('#bs','écriture décimale des fractions simples');
+ assert.ok(/extraction à vérifier/.test(await p.$eval('#bl',e=>e.innerText)));const bo0=await p.evaluate(()=>Q().bo+'|'+Q().capacites);
+ await p.check('#bsus');await p.selectOption('#bn','6e');await p.selectOption('#bt','Les aires');await p.fill('#bs','');const idx=await p.evaluate(()=>BO_DATA.findIndex(x=>x[4]==='1'));await p.evaluate(i=>boAdd(i),idx);assert.strictEqual(await p.evaluate(()=>Q().bo+'|'+Q().capacites),bo0,'fragment non ajouté');
+ const si=await p.evaluate(()=>BO_DATA.findIndex(x=>boSus(x[4])&&!boBad(x[4])&&x[3]!=='c'));await p.evaluate(i=>boAdd(i),si);assert.ok(/vérifier/.test(await p.$eval('#toast',e=>e.textContent)));assert.notStrictEqual(await p.evaluate(()=>Q().bo+'|'+Q().capacites),bo0,'ligne douteuse ajoutée avec avertissement');assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('banque : images (insertion dans la séance, stockage binaire, sauvegarde .zip et restauration)',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);const img=path.join(os.tmpdir(),'px.png');fs.writeFileSync(img,PNG1);
+ p.evaluate(()=>bankOpen()).catch(()=>{});await p.waitForSelector('#bk');await p.click('[data-bk=new]');await p.fill('[data-bf=titre]','Avec figure');await p.fill('[data-bf=enonce]','Observer la figure.');await p.setInputFiles('#bki',img);await p.waitForSelector('#bkbody img[alt="Aperçu de la figure"]');
+ assert.ok(await p.evaluate(()=>/^data:image\/jpeg;base64,/.test(bkS.draft.img)));await p.click('[data-bk=save]');await p.waitForSelector('.bkit img.bkth');
+ await p.click('.bkit [data-bk^=ins]');assert.ok(await p.evaluate(()=>S().imgs.length===1&&S().imgs[0].z==='a'&&/^data:image/.test(S().imgs[0].u)),'image copiée dans la séance');assert.ok(/Observer la figure/.test(await p.evaluate(()=>S().activite)));
+ await p.click('[data-bk=close]');await p.evaluate(()=>{S().imgs=[];const r=new Uint8Array(30000);for(let i=0;i<r.length;i++)r[i]=(i*7+3)&255;BK()[0].img=b2d('image/jpeg',r);changed();clearTimeout(t2);save();return stFlush()});
+ assert.strictEqual((await idbDump(p)).blobs.n,1,'image de la banque stockée en binaire (blob)'); await p.reload();await booted(p);assert.ok(await p.evaluate(()=>/^data:image/.test(BK()[0].img)));assert.deepStrictEqual(await p.evaluate(()=>stVerify()),[]);
+ const [dl]=await Promise.all([p.waitForEvent('download'),p.evaluate(()=>exportBackup())]);const zp=path.join(os.tmpdir(),'bk-'+Date.now()+'.zip');await dl.saveAs(zp);const Z=await JSZip.loadAsync(fs.readFileSync(zp)),dj=await Z.file('data.json').async('string');assert.ok(!/data:image/.test(dj),'pas de Base64 dans data.json');assert.ok(/img\/[0-9a-f]{64}/.test(dj));
+ const c2=await ctx(),q=await c2.newPage();await booted(q);await q.setInputFiles('#impf',zp);await clickBtn(q,'Remplacer tout');await clickBtn(q,'Remplacer');t=await modalText(q);assert.ok(/Remplacement terminé/.test(t)&&!/⚠/.test(t),t);await clickBtn(q,'Fermer');
+ assert.ok(await q.evaluate(()=>BK().length===1&&/^data:image\/jpeg/.test(BK()[0].img)));assert.deepStrictEqual(await q.evaluate(()=>stVerify()),[]);
+ // import de banque malveillant : image invalide neutralisée
+ const ef=path.join(os.tmpdir(),'bank-evil-'+Date.now()+'.json');fs.writeFileSync(ef,JSON.stringify({format:'createdocmath-bank',v:1,items:[{titre:'X',enonce:'e',img:'x" onerror="window.__x=1'},{titre:'Y',enonce:'f',img:'javascript:alert(1)'}]}));
+ await q.evaluate(()=>bankOpen());await q.waitForSelector('#bk');await q.setInputFiles('#bkf',ef);await q.waitForFunction(()=>BK().length===3);assert.ok(await q.evaluate(()=>BK().filter(x=>x.titre==='X'||x.titre==='Y').every(x=>x.img==='')));assert.strictEqual(await q.evaluate(()=>window.__x),undefined);
+ await c2.close();assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('sécurité : aucun script injecté depuis les contenus ou les imports (toutes vues, fenêtres et exports)',async()=>{const c=await ctx(),p=await c.newPage();const dlg=[];p.on('dialog',d=>{dlg.push(d.message());d.dismiss()});await booted(p);
+ const X='"><img src=x onerror="window.__x=1"><script>window.__x=1<\/script><svg onload=window.__x=1>\'';
+ await p.evaluate(X=>{const q=Q(),s=S();['nom','niveau','classe','boRef','bo','capacites','cadre','reco'].forEach(k=>q[k]=X);
+  ['nom','objectifs','prereq','tice','travail','objFin','activiteTitre','activite','trace','choixProbleme','difficultes','supp','aides','evalBilan','compTexte','choixTravail','introS','coursS','entrS','remLabel','rem','tags'].forEach(k=>s[k]=X);s.date='2026-10-20';s.comp=['Chercher'];s.statut='prete';
+  s.phases=[{duree:5,nom:X,contenu:X,comment:X,mode:'a',support:X,modalites:X}];s.imgs=[{u:'data:image/png;base64,AAAA',w:50,a:'c',z:'a',l:X}];
+  BK().push({id:'bx',type:'exercice',titre:X,niveau:X,domaine:X,notions:X,comp:[],enonce:X,correction:X,diff:'2',duree:X,mots:X,source:X,fav:0,img:''});MD().push({label:X,niv:X,dom:X,tags:X,fav:1,s:{nom:X,phases:[]}});SM().push({label:X,niv:X,dom:X,tags:X,fav:1,q:{nom:X},s:[]});
+  CAL().off=X;db.seqs.push({id:'q2',nom:X,niveau:X,classe:X,bo:X});idxV++;show()},X);
+ const clean=async(l)=>{await p.waitForTimeout(150);const r=await p.evaluate(()=>({x:window.__x,imgs:document.querySelectorAll('img[src="x"],svg[onload],[onerror],[onload]').length,sc:document.querySelectorAll('script:not([src])').length}));assert.strictEqual(r.x,undefined,'exécution détectée : '+l);assert.strictEqual(r.imgs,0,'élément injecté : '+l);assert.ok(r.sc<=1,'script injecté : '+l)};
+ for(const v of ['','seq','all','eleve','texte','annee','cov','comp']){await p.evaluate(v=>{bv=v;preview()},v);await clean('vue '+v)}
+ await p.evaluate(()=>{bv='';show()});await clean('liste');await p.evaluate(()=>{document.getElementById('dbil').open=true;document.getElementById('dchk').open=true;check();bilan();tplUI()});await clean('volet');
+ await p.keyboard.press('Control+k');await p.fill('#cki','img');await p.waitForSelector('.ckit');await clean('palette');await p.keyboard.press('Escape');
+ for(const m of ['month','week','list']){await p.evaluate(m=>{calOpen();cal.mode=m;cal.d='2026-10-20';calRender()},m);await clean('calendrier '+m);await p.evaluate(()=>calClose())}
+ p.evaluate(()=>bankOpen()).catch(()=>{});await p.waitForSelector('#bk');await clean('banque');await p.click('[data-bk^=edit]');await clean('banque édition');await p.keyboard.press('Escape');await p.evaluate(()=>bankClose());
+ p.evaluate(()=>modelsOpen()).catch(()=>{});await p.waitForSelector('#ml');await clean('modèles');await p.evaluate(()=>modelsClose());
+ p.evaluate(()=>storPanel()).catch(()=>{});await p.waitForSelector('.mdb');await clean('stockage');await p.keyboard.press('Escape');
+ await p.evaluate(()=>{covUI();cpUI();copUI&&0});await clean('formulaire');
+ await p.evaluate(()=>{const s=S();s.phases[0].duree=1});await p.click('#mbar [data-a=chrono]');for(const v of ['a','t','p']){await p.click('#cl [data-c="v:'+v+'"]')}await clean('mode classe');await p.keyboard.press('Escape');
+ // exports : le .docx ne contient pas de balisage actif
+ const {x}=await docxOf(p,'xss');assert.ok(!/<w:[^>]*onerror/.test(x));
+ // imports : identifiants et images invalides refusés / neutralisés
+ const bad=(o)=>{const f=path.join(os.tmpdir(),'xss-'+Math.random()+'.json');fs.writeFileSync(f,JSON.stringify(o));return f};
+ await p.setInputFiles('#impf',bad({seqs:[{id:'a"><img src=x onerror=window.__x=1>',nom:'q'}],seances:[]}));let t=await modalText(p);assert.ok(/identifiant|invalide/i.test(t));await clickBtn(p,'Fermer');
+ await p.setInputFiles('#impf',bad({seqs:[{id:'ok1',nom:'Import'}],seances:[{id:'ok2',seq:'ok1',numero:1,nom:'S',phases:[],comp:[],imgs:[{u:'x" onerror="window.__x=1',w:'50%;background:url(x)',a:'"><b>',z:'zz',l:'ok'}]}]}));await p.waitForSelector('.mdb');await clickBtn(p,'Fusionner');await clickBtn(p,'Fermer');
+ const im=await p.evaluate(()=>db.seances.find(s=>s.id==='ok2').imgs[0]);assert.deepStrictEqual([im.u,im.w,im.a,im.z],['',100,'c','c']);
+ await p.evaluate(()=>{db.cur='ok2';bv='all';show()});await clean('après import');assert.ok(dlg.every(m=>/^Ajouter la séance/.test(m)),'boîte de dialogue inattendue : '+dlg.join('|'));assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('accessibilité : tous les champs et boutons visibles ont un nom accessible (page et fenêtres)',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await p.evaluate(SEED2);
+ const check=async(label)=>{await p.waitForTimeout(250);const bad=await p.evaluate(()=>{const nm=e=>{if(e.getAttribute('aria-label')||e.getAttribute('aria-labelledby'))return 1;if(e.closest('label'))return 1;if(e.id&&document.querySelector('label[for="'+e.id+'"]'))return 1;if(e.title)return 1;if((e.tagName==='BUTTON'||e.getAttribute('role')==='button')&&e.textContent.trim())return 1;return 0};
+  return[...document.querySelectorAll('input,select,textarea,button,[role=button]')].filter(e=>e.type!=='hidden'&&!e.hidden&&e.offsetParent!==null&&!nm(e)).map(e=>e.outerHTML.slice(0,90))});assert.deepStrictEqual(bad,[],label)};
+ await check('page principale');await p.evaluate(()=>{document.querySelectorAll('#form details').forEach(d=>d.open=true)});await check('formulaire déplié');
+ await p.evaluate(()=>{document.getElementById('dbil').open=true;document.getElementById('dchk').open=true});await check('volet');
+ await p.evaluate(()=>{bv='eleve';preview()});await check('options fiche élève');await p.evaluate(()=>{bv='comp';preview()});await check('options compétences');await p.evaluate(()=>{bv='texte';preview()});await check('options cahier de textes');
+ await p.keyboard.press('Control+k');await check('palette');await p.keyboard.press('Escape');
+ p.evaluate(()=>bankOpen()).catch(()=>{});await p.waitForSelector('#bk');await check('banque liste');await p.click('[data-bk=new]');await check('banque édition');await p.evaluate(()=>bankClose());
+ p.evaluate(()=>modelsOpen()).catch(()=>{});await p.waitForSelector('#ml');await check('modèles');await p.evaluate(()=>modelsClose());
+ await p.evaluate(()=>{calOpen();calRender()});await check('calendrier mois');await p.click('[data-cal="m:list"]');await check('calendrier liste');await p.evaluate(()=>calClose());
+ await p.evaluate(()=>{document.getElementById('bod').open=true});await p.waitForFunction(()=>typeof BO_DATA!=='undefined');await check('sélecteur de programme');
+ assert.deepStrictEqual(c.errs,[]);await c.close()});
 
 (async()=>{await new Promise(r=>srv.listen(0,'127.0.0.1',r));BASE='http://localhost:'+srv.address().port;browser=await chromium.launch();
  let fail=0;const only=process.argv[2];for(const t of results){if(only&&!t.name.includes(only))continue;const t0=Date.now();try{await Promise.race([t.fn(),new Promise((_,j)=>setTimeout(()=>j(new Error('délai dépassé (90 s)')),90000))]);console.log('  ✓',t.name,'('+(Date.now()-t0)+' ms)')}catch(e){fail++;console.log('  ✗',t.name,'\n     ',String(e.message).split('\n').slice(0,6).join('\n      '))}}
