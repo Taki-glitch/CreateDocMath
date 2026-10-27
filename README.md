@@ -112,6 +112,15 @@ Tout fonctionne dans le navigateur : les données restent sur votre appareil.
 - **Mode classe** : minuteur par phase en plein écran (tablette, VPI), affichage de la mise en œuvre, phase suivante, +1 min, signal sonore à l'échéance, écran maintenu allumé. Raccourcis : Espace (démarrer / pause), ← →, Échap.
 - **PWA** : installable et utilisable hors connexion (voir ci-dessous).
 
+## Correctifs 2.2.1 : iPhone / tactile
+
+- La barre de menus n'est plus un conteneur à défilement sur petit écran (Safari iOS peut rogner ou rendre non cliquables des menus positionnés dans un tel conteneur) : elle passe sur deux lignes et ses menus s'affichent sous elle. Word, PDF, annuler/rétablir, mode sombre et aide sont dans le menu *Fichier* sur téléphone.
+- Les éléments cliquables non-boutons ont `cursor:pointer` et `touch-action:manipulation` (iOS ignore sinon certains clics).
+- Après une saisie dans un champ de recherche (palette Ctrl+K, banque, modèles), le premier clic ou toucher sur un résultat est maintenant pris en compte (auparavant la perte de focus redessinait la liste avant le clic). La frappe ne recrée plus le champ, ce qui évitait la fermeture du clavier sur iOS.
+- Calendrier : vue *Liste* par défaut sur téléphone (sélecteurs de date natifs) ; bouton « Ouvrir la séance » quand une séance est sélectionnée.
+- La vérification d'intégrité enregistre d'abord les réglages en attente.
+- Vérifié en émulation tactile Chromium (iPhone 13) ; **non vérifié sur un vrai iPhone** (WebKit indisponible dans l'environnement de développement).
+
 ## Nouveautés de la version 2.2 : différenciation, modèles, données, sécurité
 
 **Différenciation enrichie** : la banque d'obstacles propose, pour 15 notions courantes (fractions, priorités, relatifs, puissances, identités remarquables, équations, pourcentages, proportionnalité, Pythagore, Thalès, moyenne pondérée, image/antécédent…), une **question diagnostique**, une **aide progressive**, une **remédiation**, un **prolongement** et un **critère de réussite**, adaptés à une fourchette de niveaux. Le bouton **＋ aides** ajoute l'obstacle dans « Difficultés potentielles » *et* le bloc d'aides dans « Aides et différenciation prévues » (sans doublon, modifiable ensuite). La case « Adapter au niveau de la séquence » filtre les propositions. Ce sont des **hypothèses pédagogiques** à valider par l'enseignant, jamais des caractéristiques d'un élève. Pour enrichir : quatrième élément facultatif `{niv:[min,max], diag, aide, remed, prolong, crit}` dans `bank_difficultes.js`.

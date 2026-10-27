@@ -138,6 +138,7 @@ body.dark .mdb{background:#17212b;color:#e3eaf1}body.dark .mdb .btn:not(.pri):no
 .mp hr{border:0;border-top:1px solid var(--line);margin:4px 0}.mp .mh{font-size:11px;text-transform:uppercase;color:#5b6b7a;padding:6px 12px 2px}
 .mp label{display:flex;gap:8px;align-items:center;padding:8px 12px;margin:0;font-weight:400;cursor:pointer;font-size:14px}.mp label input{width:auto;margin:0}
 body.dark .mp{background:#17212b;color:#e3eaf1}body.dark .mp button:hover,body.dark .mp button:focus-visible{background:#243342}body.dark .mp button.act{background:#1d3a48}body.dark .mp .mh{color:#8fa3b5}
+.mp .msm{display:none}
 /* ---- volet de gauche : navigation seulement ---- */
 #side #lf,#side #lvf{margin:0 0 4px}#side .sq{display:flex;align-items:center;gap:4px;margin:10px 0 2px}.chv{cursor:pointer;display:inline-block;width:18px;text-align:center;color:#9db0c2;border-radius:3px}.chv:hover,.chv:focus-visible{background:#33465a;outline:0}
 #side details{margin:6px 0}#side details>div{padding-left:2px}#side summary{cursor:pointer}#gauge{font-size:10.5px;margin-top:8px}#st{font-size:11px}
@@ -173,6 +174,9 @@ body.dark .cd{background:#17212b}body.dark .cd.wkd{background:#131c25}body.dark 
 #cc{max-height:46vh;font:inherit;line-height:1.45}#cc h3{margin:.2em 0}#cc ul{padding-left:1.2em}#cc p{margin:.3em 0}
 #cl.hc{background:#000;color:#fff}#cl.hc #cc{background:#000;border:2px solid #fff;color:#fff}#cl.hc .bar{background:#555}#cl.hc .bar i{background:#fff}#cl.hc .cbt button,#cl.hc #ctabs button{background:#000;border:2px solid #fff;color:#fff}#cl.hc #ctabs button.on{background:#fff;color:#000}
 #cl.zen:not(.mv) .cbt,#cl.zen:not(.mv) #ctabs,#cl.zen:not(.mv) #cx{opacity:0;transition:opacity .4s}#cl:focus-visible,#cl button:focus-visible{outline:3px solid #ffb020}
+/* ---- tactile (iOS Safari) : éléments cliquables reconnus, pas de délai ni de zoom au double appui ---- */
+button,[role=button],[data-a],[data-menu],.cch,.cd,.ckit,.chv,#side a,.sq[data-qid],label,select,summary{touch-action:manipulation;-webkit-tap-highlight-color:rgba(79,179,200,.25)}
+[data-a],.cch,.cd,.ckit,.chv,#side a,.sq[data-qid],#mbar .mb,.mp button{cursor:pointer}.mdl{cursor:pointer}.mdb{cursor:auto}
 /* ---- mobile / tablette : une zone à la fois ---- */
 #bnav{display:none}
 @media screen and (max-width:1000px){
@@ -181,10 +185,11 @@ body.dark .cd{background:#17212b}body.dark .cd.wkd{background:#131c25}body.dark 
  body[data-mv=list] #side,body[data-mv=form] #formw,body[data-mv=prev] #pw{display:block}
  body:not([data-mv]) #formw{display:block}
  #bnav{display:flex;grid-row:3;grid-column:1;background:var(--ink)}#bnav button{flex:1;background:none;border:0;color:#cfd9e2;padding:12px 4px;font:inherit;font-size:14px;cursor:pointer}#bnav button[aria-current=page]{background:var(--acc);color:#fff}
- #mbar{overflow-x:auto}#mbar .sp{display:none}#mbar kbd{display:none}
- .mp{position:fixed;left:8px;right:8px;top:48px;max-height:75vh;overflow:auto}
+ .mp .msm{display:block}.mp hr.msm{display:block}#mbar .dsk{display:none}
+ #mbar{flex-wrap:wrap;overflow:visible;row-gap:2px;padding:4px 6px}#mbar .sp,#mbar .gap{display:none}#mbar kbd{display:none}
+ .mp{position:fixed;left:8px;right:8px;top:96px;max-height:70vh;overflow:auto;-webkit-overflow-scrolling:touch}
  #prev{padding:20px;width:794px}.cvr{grid-template-columns:1fr}
- .calw{flex-direction:column}.caltray{width:100%}.cd{min-height:60px}.calg.wk .cd{min-height:120px}
+ .cch .op{display:none}.calw{flex-direction:column}.caltray{width:100%}.cd{min-height:60px}.calg.wk .cd{min-height:120px}
 }
 @media(pointer:coarse){#mbar .mb,.mp button,.btn,#side a,#bnav button,.cch{min-height:40px}.mp label{min-height:40px}}
 </style>
@@ -194,11 +199,12 @@ body.dark .cd{background:#17212b}body.dark .cd.wkd{background:#131c25}body.dark 
 <body>
 <div id="boot" role="status">Chargement de vos fiches…</div>
 <header id="mbar" role="toolbar" aria-label="Menu principal">
- <button class="mb ic" data-a="vside" title="Afficher / masquer la liste des fiches" aria-label="Afficher ou masquer la liste des fiches">☰</button>
+ <button class="mb dsk ic" data-a="vside" title="Afficher / masquer la liste des fiches" aria-label="Afficher ou masquer la liste des fiches">☰</button>
  <div class="mm"><button class="mb" data-menu="f" aria-haspopup="true" aria-expanded="false">Fichier ▾</button><div class="mp" role="menu" hidden>
   <button role="menuitem" data-a="imp">📂 Importer (sauvegarde .zip ou .json)…</button><button role="menuitem" data-a="exp">💾 Exporter une sauvegarde (.zip)</button>
   <hr><button role="menuitem" data-a="exps" title="Une seule séance, à partager avec un collègue">📤 Partager cette séance (.json)</button><button role="menuitem" data-a="expq" title="Fichier à partager avec un collègue">📤 Partager cette séquence (.json)</button>
   <hr><button role="menuitem" data-a="bank">📚 Banque d’exercices…</button><button role="menuitem" data-a="stor" title="État du stockage, sauvegardes, import, copies de sécurité">🛟 Stockage et sauvegardes…</button>
+  <hr class="msm"><button class="msm" role="menuitem" data-a="docx">📝 Exporter en Word</button><button class="msm" role="menuitem" data-a="print">🖨️ Imprimer / enregistrer en PDF</button><button class="msm" role="menuitem" data-a="hundo">↶ Annuler</button><button class="msm" role="menuitem" data-a="hredo">↷ Rétablir</button><button class="msm" role="menuitem" data-a="dark">🌙 Mode sombre</button><button class="msm" role="menuitem" data-a="help">? Raccourcis et aide</button><hr class="msm">
   <div id="fsbox"><button role="menuitem" data-a="fspick" title="Chrome / Edge : copie automatique dans un dossier de votre choix">📁 Dossier de sauvegarde automatique…</button><div id="fsst" style="font-size:11px;color:#5b6b7a;padding:0 12px 4px"></div></div></div></div>
  <div class="mm"><button class="mb" data-menu="q" aria-haspopup="true" aria-expanded="false">Séquence ▾</button><div class="mp" role="menu" hidden>
   <button role="menuitem" data-a="newq">+ Nouvelle séquence</button><button role="menuitem" data-a="dupq" title="Copier la séquence et toutes ses séances (réutilisation l’an prochain)">⧉ Dupliquer la séquence</button><button role="menuitem" data-a="clone" title="Copier la séquence et ses séances pour une autre classe, avec décalage des dates">🏫 Copier pour une autre classe…</button><button role="menuitem" data-a="saveseqmodel">★ Enregistrer la séquence comme modèle…</button><button role="menuitem" data-a="renum" title="Renuméroter les séances de la séquence de 1 à N, dans l’ordre actuel">1…N Renuméroter les séances</button>
@@ -215,9 +221,9 @@ body.dark .cd{background:#17212b}body.dark .cd.wkd{background:#131c25}body.dark 
   <hr><label><input type="checkbox" id="short">Trame seule (sans analyse didactique)</label></div></div>
  <span class="sp"></span>
  <button class="mb" data-a="cmdk" title="Rechercher dans tout le contenu / lancer une commande (Ctrl+K)" aria-label="Rechercher ou lancer une commande">🔎<kbd>Ctrl K</kbd></button>
- <button class="mb pri" data-a="chrono">⏱ Mode classe</button><button class="mb" data-a="docx" title="Exporter la vue affichée en Word">📝 Word</button><button class="mb" data-a="print" title="Imprimer ou enregistrer en PDF">🖨️ PDF</button>
+ <button class="mb pri" data-a="chrono">⏱ Mode classe</button><button class="mb dsk" data-a="docx" title="Exporter la vue affichée en Word">📝 Word</button><button class="mb dsk" data-a="print" title="Imprimer ou enregistrer en PDF">🖨️ PDF</button>
  <span class="gap"></span>
- <button class="mb ic" data-a="vform" title="Aperçu seul / formulaire + aperçu" aria-label="Masquer ou afficher le formulaire">👁</button><button class="mb ic" data-a="hundo" title="Annuler (Ctrl+Z)" aria-label="Annuler">↶</button><button class="mb ic" data-a="hredo" title="Rétablir (Ctrl+Y)" aria-label="Rétablir">↷</button><button class="mb ic" data-a="dark" title="Mode sombre" aria-label="Mode sombre">🌙</button><button class="mb ic" data-a="help" title="Raccourcis clavier" aria-label="Aide : raccourcis clavier">?</button>
+ <button class="mb dsk ic" data-a="vform" title="Aperçu seul / formulaire + aperçu" aria-label="Masquer ou afficher le formulaire">👁</button><button class="mb dsk ic" data-a="hundo" title="Annuler (Ctrl+Z)" aria-label="Annuler">↶</button><button class="mb dsk ic" data-a="hredo" title="Rétablir (Ctrl+Y)" aria-label="Rétablir">↷</button><button class="mb dsk ic" data-a="dark" title="Mode sombre" aria-label="Mode sombre">🌙</button><button class="mb dsk ic" data-a="help" title="Raccourcis clavier" aria-label="Aide : raccourcis clavier">?</button>
 </header>
 <div id="side">
   <input id="lf" placeholder="🔎 Filtrer séquences et séances…" aria-label="Filtrer les séquences et les séances"><select id="lvf" aria-label="Filtrer par niveau"></select>
@@ -357,7 +363,7 @@ async function stReadDb(){
  seances.forEach(s=>{s.imgs=(s.imgs||[]).map(m=>{if(m&&typeof m.u==='string'&&m.u.startsWith('idb:')){const k=m.u.slice(4);if(got.has(k))return{...m,u:got.get(k)};missing++;return{...m,u:''}}return m})});
  if(Array.isArray(set.bank))set.bank=set.bank.map(x=>{if(x&&typeof x.img==='string'&&x.img.startsWith('idb:')){const k=x.img.slice(4);if(got.has(k))return{...x,img:got.get(k)};missing++;return{...x,img:''}}return x});
  return{d:{...set,seqs,seances},missing}}
-async function stVerify(){const r=await stReadDb(),D=diffDb(db,r.d);if(r.missing)D.push(r.missing+' image(s) introuvable(s) dans le stockage');return D}
+async function stVerify(){if(STORE==='idb'){sv.dirty=true;await stFlush()}const r=await stReadDb(),D=diffDb(db,r.d);if(r.missing)D.push(r.missing+' image(s) introuvable(s) dans le stockage');return D}
 async function stCommitFull(d,extra){const S=sSer(d),B=[...S.imgs].map(([k,u])=>[k,toBuf(u)]);
  const t=idbh.transaction(['seqs','seances','kv','blobs'],'readwrite'),done=tdone(t);done.catch(()=>{});
  try{['seqs','seances','kv','blobs'].forEach(n=>t.objectStore(n).clear());
@@ -1106,7 +1112,7 @@ function tex2txt(s){const R=[['\\mathbb{R}','ℝ'],['\\mathbb{N}','ℕ'],['\\mat
 /* ---------- mode classe : minuteur par phase ---------- */
 /* ---------- menus déroulants (accessibles au clavier) ---------- */
 function mnClose(){document.querySelectorAll('#mbar .mp').forEach(p=>{p.hidden=true});document.querySelectorAll('#mbar [data-menu]').forEach(b=>b.setAttribute('aria-expanded','false'))}
-function mnOpen(b){mnClose();b.nextElementSibling.hidden=false;b.setAttribute('aria-expanded','true')}
+function mnOpen(b){mnClose();const p=b.nextElementSibling;if(smallScr())p.style.top=Math.round($('mbar').getBoundingClientRect().bottom)+'px';else p.style.top='';p.hidden=false;b.setAttribute('aria-expanded','true')}
 document.addEventListener('click',e=>{const b=e.target.closest('#mbar [data-menu]');
  if(b){if(b.getAttribute('aria-expanded')==='true')mnClose();else{mnOpen(b);const f=b.nextElementSibling.querySelector('button');if(f&&e.detail===0)f.focus()}return}
  if(e.target.closest('.mp button'))setTimeout(mnClose,0);else if(!e.target.closest('.mp'))mnClose()},true);
@@ -1151,8 +1157,8 @@ function excerpt(hit,words){const t=hit[1],m=hit[2];let pos=-1;for(const w of wo
  for(const w of words){let i=0;while((i=sm.n.indexOf(w,i))>=0){R.push([sm.m[i],sm.m[i+w.length-1]+1]);i+=w.length}}
  R.sort((x,y)=>x[0]-y[0]);let h='',p=0;for(const[x,y]of R){if(x<p)continue;h+=esc(seg.slice(p,x))+'<mark>'+esc(seg.slice(x,y))+'</mark>';p=y}h+=esc(seg.slice(p));
  return(a>0?'… ':'')+h.replace(/\*\*|__/g,'')+(b<t.length?' …':'')}
-function cmdList(){const out=[];document.querySelectorAll('#mbar .mm').forEach(m=>{const mn=m.querySelector('[data-menu]').textContent.replace('▾','').trim();m.querySelectorAll('.mp button').forEach(b=>out.push({label:b.textContent.trim(),menu:mn,el:b,n:nmap(mn+' '+b.textContent).n}))});
- ['chrono','docx','print','hundo','hredo','dark','help'].forEach(a=>{const b=document.querySelector('#mbar [data-a="'+a+'"]');if(b)out.push({label:(b.getAttribute('title')||b.textContent).trim(),menu:'Actions',el:b,n:nmap(b.textContent+' '+(b.title||'')).n})});return out}
+function cmdList(){const out=[];document.querySelectorAll('#mbar .mm').forEach(m=>{const mn=m.querySelector('[data-menu]').textContent.replace('▾','').trim();m.querySelectorAll('.mp button:not(.msm)').forEach(b=>out.push({label:b.textContent.trim(),menu:mn,el:b,n:nmap(mn+' '+b.textContent).n}))});
+ ['chrono','docx','print','hundo','hredo','dark','help'].forEach(a=>{const b=document.querySelector('#mbar .mb[data-a="'+a+'"]');if(b)out.push({label:(b.getAttribute('title')||b.textContent).trim(),menu:'Actions',el:b,n:nmap(b.textContent+' '+(b.title||'')).n})});return out}
 function openHit(r){if(r.t==='s'){db.cur=r.id;bv='';show();if(smallScr())mvGo('form')}
  else if(r.t==='q'){const f=db.seances.filter(x=>x.seq===r.id).sort((a,b)=>a.numero-b.numero)[0];if(f){db.cur=f.id;bv='seq';show();if(smallScr())mvGo('prev')}}
  else bankOpen(r.id)}
@@ -1173,7 +1179,7 @@ function cmdk(){if($('ck'))return;const prev=document.activeElement,el=document.
   if(!R.length&&(words.length||hasF))h+='<p class="ckn">Aucun contenu trouvé'+(qs.trim()?' pour « '+esc(qs.trim())+' »':'')+'.</p>';
   $('ckr').innerHTML=h;sel=0;mark()};
  const kd=e=>{if(e.key==='Escape'){e.stopPropagation();close()}else if(e.key==='ArrowDown'){e.preventDefault();sel=Math.min(items.length-1,sel+1);mark()}else if(e.key==='ArrowUp'){e.preventDefault();sel=Math.max(0,sel-1);mark()}else if(e.key==='Enter'&&e.target.id==='cki'){e.preventDefault();run(sel)}};
- el.addEventListener('input',render);el.addEventListener('change',render);el.addEventListener('click',e=>{const n=e.target.closest('.ckit');if(n)run(+n.dataset.i);else if(e.target===el)close()});
+ el.addEventListener('input',render);el.addEventListener('click',e=>{const n=e.target.closest('.ckit');if(n)run(+n.dataset.i);else if(e.target===el)close()});
  document.addEventListener('keydown',kd,true);render();$('cki').focus()}
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();if($('ck')){$('cki').focus()}else cmdk()}});
 
@@ -1252,9 +1258,9 @@ function bkRender(){const B=$('bkbody');if(!B)return;
  B.innerHTML=`<div class="bkt"><input data-bq placeholder="🔎 Rechercher (titre, énoncé, notions, mots-clés…)" aria-label="Rechercher dans la banque" value="${esc(bkS.q)}"><select data-bs="t" aria-label="Type">${ti}</select><select data-bs="n" aria-label="Niveau">${ni}</select><label class="inl"><input type="checkbox" data-bs="f"${bkS.f?' checked':''}>★ Favoris</label></div>
  <div class="bkt"><button class="btn pri" data-bk="new">+ Nouvel élément</button><button class="btn" data-bk="imp">📂 Importer</button><button class="btn" data-bk="exp">💾 Exporter</button><input type="file" id="bkf" accept=".json" hidden></div>
  <div class="bkt bki"><b>Insérer dans :</b><select data-bs="target" aria-label="Zone"><option value="a"${bkS.target==='a'?' selected':''}>Activité</option><option value="t"${bkS.target==='t'?' selected':''}>Trace écrite</option></select><select data-bs="pos" aria-label="Position"><option value="cursor"${bkS.pos==='cursor'?' selected':''}>à la position du curseur</option><option value="end"${bkS.pos==='end'?' selected':''}>à la fin du texte</option></select><label class="inl"><input type="checkbox" data-bs="corr"${bkS.corr?' checked':''}>avec la correction</label></div>
- <p class="bkc">${L.length} élément(s) sur ${BK().length}${S()?'':' — aucune séance ouverte'}. L’insertion crée une <b>copie indépendante</b> dans la séance (modifier la banque ne change pas les séances).</p>
- ${L.map(x=>`<div class="bkit${x.id===bkS.id?' on':''}" data-id="${x.id}"><div class="bkm"><b>${esc(x.titre||'(sans titre)')}</b> <span class="tg" style="background:#4a5a73">${esc(BK_T[x.type]||'Exercice')}</span>${x.niveau?` <span class="tg" style="background:#0f5e73">${esc(x.niveau)}</span>`:''}${x.duree?` <small>${esc(x.duree)} min</small>`:''} <small>${'★'.repeat(+x.diff||0)}${'☆'.repeat(3-(+x.diff||0))}</small>${x.notions?` <small>· ${esc(x.notions)}</small>`:''}</div><div class="bke">${x.img?`<img class="bkth" alt="" src="${esc(x.img)}">`:''}${esc((x.enonce||'').replace(/\s+/g,' ').slice(0,180))}</div><div class="bka"><button class="btn pri" data-bk="ins:${x.id}">➕ Insérer</button><button class="btn" data-bk="fav:${x.id}" aria-label="${x.fav?'Retirer des favoris':'Ajouter aux favoris'}">${x.fav?'★':'☆'}</button><button class="btn" data-bk="edit:${x.id}">✎ Modifier</button><button class="btn" data-bk="dup:${x.id}">⧉ Dupliquer</button><button class="btn" data-bk="del:${x.id}">🗑 Supprimer</button></div></div>`).join('')||'<p><i>Aucun élément. Créez-en un avec « + Nouvel élément », ou sélectionnez du texte dans un champ puis cliquez sur « ★ banque ».</i></p>'}`;
- const on=B.querySelector('.bkit.on');if(on)on.scrollIntoView({block:'center'});const bf=$('bkf');if(bf)bf.onchange=bkImport}
+ <p class="bkc" id="bkcount"></p><div id="bklist"></div>`;
+ bkList();const bf=$('bkf');if(bf)bf.onchange=bkImport}
+function bkList(){const L=bkFiltered(),c=$('bkcount'),l=$('bklist');if(!c||!l)return;c.innerHTML=`${L.length} élément(s) sur ${BK().length}${S()?'':' — aucune séance ouverte'}. L’insertion crée une <b>copie indépendante</b> dans la séance (modifier la banque ne change pas les séances).`;l.innerHTML=`${L.map(x=>`<div class="bkit${x.id===bkS.id?' on':''}" data-id="${x.id}"><div class="bkm"><b>${esc(x.titre||'(sans titre)')}</b> <span class="tg" style="background:#4a5a73">${esc(BK_T[x.type]||'Exercice')}</span>${x.niveau?` <span class="tg" style="background:#0f5e73">${esc(x.niveau)}</span>`:''}${x.duree?` <small>${esc(x.duree)} min</small>`:''} <small>${'★'.repeat(+x.diff||0)}${'☆'.repeat(3-(+x.diff||0))}</small>${x.notions?` <small>· ${esc(x.notions)}</small>`:''}</div><div class="bke">${x.img?`<img class="bkth" alt="" src="${esc(x.img)}">`:''}${esc((x.enonce||'').replace(/\s+/g,' ').slice(0,180))}</div><div class="bka"><button class="btn pri" data-bk="ins:${x.id}">➕ Insérer</button><button class="btn" data-bk="fav:${x.id}" aria-label="${x.fav?'Retirer des favoris':'Ajouter aux favoris'}">${x.fav?'★':'☆'}</button><button class="btn" data-bk="edit:${x.id}">✎ Modifier</button><button class="btn" data-bk="dup:${x.id}">⧉ Dupliquer</button><button class="btn" data-bk="del:${x.id}">🗑 Supprimer</button></div></div>`).join('')||'<p><i>Aucun élément. Créez-en un avec « + Nouvel élément », ou sélectionnez du texte dans un champ puis cliquez sur « ★ banque ».</i></p>'}`;const on=l.querySelector('.bkit.on');if(on)on.scrollIntoView({block:'center'})}
 function bkInsert(id){const x=BK().find(y=>y.id===id);if(!x||!S()){toast('Ouvrez d’abord une séance');return}const ta=document.querySelector('[data-s="'+(bkS.target==='t'?'trace':'activite')+'"]');if(!ta)return;
  let txt=(x.enonce||'').trim();if(bkS.corr&&(x.correction||'').trim())txt+='\n→ Correction : '+x.correction.trim();if(!txt&&!x.img)return;if(x.img&&isData(x.img)){S().imgs.push({u:x.img,w:60,a:'c',z:bkS.target==='t'?'t':'a',l:''});imgs();changed()}if(!txt){toast('Image insérée');return}
  const v=ta.value,pos=bkS.pos==='end'?v.length:Math.min(ta.selectionStart==null?v.length:ta.selectionStart,v.length),be=v.slice(0,pos),af=v.slice(pos);
@@ -1284,8 +1290,8 @@ function bkInput(e){const t=e.target;if(t.id==='bki'){bkImg(t.files[0]);return}
  
  if(t.dataset.bf!==undefined){bkS.draft[t.dataset.bf]=t.value;return}
  if(t.dataset.bfc){const d=bkS.draft;d.comp=(d.comp||[]).filter(c=>c!==t.dataset.bfc);if(t.checked)d.comp.push(t.dataset.bfc);return}
- if(t.dataset.bq!==undefined){bkS.q=t.value;const p=t.selectionStart;bkRender();const n=document.querySelector('[data-bq]');n.focus();n.setSelectionRange(p,p);return}
- if(t.dataset.bs){const k=t.dataset.bs;bkS[k]=t.type==='checkbox'?(t.checked?1:0):t.value;if(k==='t'||k==='n'||k==='f')bkRender()}}
+ if(t.dataset.bq!==undefined){if(e.type==='input'){bkS.q=t.value;bkList()}return}
+ if(t.dataset.bs){const k=t.dataset.bs;bkS[k]=t.type==='checkbox'?(t.checked?1:0):t.value;if(k==='t'||k==='n'||k==='f')bkList()}}
 
 /* ---------- calendrier : mois / semaine / liste, déplacement et décalage en cascade ---------- */
 const pdt=s=>{const[y,m,d]=s.split('-').map(Number);return Date.UTC(y,m-1,d)};
@@ -1297,7 +1303,7 @@ const CAL=()=>db.cal||(db.cal={off:''});
 function offSet(){const S2=new Set();String(CAL().off||'').split(/\n|;/).forEach(l=>{l=l.trim();if(!l)return;const m=l.match(/^(\d{4}-\d{2}-\d{2})\s*(?:\.\.|→)\s*(\d{4}-\d{2}-\d{2})$/);if(m&&okD(m[1])&&okD(m[2])){for(let t=pdt(m[1]),e=pdt(m[2]),n=0;t<=e&&n<400;t+=864e5,n++)S2.add(fdu(t))}else if(okD(l))S2.add(l)});return S2}
 let cal={mode:'month',d:todayS(),sel:null,cl:''},calUndo=[];
 const calCol=q=>{let n=0;for(const c of (q.classe||q.nom||'x'))n=(n*31+c.charCodeAt(0))%360;return'hsl('+n+' 55% 42%)'};
-function calOpen(){if($('cal'))return;const el=document.createElement('div');el.id='cal';el.className='mdl';el.innerHTML='<div class="mdb calb" role="dialog" aria-modal="true" aria-label="Calendrier"><div id="calh"></div><div id="calbody"></div></div>';el._prev=document.activeElement;document.body.append(el);
+function calOpen(){if($('cal'))return;if(smallScr())cal.mode='list';const el=document.createElement('div');el.id='cal';el.className='mdl';el.innerHTML='<div class="mdb calb" role="dialog" aria-modal="true" aria-label="Calendrier"><div id="calh"></div><div id="calbody"></div></div>';el._prev=document.activeElement;document.body.append(el);
  el.addEventListener('click',calClick);el.addEventListener('change',calChange);el.addEventListener('dragstart',e=>{const c=e.target.closest('.cch');if(c){e.dataTransfer.setData('text/plain',c.dataset.id);e.dataTransfer.effectAllowed='move'}});
  el.addEventListener('dragover',e=>{if(e.target.closest('.cd'))e.preventDefault()});el.addEventListener('drop',e=>{const d=e.target.closest('.cd');if(d){e.preventDefault();calMove(e.dataTransfer.getData('text/plain'),d.dataset.d)}});
  el.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.querySelector('.mdl:not(#cal)')){e.stopPropagation();calClose()}else if((e.key==='Enter'||e.key===' ')&&e.target.classList.contains('cch')){e.preventDefault();calSelect(e.target.dataset.id)}else if(e.key==='Enter'&&e.target.classList.contains('cd')&&cal.sel){e.preventDefault();calMove(cal.sel,e.target.dataset.d)}});
@@ -1310,7 +1316,7 @@ function calRender(){const H=$('calh'),B=$('calbody');if(!H)return;const all=cal
  const lab=cal.mode==='month'?new Date(pdt(cal.d)).toLocaleDateString('fr-FR',{month:'long',year:'numeric',timeZone:'UTC'}):cal.mode==='week'?'Semaine du '+fdate(addD(cal.d,-dowM(cal.d))):'Liste des séances';
  H.innerHTML=`<div class="calt"><h3>🗓 Calendrier</h3><span class="sp"></span><button class="btn" data-cal="undo"${calUndo.length?'':' disabled'}>↶ Annuler le dernier déplacement</button><button class="btn" data-cal="off">Jours non travaillés…</button><button class="btn" data-cal="close">Fermer</button></div>
  <div class="calt"><button class="btn" data-cal="prev" aria-label="Période précédente">‹</button><button class="btn" data-cal="today">Aujourd’hui</button><button class="btn" data-cal="next" aria-label="Période suivante">›</button><b class="call">${esc(lab)}</b><span class="sp"></span>${['month:Mois','week:Semaine','list:Liste'].map(x=>{const[k,l]=x.split(':');return`<button class="btn${cal.mode===k?' pri':''}" data-cal="m:${k}" aria-pressed="${cal.mode===k}">${l}</button>`}).join('')}<select data-calcl aria-label="Classe"><option value="">Toutes classes</option>${cls.map(c=>`<option${cal.cl===c?' selected':''}>${esc(c)}</option>`).join('')}</select></div>
- <p class="calhint">${cal.sel?'<b>Séance sélectionnée</b> : cliquez sur un jour (ou appuyez sur Entrée sur un jour) pour la déplacer.':'Glissez une séance sur un jour, ou sélectionnez-la puis cliquez sur le jour voulu (tactile).'}</p>`;
+ <p class="calhint">${cal.sel?'<b>Séance sélectionnée</b> : cliquez sur un jour (ou appuyez sur Entrée sur un jour) pour la déplacer. <button class="btn" data-open="'+esc(cal.sel)+'">Ouvrir la séance</button>':'Glissez une séance sur un jour, ou sélectionnez-la puis cliquez sur le jour voulu (tactile).'}</p>`;
  const nod=all.filter(x=>!okD(x.s.date));
  const tray=nod.length?`<aside class="caltray" aria-label="Séances sans date"><b>Sans date (${nod.length})</b>${nod.map(calChip).join('')}</aside>`:'';
  if(cal.mode==='list'){const rows=dated.slice().sort((a,b)=>a.s.date.localeCompare(b.s.date)||a.s.numero-b.s.numero).concat(nod);
@@ -1406,13 +1412,13 @@ function mlItems(){const o=[];MD().forEach((m,i)=>o.push({k:'u:'+i,kind:'s',labe
  Object.entries(MODELS).forEach(([k,m])=>o.push({k:'b:'+k,kind:'s',label:m.label,niv:'',dom:'',tags:'modèle intégré',fav:0,builtin:1,n:m.s.phases.length}));return o}
 function mlRender(){const B=$('mlbody');if(!B)return;
  if(mlS.edit){const d=mlS.edit.d,f=(k,l,ph)=>`<label>${l}<input data-mf="${k}" value="${esc(d[k])}" placeholder="${ph||''}"></label>`;B.innerHTML=`<h4>Propriétés du modèle</h4>${f('label','Nom')}${f('niv','Niveau','3e, 2de…')}${f('dom','Domaine','Géométrie, Fonctions…')}${f('tags','Mots-clés (séparés par des virgules)')}<div class="mda"><button class="btn pri" data-ml="save">Enregistrer</button><button class="btn" data-ml="cancel">Annuler</button></div>`;return}
- const w=nmap(mlS.q).n.split(/\s+/).filter(Boolean),all=mlItems(),L=all.filter(x=>(!mlS.n||x.niv===mlS.n)&&(!mlS.f||x.fav)&&w.every(k=>nmap(x.label+' '+x.niv+' '+x.dom+' '+x.tags).n.includes(k))).sort((a,b)=>(b.fav?1:0)-(a.fav?1:0)||a.label.localeCompare(b.label,'fr'));
- const ni='<option value="">Tous niveaux</option>'+uniq(all.map(x=>x.niv).filter(Boolean)).map(n=>`<option${mlS.n===n?' selected':''}>${esc(n)}</option>`).join('');
- const grp=(t,f)=>{const g=L.filter(f);return g.length?`<h4>${t} (${g.length})</h4>`+g.map(x=>`<div class="bkit"><div class="bkm"><b>${x.fav?'★ ':''}${esc(x.label)}</b>${x.niv?` <span class="tg" style="background:#0f5e73">${esc(x.niv)}</span>`:''}${x.dom?` <small>· ${esc(x.dom)}</small>`:''}${x.tags?` <small>· ${esc(x.tags)}</small>`:''} <small>(${x.n} ${x.kind==='q'?'séance(s)':'phase(s)'})</small></div><div class="bka"><button class="btn pri" data-ml="use:${x.k}">➕ Créer ${x.kind==='q'?'une séquence':'une séance'}</button>${x.builtin?'':`<button class="btn" data-ml="fav:${x.k}" aria-label="${x.fav?'Retirer des favoris':'Ajouter aux favoris'}">${x.fav?'★':'☆'}</button><button class="btn" data-ml="edit:${x.k}">✎ Propriétés</button><button class="btn" data-ml="dup:${x.k}">⧉ Dupliquer</button><button class="btn" data-ml="del:${x.k}">🗑 Supprimer</button>`}</div></div>`).join(''):''};
+ const all=mlItems(),ni='<option value="">Tous niveaux</option>'+uniq(all.map(x=>x.niv).filter(Boolean)).map(n=>`<option${mlS.n===n?' selected':''}>${esc(n)}</option>`).join('');
  B.innerHTML=`<div class="bkt"><input data-mq placeholder="🔎 Rechercher un modèle (nom, niveau, domaine, mots-clés…)" aria-label="Rechercher un modèle" value="${esc(mlS.q)}" style="flex:1;min-width:200px;margin:0"><select data-ms="n" aria-label="Niveau" style="width:auto;margin:0">${ni}</select><label class="inl"><input type="checkbox" data-ms="f"${mlS.f?' checked':''}>★ Favoris</label></div>
  <div class="bkt"><button class="btn" data-ml="exp">💾 Exporter mes modèles</button><button class="btn" data-ml="imp">📂 Importer</button><input type="file" id="mlf" accept=".json" hidden></div>
- <p class="bkc"><b>Un modèle est une copie de départ</b> : créer une séance ou une séquence à partir d’un modèle produit une <b>copie indépendante</b> (modifier le modèle ne change jamais les fiches déjà créées, et inversement). Les modèles de séquence n’emportent ni dates, ni statuts, ni suivi, ni images. Pour enregistrer : <i>Séance ▸ Enregistrer comme modèle</i> ou <i>Séquence ▸ Enregistrer la séquence comme modèle</i>.</p>
- ${grp('Modèles de séquence',x=>x.kind==='q')}${grp('Mes modèles de séance',x=>x.kind==='s'&&!x.builtin)}${grp('Modèles intégrés',x=>x.builtin)}${L.length?'':'<p><i>Aucun modèle ne correspond.</i></p>'}`;const f=$('mlf');if(f)f.onchange=mlImport}
+ <p class="bkc"><b>Un modèle est une copie de départ</b> : créer une séance ou une séquence à partir d’un modèle produit une <b>copie indépendante</b> (modifier le modèle ne change jamais les fiches déjà créées, et inversement). Les modèles de séquence n’emportent ni dates, ni statuts, ni suivi, ni images. Pour enregistrer : <i>Séance ▸ Enregistrer comme modèle</i> ou <i>Séquence ▸ Enregistrer la séquence comme modèle</i>.</p><div id="mllist"></div>`;mlList();const f=$('mlf');if(f)f.onchange=mlImport}
+function mlList(){const l=$('mllist');if(!l)return;const w=nmap(mlS.q).n.split(/\s+/).filter(Boolean),all=mlItems(),L=all.filter(x=>(!mlS.n||x.niv===mlS.n)&&(!mlS.f||x.fav)&&w.every(k=>nmap(x.label+' '+x.niv+' '+x.dom+' '+x.tags).n.includes(k))).sort((a,b)=>(b.fav?1:0)-(a.fav?1:0)||a.label.localeCompare(b.label,'fr'));
+ const grp=(t,f)=>{const g=L.filter(f);return g.length?`<h4>${t} (${g.length})</h4>`+g.map(x=>`<div class="bkit"><div class="bkm"><b>${x.fav?'★ ':''}${esc(x.label)}</b>${x.niv?` <span class="tg" style="background:#0f5e73">${esc(x.niv)}</span>`:''}${x.dom?` <small>· ${esc(x.dom)}</small>`:''}${x.tags?` <small>· ${esc(x.tags)}</small>`:''} <small>(${x.n} ${x.kind==='q'?'séance(s)':'phase(s)'})</small></div><div class="bka"><button class="btn pri" data-ml="use:${x.k}">➕ Créer ${x.kind==='q'?'une séquence':'une séance'}</button>${x.builtin?'':`<button class="btn" data-ml="fav:${x.k}" aria-label="${x.fav?'Retirer des favoris':'Ajouter aux favoris'}">${x.fav?'★':'☆'}</button><button class="btn" data-ml="edit:${x.k}">✎ Propriétés</button><button class="btn" data-ml="dup:${x.k}">⧉ Dupliquer</button><button class="btn" data-ml="del:${x.k}">🗑 Supprimer</button>`}</div></div>`).join(''):''};
+ l.innerHTML=grp('Modèles de séquence',x=>x.kind==='q')+grp('Mes modèles de séance',x=>x.kind==='s'&&!x.builtin)+grp('Modèles intégrés',x=>x.builtin)+(L.length?'':'<p><i>Aucun modèle ne correspond.</i></p>')}
 function mlParse(k){const[t,i]=k.split(':');return[t,t==='b'?i:+i]}
 async function mlClick(e){const b=e.target.closest('[data-ml]');if(!b){if(e.target===$('ml'))modelsClose();return}const s=b.dataset.ml,ix=s.indexOf(':'),a=ix<0?s:s.slice(0,ix),k=ix<0?'':s.slice(ix+1);
  if(a==='close')modelsClose();
@@ -1432,8 +1438,8 @@ async function mlImport(){const f=$('mlf'),file=f.files[0];f.value='';if(!file)r
   (Array.isArray(d.seqModels)?d.seqModels:[]).slice(0,200).forEach(r=>{if(!r||!String(r.label||'').trim()||!r.q||typeof r.q!=='object'||!Array.isArray(r.s))return;const q=JSON.parse(JSON.stringify(r.q));['id','classe','cov','compBilan','compLog'].forEach(k=>delete q[k]);const m={...meta(r),q,s:r.s.slice(0,200).map(cleanSeanceModel)};if(SM().some(x=>x.label===m.label&&cj(x.q)===cj(m.q)&&cj(x.s)===cj(m.s))){s2++;return}SM().push(m);n++});
   tplUI();save();mlRender();toast(n+' modèle(s) importé(s), '+s2+' doublon(s) ignoré(s)')}catch(x){await info('Import impossible','<p>'+esc(errMsg(x))+'</p>')}}
 function mlInput(e){const t=e.target;if(t.dataset.mf){mlS.edit.d[t.dataset.mf]=t.value;return}
- if(t.dataset.mq!==undefined){mlS.q=t.value;const p=t.selectionStart;mlRender();const n=document.querySelector('[data-mq]');n.focus();n.setSelectionRange(p,p);return}
- if(t.dataset.ms){const k=t.dataset.ms;mlS[k]=t.type==='checkbox'?(t.checked?1:0):t.value;mlRender()}}
+ if(t.dataset.mq!==undefined){if(e.type==='input'){mlS.q=t.value;mlList()}return}
+ if(t.dataset.ms){const k=t.dataset.ms;mlS[k]=t.type==='checkbox'?(t.checked?1:0):t.value;mlList()}}
 
 /* ---------- accessibilité : noms accessibles automatiques pour les champs sans étiquette ---------- */
 const A11M={w:'Largeur de l’image',a:'Alignement de l’image',z:'Zone de l’image',l:'Légende de l’image'},A11F={duree:'Durée en minutes',nom:'Nom de la phase',mode:'Mode : élèves actifs ou collectif',support:'Support',modalites:'Modalités',contenu:'Description des activités des élèves',comment:'Commentaire sur la phase'};

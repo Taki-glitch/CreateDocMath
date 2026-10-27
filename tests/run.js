@@ -149,7 +149,7 @@ T('formules KaTeX locales (aucune requête CDN pour KaTeX/JSZip) + non-régressi
 T('PWA : fonctionne hors ligne après installation (KaTeX local, données IndexedDB)',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
  await p.evaluate(()=>navigator.serviceWorker.ready.then(()=>1));await p.reload();await p.waitForFunction(()=>navigator.serviceWorker.controller);
  const names=await p.evaluate(async()=>{const ks=await caches.keys(),c=await caches.open(ks.find(k=>k.startsWith('fiches-maths'))),r=await c.keys();return{ks,u:r.map(x=>new URL(x.url).pathname)}});
- assert.deepStrictEqual(names.ks,['fiches-maths-v14']);for(const f of ['/vendor/docx.iife.js','/vendor/katex/katex.min.js','/vendor/jszip.min.js','/vendor/katex/fonts/KaTeX_Main-Regular.woff2','/index.html','/bo_cycle4.js'])assert.ok(names.u.includes(f),f);
+ assert.deepStrictEqual(names.ks,['fiches-maths-v15']);for(const f of ['/vendor/docx.iife.js','/vendor/katex/katex.min.js','/vendor/jszip.min.js','/vendor/katex/fonts/KaTeX_Main-Regular.woff2','/index.html','/bo_cycle4.js'])assert.ok(names.u.includes(f),f);
  await p.evaluate(()=>{S().nom='Hors ligne ok';S().activite='$a^2$';changed()});await saved(p);await c.setOffline(true);await p.reload();await booted(p);assert.strictEqual(await p.evaluate(()=>S().nom),'Hors ligne ok');await p.waitForSelector('#prev .katex');
  assert.ok(await p.evaluate(()=>document.fonts.check('16px KaTeX_Main')||true));await c.close()});
 
@@ -427,6 +427,35 @@ T('accessibilité : tous les champs et boutons visibles ont un nom accessible (p
  await p.evaluate(()=>{calOpen();calRender()});await check('calendrier mois');await p.click('[data-cal="m:list"]');await check('calendrier liste');await p.evaluate(()=>calClose());
  await p.evaluate(()=>{document.getElementById('bod').open=true});await p.waitForFunction(()=>typeof BO_DATA!=='undefined');await check('sélecteur de programme');
  assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('iPhone (émulation tactile) : barre de menus sans conteneur à défilement, chaque entrée atteignable et cliquable au doigt',async()=>{const {devices}=require('playwright');const c=await ctx({...devices['iPhone 13']}),p=await c.newPage();await booted(p);await p.evaluate(SEED2);
+ const o=await p.evaluate(()=>{const b=document.getElementById('mbar'),cs=getComputedStyle(b);return{ox:cs.overflowX,oy:cs.overflowY,h:b.getBoundingClientRect().height,w:innerWidth,sw:document.documentElement.scrollWidth}});
+ assert.ok(o.ox==='visible'&&o.oy==='visible','la barre ne doit pas être un conteneur à défilement (iOS rogne les menus fixes) : '+o.ox);assert.ok(o.h<=110,'barre trop haute : '+o.h);assert.ok(o.sw<=o.w+1,'défilement horizontal de la page');
+ for(const m of ['f','q','s','v']){await p.tap('#mbar [data-menu='+m+']');const r=await p.evaluate(()=>{const pn=document.querySelector('#mbar .mp:not([hidden])');if(!pn)return null;const b=pn.getBoundingClientRect(),its=[...pn.querySelectorAll('button')].filter(x=>x.offsetParent!==null);
+   const bad=[];pn.scrollTop=0;its.forEach(x=>{x.scrollIntoView({block:'nearest'});const q=x.getBoundingClientRect();const e=document.elementFromPoint(q.left+q.width/2,q.top+q.height/2);if(!x.contains(e))bad.push(x.textContent.trim().slice(0,30)+' <- '+(e&&e.tagName+'.'+e.className))});
+   return{left:b.left,right:b.right,top:b.top,bottom:b.bottom,w:innerWidth,h:innerHeight,n:its.length,bad}});
+  assert.ok(r,'menu '+m+' ouvert');assert.ok(r.left>=0&&r.right<=r.w&&r.top>=40&&r.bottom<=r.h,'menu '+m+' dans l’écran : '+JSON.stringify(r));assert.deepStrictEqual(r.bad,[],'entrées masquées ou non atteignables : menu '+m);await p.tap('#mbar [data-menu='+m+']')}
+ const n0=await p.evaluate(()=>db.seqs.length);await p.tap('#mbar [data-menu=q]');await p.tap('#mbar [data-a=newq]');assert.strictEqual(await p.evaluate(()=>db.seqs.length),n0+1,'action déclenchée au toucher');await p.waitForFunction(()=>!document.querySelector('#mbar .mp:not([hidden])'),null,{timeout:2000});
+ await p.tap('#mbar [data-menu=v]');await p.tap('#mbar [data-a=eleve]');assert.strictEqual(await p.evaluate(()=>bv),'eleve');
+ await p.tap('#bnav [data-mv=list]');await p.tap('#list [data-tg] >> nth=0');await p.tap('#list a >> nth=0');assert.strictEqual(await p.evaluate(()=>document.body.dataset.mv),'form');
+ await p.tap('#mbar [data-a=cmdk]');await p.waitForSelector('#ck');await p.keyboard.type('thal');await p.tap('#ckr .ckit >> nth=0');await p.waitForFunction(()=>!document.getElementById('ck'));
+ await p.tap('#mbar [data-a=chrono]');await p.waitForSelector('#cl:not([hidden])');await p.tap('#cl [data-c=close]');assert.ok(await p.$eval('#cl',e=>e.hidden));
+ await p.evaluate(()=>{db.seances[0].date=todayS();changed();calOpen()});await p.waitForSelector('#cal');assert.strictEqual(await p.evaluate(()=>cal.mode),'list','vue liste par défaut sur téléphone');assert.ok(await p.locator('#cal .cll input[type=date]').first().isVisible());
+ await p.tap('#cal [data-cal="m:month"]');await p.waitForSelector('#cal .cch');await p.tap('#cal .cch >> nth=0');assert.ok(await p.evaluate(()=>!!cal.sel),'sélection au toucher dans le calendrier');await p.tap('#cal .calhint [data-open]');await p.waitForFunction(()=>!document.getElementById('cal'),null,{timeout:2000});
+ assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('saisie puis clic/toucher sur un résultat : le premier clic est pris en compte (palette, banque, modèles), le champ garde le focus',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await p.evaluate(SEED2);
+ await p.evaluate(()=>{BK().push({id:'b1',type:'flash',titre:'Fractions addition',niveau:'5e',domaine:'',notions:'',comp:[],enonce:'Calculer 1/2+1/3',correction:'',diff:'2',duree:'',mots:'',source:'',fav:0,img:''},{id:'b2',type:'exercice',titre:'Autre sujet',niveau:'3e',domaine:'',notions:'',comp:[],enonce:'Thalès',correction:'',diff:'2',duree:'',mots:'',source:'',fav:0,img:''});MD().push({label:'Mon modèle test',niv:'3e',dom:'',tags:'',fav:0,s:{nom:'Séance modèle',phases:[]}})});
+ // palette : taper puis cliquer le résultat (le champ perd le focus => 'change' ne doit pas redessiner avant le clic)
+ await p.keyboard.press('Control+k');await p.type('#cki','réciproque');await p.waitForSelector('#ckr .ckit');assert.strictEqual(await p.evaluate(()=>document.activeElement.id),'cki','le champ garde le focus pendant la frappe');
+ await p.click('#ckr .ckit >> nth=0');await p.waitForFunction(()=>!document.getElementById('ck'),null,{timeout:3000});assert.ok(await p.evaluate(()=>/Réciproque/.test(S().nom)));
+ // banque : la frappe ne doit pas remplacer le champ (clavier iOS) ; un clic sur « Insérer » juste après doit fonctionner du premier coup
+ p.evaluate(()=>bankOpen()).catch(()=>{});await p.waitForSelector('#bk');await p.type('[data-bq]','fractions');assert.strictEqual(await p.evaluate(()=>document.activeElement.hasAttribute('data-bq')),true,'focus conservé dans la recherche de la banque');
+ const same=await p.evaluate(()=>{const e=document.querySelector('[data-bq]');e.dataset.mark='1';return e.dataset.mark});await p.type('[data-bq]',' ');assert.strictEqual(await p.evaluate(()=>document.querySelector('[data-bq]').dataset.mark),'1','le champ n’est pas recréé à chaque lettre');
+ assert.strictEqual(await p.locator('.bkit').count(),1);const n0=await p.evaluate(()=>S().activite.length);await p.click('.bkit [data-bk^=ins]');assert.ok(await p.evaluate(()=>S().activite.length)>n0,'insertion au premier clic');await p.click('[data-bk=close]');
+ // modèles
+ p.evaluate(()=>modelsOpen()).catch(()=>{});await p.waitForSelector('#ml');await p.type('[data-mq]','modèle test');await p.evaluate(()=>{document.querySelector('[data-mq]').dataset.mark='1'});const ns=await p.evaluate(()=>db.seances.length);
+ await p.click('[data-ml^="use:u"]');await p.waitForFunction(n=>db.seances.length===n+1,ns,{timeout:3000});assert.deepStrictEqual(c.errs,[]);await c.close()});
 
 (async()=>{await new Promise(r=>srv.listen(0,'127.0.0.1',r));BASE='http://localhost:'+srv.address().port;browser=await chromium.launch();
  let fail=0;const only=process.argv[2];for(const t of results){if(only&&!t.name.includes(only))continue;const t0=Date.now();try{await Promise.race([t.fn(),new Promise((_,j)=>setTimeout(()=>j(new Error('délai dépassé (90 s)')),90000))]);console.log('  ✓',t.name,'('+(Date.now()-t0)+' ms)')}catch(e){fail++;console.log('  ✗',t.name,'\n     ',String(e.message).split('\n').slice(0,6).join('\n      '))}}
