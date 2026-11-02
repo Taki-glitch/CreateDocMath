@@ -149,7 +149,7 @@ T('formules KaTeX locales (aucune requête CDN pour KaTeX/JSZip) + non-régressi
 T('PWA : fonctionne hors ligne après installation (KaTeX local, données IndexedDB)',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
  await p.evaluate(()=>navigator.serviceWorker.ready.then(()=>1));await p.reload();await p.waitForFunction(()=>navigator.serviceWorker.controller);
  const names=await p.evaluate(async()=>{const ks=await caches.keys(),c=await caches.open(ks.find(k=>k.startsWith('fiches-maths'))),r=await c.keys();return{ks,u:r.map(x=>new URL(x.url).pathname)}});
- assert.deepStrictEqual(names.ks,['fiches-maths-v15']);for(const f of ['/vendor/docx.iife.js','/vendor/katex/katex.min.js','/vendor/jszip.min.js','/vendor/katex/fonts/KaTeX_Main-Regular.woff2','/index.html','/bo_cycle4.js'])assert.ok(names.u.includes(f),f);
+ assert.deepStrictEqual(names.ks,['fiches-maths-v16']);for(const f of ['/vendor/docx.iife.js','/vendor/katex/katex.min.js','/vendor/jszip.min.js','/vendor/katex/fonts/KaTeX_Main-Regular.woff2','/index.html','/bo_cycle4.js'])assert.ok(names.u.includes(f),f);
  await p.evaluate(()=>{S().nom='Hors ligne ok';S().activite='$a^2$';changed()});await saved(p);await c.setOffline(true);await p.reload();await booted(p);assert.strictEqual(await p.evaluate(()=>S().nom),'Hors ligne ok');await p.waitForSelector('#prev .katex');
  assert.ok(await p.evaluate(()=>document.fonts.check('16px KaTeX_Main')||true));await c.close()});
 
@@ -456,6 +456,149 @@ T('saisie puis clic/toucher sur un résultat : le premier clic est pris en compt
  // modèles
  p.evaluate(()=>modelsOpen()).catch(()=>{});await p.waitForSelector('#ml');await p.type('[data-mq]','modèle test');await p.evaluate(()=>{document.querySelector('[data-mq]').dataset.mark='1'});const ns=await p.evaluate(()=>db.seances.length);
  await p.click('[data-ml^="use:u"]');await p.waitForFunction(n=>db.seances.length===n+1,ns,{timeout:3000});assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+/* ================= import d'une séquence produite par une IA (createdocmath-ai-sequence) ================= */
+const AI_EX=JSON.parse(fs.readFileSync(path.join(ROOT,'docs','exemple-sequence-ia.json'),'utf8'));
+const aiSeance=i=>({numero:i,titre:'Séance '+i+' : fractions é à ç',type:i%5===0?'evaluation':'apprentissage',duree:55,date:'2026-11-'+String(8+i).padStart(2,'0'),
+ objectifs:'Comprendre $\\frac{a}{b}$ n°'+i,prerequis:['Tables','Division'],prerequis_tice:'Calculatrice',
+ phases:[{duree:10,nom:'Rituel '+i,contenu:'- calcul $\\sqrt{x^2+1}$',commentaire:'Observer',modalite:'individuel',support:'Diaporama'},{duree:25,nom:'Recherche',contenu:'Chercher',commentaire:'',modalite:'binôme'},{duree:20,nom:'Mise en commun',contenu:'Débat',commentaire:'',modalite:'collectif'}],
+ objectifs_fin:'Savoir',travail_personnel:'Ex '+i,activite_titre:'Activité '+i,activite:'1. Calculer $\\frac{1}{2}+\\frac{1}{4}$.\n2. Conclure.',trace_ecrite:'## Cours\n$$\\frac{a}{b}=\\frac{ak}{bk}$$',
+ difficultes:'Confusion',aides:'Fiche d’aide',competences:['Chercher','Calculer'],competences_justification:'Justif',evaluation:'Critères',bilan:'Bilan',introduction:'Intro',moment_cours:'Cours',entrainement:'Entraînement',remarque_pedagogique:'Remarque'});
+const aiSeq=n=>({format:'createdocmath-ai-sequence',version:'1.0',sequence:{titre:'Fractions IA',niveau:'5e',classe:'5A',reference_bo:'BO test',contenus_bo:['Contenu A','Contenu B'],capacites_attendues:['Cap 1'],problematique:'Problématique ?',objectifs_generaux:['Obj 1','Obj 2'],domaine:'Nombres',theme:'Fractions',duree_previsionnelle:275,recommandations:'Reco'},seances:Array.from({length:n},(_,i)=>aiSeance(i+1))});
+const aiFile=(p,obj,name)=>p.setInputFiles('#aif',{name:name||'sequence.json',mimeType:/\.json$/.test(name||'x.json')?'application/json':'text/plain',buffer:Buffer.from(typeof obj==='string'?obj:JSON.stringify(obj))});
+const modalDone=p=>p.waitForFunction(()=>!document.querySelector('.mdb'),null,{timeout:5000});
+async function aiPreview(p,obj,name){await aiFile(p,obj,name);return modalText(p)}
+async function aiRun(p,obj,name){const t=await aiPreview(p,obj,name);if(!/Importer comme nouvelle séquence/.test(t))return{t,done:null};
+ await clickBtn(p,'Importer comme nouvelle séquence');await p.waitForFunction(()=>[...document.querySelectorAll('.mdb')].some(e=>/Séquence importée|Import annulé/.test(e.innerText)),null,{timeout:8000});
+ const done=await modalText(p);await clickBtn(p,'Fermer');await modalDone(p);return{t,done}}
+const aiRefuse=async(p,obj,rx,name)=>{const n=await p.evaluate(()=>[db.seqs.length,db.seances.length].join());const t=await aiPreview(p,obj,name);assert.ok(/Import impossible/.test(t)&&rx.test(t),'message attendu '+rx+' : '+t.slice(0,250));
+ await clickBtn(p,'Fermer');await modalDone(p);assert.strictEqual(await p.evaluate(()=>[db.seqs.length,db.seances.length].join()),n,'aucune donnée modifiée')};
+
+for(const N of [1,5,10])T('import IA : séquence de '+N+' séance(s) — aperçu, nouveaux identifiants, association, phases, compétences, activités, formules, enregistrement',async()=>{
+ const c=await ctx(),p=await c.newPage();await booted(p);const before=await fp(p),ids0=await p.evaluate(()=>[db.seqs[0].id,db.seances[0].id]);
+ const obj=aiSeq(N);obj.sequence.id='HACK-Q';obj.seances.forEach((s,i)=>{s.id='HACK-S'+i;s.seq='HACK-Q'});
+ const {t,done}=await aiRun(p,obj);
+ assert.ok(new RegExp('<?'+N+'\\s*séance').test(t)||t.includes(N+' séance(s)'),'nombre de séances dans l’aperçu');assert.ok(/Fractions IA/.test(t)&&/5e/.test(t)&&/55 min|min au total/.test(t),'titre, niveau, durées');
+ assert.ok(/Non importé/.test(t)&&/champ inconnu « id »/.test(t),'champs ignorés signalés');assert.ok(/S1 – Séance 1/.test(t));assert.ok(/Séquence importée/.test(done)&&/Vérification/.test(done));
+ const r=await p.evaluate(()=>{const q=db.seqs[db.seqs.length-1],ss=db.seances.filter(s=>s.seq===q.id);return{q,ss,n:db.seqs.length,cur:db.cur,ids:[...db.seqs.map(x=>x.id),...db.seances.map(x=>x.id)]}});
+ assert.strictEqual(r.n,2);assert.strictEqual(r.ss.length,N);assert.ok(!r.ids.some(i=>/HACK/.test(i)),'identifiants IA non conservés');assert.strictEqual(new Set(r.ids).size,r.ids.length,'identifiants uniques');assert.ok(r.ids.every(i=>/^[\w-]{1,64}$/.test(i)));
+ assert.strictEqual(r.cur,r.ss[0].id,'première séance sélectionnée');assert.deepStrictEqual(r.ss.map(s=>s.numero),Array.from({length:N},(_,i)=>i+1));
+ const q=r.q,s=r.ss[0];assert.strictEqual(q.nom,'Fractions IA');assert.strictEqual(q.niveau,'5e');assert.strictEqual(q.classe,'5A');assert.strictEqual(q.boRef,'BO test');assert.strictEqual(q.bo,'- Contenu A\n- Contenu B');assert.strictEqual(q.capacites,'Cap 1'.replace(/^/,'- '));assert.strictEqual(q.reco,'Reco');
+ assert.ok(/Problématique/.test(q.cadre)&&/Obj 1/.test(q.cadre)&&/275 min/.test(q.cadre)&&/Fractions/.test(q.cadre),'infos de séquence regroupées dans le cadre');
+ assert.strictEqual(s.nom,'Séance 1 : fractions é à ç');assert.strictEqual(s.type,'');assert.strictEqual(s.date,'2026-11-09');assert.strictEqual(s.duree,55);assert.strictEqual(s.objectifs,'Comprendre $\\frac{a}{b}$ n°1');assert.strictEqual(s.prereq,'- Tables\n- Division');assert.strictEqual(s.tice,'Calculatrice');
+ assert.strictEqual(s.phases.length,3);assert.deepStrictEqual(s.phases.map(x=>[x.duree,x.mode]),[[10,'a'],[25,'a'],[20,'c']]);assert.strictEqual(s.phases[0].support,'Diaporama');assert.strictEqual(s.phases[0].modalites,'Individuel');assert.strictEqual(s.phases[0].comment,'Observer');assert.strictEqual(s.phases[0].contenu,'- calcul $\\sqrt{x^2+1}$');
+ assert.deepStrictEqual(s.comp,['Chercher','Calculer']);assert.strictEqual(s.compTexte,'Justif');assert.strictEqual(s.activiteTitre,'Activité 1');assert.ok(/\\frac\{1\}\{2\}/.test(s.activite)&&/^## Cours/.test(s.trace));assert.strictEqual(s.travail,'Ex 1');assert.strictEqual(s.objFin,'Savoir');
+ assert.strictEqual(s.difficultes,'Confusion');assert.strictEqual(s.aides,'Fiche d’aide');assert.strictEqual(s.evalBilan,'**Évaluation :** Critères\n\n**Bilan :** Bilan');assert.strictEqual(s.introS,'Intro');assert.strictEqual(s.coursS,'Cours');assert.strictEqual(s.entrS,'Entraînement');assert.strictEqual(s.rem,'Remarque');
+  assert.ok(!('__miss' in s),'champ technique retiré avant enregistrement');assert.deepStrictEqual(Object.keys(s).sort(),Object.keys(await p.evaluate(()=>{addSeance(db.seqs[0].id);const x=db.seances.pop();db.cur=db.seances[0].id;return Object.fromEntries(Object.keys(x).concat(['type','statut','activiteTitre','activite','trace','aides','evalBilan','introS','coursS','entrS','remLabel','rem']).map(k=>[k,1]))})).sort(),'mêmes propriétés que les séances natives');
+ if(N>=5)assert.strictEqual(r.ss[4].type,'eval');
+ assert.deepStrictEqual(await p.evaluate(a=>[db.seqs[0].id,db.seances[0].id].join()===a.join(),ids0),true);assert.deepStrictEqual((await fp(p)).seances.slice(0,1),before.seances,'séquence existante intacte');
+ // affichage, enregistrement, persistance
+ await p.waitForSelector('#prev .katex');assert.ok(/Séance 1/.test(await p.$eval('#prev',e=>e.innerText)));
+ await saved(p);const d=await idbDump(p);assert.strictEqual(d.seqs.n,2);assert.strictEqual(d.seances.n,1+N);
+ await p.reload();await booted(p);assert.strictEqual(await p.evaluate(()=>db.seances.length),1+N);assert.ok(await p.evaluate(()=>db.seqs.some(q=>q.nom==='Fractions IA')));assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('import IA : champs facultatifs absents, valeurs incorrectes, avertissements (conversion pure, rien n’est inventé)',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
+ const conv=o=>p.evaluate(o=>{const r=aiConvert(o);return{E:r.R.E,W:r.R.W,I:r.R.I,q:r.q,ss:r.ss}},o);
+ let r=await conv({format:'createdocmath-ai-sequence',version:'1.0',sequence:{titre:'Minimal'},seances:[{titre:'Seule'}]});
+ assert.deepStrictEqual(r.E,[]);assert.strictEqual(r.q.niveau,'');assert.strictEqual(r.q.cadre,'');assert.strictEqual(r.q.bo,'');assert.strictEqual(r.ss[0].objectifs,'');assert.deepStrictEqual(r.ss[0].phases,[]);assert.deepStrictEqual(r.ss[0].comp,[]);assert.strictEqual(r.ss[0].duree,55);assert.ok(r.W.some(x=>/niveau/.test(x)));assert.ok(r.ss[0].__miss.includes('objectifs'));
+ r=await conv({format:'createdocmath-ai-sequence',version:'1.0',sequence:{titre:'Données douteuses',niveau:'4e',duree_previsionnelle:-5,competences:['Chercher']},seances:[
+  {numero:3,titre:'',type:'bizarre',duree:-10,date:'31/12/2026',competences:['Chercher','Danser','calculer','Modeliser'],phases:[{nom:'Sans durée',contenu:'x'},{duree:-4,nom:'Négative',modalite:'individuel'},{duree:'abc',nom:'Texte',modalite:'on ne sait pas'},{duree:1e9,nom:'Énorme'},{},{duree:5,nom:'Collectif',modalite:'plénière',extra:1},'pas un objet'],activite:{a:1},objectifs:['A','B'],truc:1},
+  {numero:3,titre:'Doublon de numéro',duree:'40',phases:'oups'},{numero:'x',titre:'Numéro invalide',date:'2026-02-30'},42]});
+ assert.deepStrictEqual(r.E,[]);const W=r.W.join('\n'),I=r.I.join('\n');
+ assert.deepStrictEqual(r.ss.map(s=>s.numero),[1,2,3],'numéros consécutifs');
+ const s=r.ss.find(x=>x.nom==='Séance 1'||/Séance/.test(x.nom)&&x.phases.length);assert.ok(s,'séance sans titre nommée');assert.strictEqual(s.date,'');assert.deepStrictEqual(s.comp,['Chercher','Modéliser','Calculer'],'compétences reconnues (casse / accents indifférents), dans l’ordre habituel');assert.strictEqual(s.objectifs,'- A\n- B');assert.strictEqual(s.activite,'');
+ assert.ok(/compétence « Danser » inconnue/.test(W)&&/type « bizarre » inconnu/.test(W)&&/date « 31\/12\/2026 » invalide/.test(W)&&/durée invalide/.test(W)&&/sans durée/.test(W)&&/durée invalide, mise à 0/.test(W)&&/modalité « on ne sait pas » inconnue/.test(W)&&/phase 5 vide/.test(W)&&/phase 7 ignorée/.test(W)&&/« phases » doit être une liste/.test(W)&&/durée prévisionnelle.*invalide/.test(W)&&/valeur ignorée/.test(W)&&/élément n°4/.test(W)&&/numéro « 3 »|numéro absent/.test(W),W);
+ assert.ok(/champ inconnu « truc »/.test(I)&&/champ inconnu « extra »/.test(I)&&/Compétences de la séquence/.test(I),I);
+ assert.deepStrictEqual(s.phases.map(x=>x.duree),[0,0,0,0,5]);assert.strictEqual(s.phases[4].mode,'c');assert.strictEqual(s.phases[2].mode,'a');assert.ok(s.phases.every(x=>Number.isInteger(x.duree)&&x.duree>=0));
+ assert.strictEqual(r.ss.find(x=>x.nom==='Doublon de numéro').duree,40);assert.strictEqual(r.ss.find(x=>x.nom==='Numéro invalide').date,'');
+ // modalités reconnues
+ const m=await p.evaluate(()=>['Individuel','binôme','Groupe','travail en autonomie','Collectif','plénière','Classe entière','magistral','individuel puis collectif',''].map(aiMode));assert.deepStrictEqual(m,['a','a','a','a','c','c','c','c','a',null]);
+ // réparation des barres obliques non doublées (\f, \t, \b, \r interprétés par JSON.parse)
+ r=await conv(JSON.parse('{"format":"createdocmath-ai-sequence","version":"1.0","sequence":{"titre":"Formules"},"seances":[{"titre":"F","activite":"$\\frac{1}{2}\\times 3$ et $\\beta+\\theta$ et $\\right)$ doublé : $\\\\frac{1}{2}$"}]}'));
+ assert.strictEqual(r.ss[0].activite,'$\\frac{1}{2}\\times 3$ et $\\beta+\\theta$ et $\\right)$ doublé : $\\frac{1}{2}$');assert.ok(r.W.some(x=>/formule\(s\) corrigée/.test(x)));
+ assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('import IA : fichier refusé (JSON mal formé, format ou version inconnus, sans titre, sans séance, trop gros, mauvaise extension) — rien n’est modifié',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
+ await aiRefuse(p,'{"format":"createdocmath-ai-sequence","seances":[',/n’est pas un JSON valide/);
+ await aiRefuse(p,'Voici votre séquence ! {"format":"createdocmath-ai-sequence"}',/n’est pas un JSON valide/);
+ await aiRefuse(p,{format:'autre-chose',sequence:{titre:'A'},seances:[{titre:'B'}]},/Format non reconnu/);await aiRefuse(p,[1,2,3],/Format non reconnu/);await aiRefuse(p,'null',/Format non reconnu/);
+ await aiRefuse(p,{format:'createdocmath-ai-sequence',version:'2.0',sequence:{titre:'A'},seances:[{titre:'B'}]},/version « 2\.0 » non prise en charge/);
+ await aiRefuse(p,{format:'createdocmath-ai-sequence',version:'1.0',sequence:{titre:'  '},seances:[{titre:'B'}]},/n’a pas de titre/);
+ await aiRefuse(p,{format:'createdocmath-ai-sequence',version:'1.0',sequence:{titre:'A'},seances:[]},/aucune séance/);
+ await aiRefuse(p,{format:'createdocmath-ai-sequence',version:'1.0',seances:[{titre:'B'}]},/« sequence » est absente/);
+ await aiRefuse(p,aiSeq(61),/trop de séances \(61\)/);await aiRefuse(p,{format:'createdocmath-ai-sequence',version:'1.0',sequence:{titre:'A'},seances:[1,2]},/aucune séance exploitable/);
+ await aiRefuse(p,' '.repeat(5.2e6),/trop volumineux/);await aiRefuse(p,aiSeq(1),/Choisissez un fichier « \.json »/,'sequence.txt');await aiRefuse(p,'PK\u0003\u0004',/Choisissez un fichier/,'sauvegarde.zip');
+ assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('import IA : accepte JSON entouré de balises Markdown, avertit ; version 1.x ; annulation sans effet',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);const n=await p.evaluate(()=>db.seqs.length);
+ let t=await aiPreview(p,'```json\n'+JSON.stringify(aiSeq(2))+'\n```');assert.ok(/Importer comme nouvelle séquence/.test(t)&&/bloc de code Markdown/.test(t));await clickBtn(p,'Annuler');await modalDone(p);assert.strictEqual(await p.evaluate(()=>db.seqs.length),n,'annulation : rien ajouté');
+ const o=aiSeq(1);o.version='1.3';t=await aiPreview(p,'\uFEFF'+JSON.stringify(o));assert.ok(/plus récente que la 1\.0/.test(t));await clickBtn(p,'Annuler');await modalDone(p);assert.strictEqual(await p.evaluate(()=>db.seqs.length),n);assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('import IA : doublon signalé sans blocage, jamais d’écrasement, anciennes sauvegardes et exports natifs toujours importables',async()=>{const c=await ctx(),p=await c.newPage();await seed(p,null,JSON.stringify(legacyDb()));await booted(p);
+ const f0=await fp(p),snap0=await p.evaluate(()=>JSON.stringify({s:db.seqs,a:db.seances.map(x=>({...x,imgs:x.imgs.map(m=>({...m,u:m.u.length}))}))}));
+ let r=await aiRun(p,aiSeq(2));assert.ok(!/existe déjà/.test(r.t));
+ r=await aiRun(p,aiSeq(2));assert.ok(/existe déjà/.test(r.t),'doublon signalé');assert.ok(/Importer comme nouvelle séquence/.test(r.t),'doublon non bloquant');
+ assert.strictEqual(await p.evaluate(()=>db.seqs.filter(q=>q.nom==='Fractions IA').length),2);assert.strictEqual(await p.evaluate(()=>db.seqs.length),4);
+ const same=await p.evaluate(()=>JSON.stringify({s:db.seqs.slice(0,2),a:db.seances.slice(0,4).map(x=>({...x,imgs:x.imgs.map(m=>({...m,u:m.u.length}))}))}));assert.strictEqual(same,snap0,'séquences existantes inchangées');
+ // JSON natif (export « Partager cette séquence » / ancienne sauvegarde) : accepté par la même entrée, via le flux d’import existant
+ const c2=await ctx(),p2=await c2.newPage();await booted(p2);const nat=legacyDb();await aiFile(p2,nat,'ancienne.json');let t=await modalText(p2);assert.ok(/Importer des fiches/.test(t)&&/Thalès/.test(t));await clickBtn(p2,'Fusionner');
+ await p2.waitForFunction(()=>[...document.querySelectorAll('.mdb')].some(e=>/Rapport d’import/.test(e.innerText)));await clickBtn(p2,'Fermer');await modalDone(p2);assert.strictEqual(await p2.evaluate(()=>db.seqs.length),3);assert.strictEqual(await p2.evaluate(()=>db.seances.length),5);
+ // le flux « Importer » historique est inchangé
+ assert.strictEqual(await p2.evaluate(()=>typeof importFlow+typeof validateDb+typeof normalizeDb+typeof mergeData),'functionfunctionfunctionfunction');assert.deepStrictEqual(c.errs,[]);assert.deepStrictEqual(c2.errs,[]);await c.close();await c2.close()});
+
+T('import IA : sécurité — HTML / JavaScript importé jamais exécuté (aperçu, toutes vues), pas de pollution de prototype',async()=>{const c=await ctx(),p=await c.newPage();const dlg=[];p.on('dialog',d=>{dlg.push(d.message());d.dismiss()});await booted(p);
+ const X='"><img src=x onerror="window.__x=1"><script>window.__x=1<\/script><svg onload=window.__x=1>\'';
+ const o=aiSeq(1);const S0=o.seances[0];for(const k of ['titre','objectifs','prerequis_tice','objectifs_fin','travail_personnel','activite_titre','activite','trace_ecrite','difficultes','aides','competences_justification','evaluation','bilan','introduction','moment_cours','entrainement','remarque_pedagogique'])S0[k]=X;
+ o.sequence.titre=X;o.sequence.niveau=X;o.sequence.classe=X;o.sequence.reference_bo=X;o.sequence.contenus_bo=[X,X];o.sequence.cadre_general=X;o.sequence.problematique=X;o.sequence.recommandations=X;S0.phases[0].nom=X;S0.phases[0].contenu=X;S0.phases[0].commentaire=X;S0.phases[0].support=X;S0.phases[0].modalite=X;
+ const raw=JSON.stringify(o).replace('"format"','"__proto__":{"polluted":1},"constructor":{"prototype":{"polluted2":1}},"format"');
+ const r=await aiRun(p,raw);assert.ok(/Importer comme nouvelle séquence/.test(r.t));
+ const check=async l=>{await p.waitForTimeout(150);const x=await p.evaluate(()=>({x:window.__x,bad:document.querySelectorAll('img[src="x"],svg[onload],[onerror],[onload]').length,sc:[...document.querySelectorAll('script')].filter(s=>/__x/.test(s.textContent)).length}));assert.deepStrictEqual(x,{x:undefined,bad:0,sc:0},l)};
+ await check('aperçu + import');assert.strictEqual(await p.evaluate(()=>({}).polluted===undefined&&({}).polluted2===undefined&&Object.prototype.polluted===undefined),true,'prototype intact');
+ for(const v of ['','seq','all','eleve','texte','annee']){await p.evaluate(v=>{bv=v;preview()},v);await check('vue '+v)}
+ await p.evaluate(()=>{bv='';preview()});assert.ok((await p.evaluate(()=>S().activite)).includes('<script>'),'texte conservé tel quel (non interprété)');
+ await p.evaluate(()=>{EL().a=1;EL().t=1;bv='eleve';preview()});await check('fiche élève');
+ await aiPreview(p,raw);await check('aperçu seul');await clickBtn(p,'Annuler');await modalDone(p);assert.deepStrictEqual(dlg,[]);assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('import IA : si l’enregistrement échoue, rien n’est ajouté (retour arrière), puis import possible après correction',async()=>{const c=await ctx();
+ await c.addInitScript(()=>{const o=IDBObjectStore.prototype.put;IDBObjectStore.prototype.put=function(){if(window.__fail&&this.name==='seances')throw new DOMException('quota','QuotaExceededError');return o.apply(this,arguments)}});
+ const p=await c.newPage();await booted(p);await saved(p);const n=await p.evaluate(()=>[db.seqs.length,db.seances.length,db.cur].join());await p.evaluate(()=>{window.__fail=true});
+ const r=await aiRun(p,aiSeq(3));assert.ok(/Import annulé/.test(r.done)&&/Rien n’a été ajouté/.test(r.done),r.done);
+ assert.strictEqual(await p.evaluate(()=>[db.seqs.length,db.seances.length,db.cur].join()),n,'mémoire inchangée');assert.ok(!(await p.evaluate(()=>db.seqs.some(q=>q.nom==='Fractions IA'))));
+ await p.evaluate(()=>{window.__fail=false});await p.evaluate(()=>{sv.err=null;changed()});await saved(p);assert.strictEqual((await idbDump(p)).seances.n,1,'aucune séance partielle en base');
+ await p.reload();await booted(p);assert.strictEqual(await p.evaluate(()=>db.seqs.length),1);
+ const r2=await aiRun(p,aiSeq(3));assert.ok(/Séquence importée/.test(r2.done));await saved(p);assert.strictEqual((await idbDump(p)).seances.n,4);assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('import IA : annuler (Ctrl+Z) retire la séquence importée ; fiche séquence, cahier complet, Word et PDF après import',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
+ const {done}=await aiRun(p,AI_EX);assert.ok(/Séquence importée/.test(done));
+ const info=await p.evaluate(()=>{const q=db.seqs[db.seqs.length-1];return{q:q.nom,n:db.seances.filter(s=>s.seq===q.id).length,types:db.seances.filter(s=>s.seq===q.id).map(s=>s.type).join()}});
+ assert.deepStrictEqual(info,{q:'Additionner et soustraire des fractions',n:4,types:',,,eval'});
+ // fiche de séance
+ await p.waitForSelector('#prev .katex');let txt=await p.$eval('#prev',e=>e.innerText);assert.ok(/Partager une unité/.test(txt)&&/Phase 1/.test(txt)&&/Phase 4/.test(txt)&&/Analyse didactique/.test(txt)&&/Aides et différenciation/.test(txt));
+ // fiche séquence
+ await p.evaluate(()=>{bv='seq';preview()});txt=await p.$eval('#prev',e=>e.innerText);assert.ok(/3 séances d’apprentissage \+ 1 séance d’évaluation/i.test(txt)&&/Problématique/.test(txt)&&/Objectifs généraux/.test(txt)&&/Durée prévisionnelle/.test(txt)&&/Partager une unité/.test(txt)&&/Évaluation : fractions/.test(txt));
+ // cahier complet + Word
+ await p.evaluate(()=>{bv='all';preview()});await p.waitForSelector('#prev .katex');let {Z,x}=await docxOf(p,'ia-all');const plain=x.replace(/<[^>]+>/g,'');
+ assert.ok(cnt(x,/<m:oMath>/g)>=5,'équations modifiables');assert.ok(/Partager une unité/.test(plain)&&/Additionner avec un dénominateur multiple/.test(plain)&&/Évaluation : fractions/.test(plain)&&/Organisation pédagogique/.test(plain));assert.ok(cnt(x,/<w:pageBreakBefore\/>/g)>=3);assert.ok(!/\$/.test(plain),'pas de $ brut');
+ for(const v of ['','eleve','texte','annee']){await p.evaluate(v=>{bv=v;preview()},v);({x}=await docxOf(p,'ia-'+(v||'f')));assert.ok(x.length>1500,v)}
+ // PDF
+ await p.evaluate(()=>{bv='all';preview()});await p.waitForSelector('#prev .katex');await p.emulateMedia({media:'print'});const f=path.join(os.tmpdir(),'cdm-ia-'+Date.now()+'.pdf');await p.pdf({path:f,format:'A4',preferCSSPageSize:true,printBackground:true});
+ let pt;try{pt=require('child_process').execFileSync('pdftotext',['-layout',f,'-'],{encoding:'utf8'})}catch(e){console.log('      (pdftotext absent : contrôle du texte PDF ignoré)')}
+ if(pt){assert.ok(/Additionner et soustraire des fractions/.test(pt)&&/Partager une unité/.test(pt)&&/Évaluation : fractions/.test(pt)&&/Page 2 \/ \d+/.test(pt));assert.ok((pt.match(/Phase \/ Durée/g)||[]).length>=3)}
+ await p.emulateMedia({media:'screen'});
+ // persistance + annulation
+ await saved(p);await p.reload();await booted(p);assert.ok(await p.evaluate(()=>db.seqs.some(q=>q.nom==='Additionner et soustraire des fractions')));
+ await p.evaluate(()=>{bv='';show()});await aiRun(p,aiSeq(2));assert.strictEqual(await p.evaluate(()=>db.seqs.length),3);await p.evaluate(()=>hgo(-1));assert.strictEqual(await p.evaluate(()=>db.seqs.length),2,'Ctrl+Z retire l’import');
+ assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('import IA : documentation — l’exemple et le prompt de docs/IMPORT-IA.md sont identiques aux fichiers sources et valides',async()=>{
+ const md=fs.readFileSync(path.join(ROOT,'docs','IMPORT-IA.md'),'utf8'),ex=fs.readFileSync(path.join(ROOT,'docs','exemple-sequence-ia.json'),'utf8').trim(),pr=fs.readFileSync(path.join(ROOT,'docs','prompt-notebooklm.txt'),'utf8').trim();
+ assert.ok(md.includes(ex),'exemple JSON complet inclus dans IMPORT-IA.md');assert.ok(md.includes(pr),'prompt NotebookLM inclus dans IMPORT-IA.md');
+ const c=await ctx(),p=await c.newPage();await booted(p);const r=await p.evaluate(o=>{const x=aiConvert(o);return{E:x.R.E,W:x.R.W,I:x.R.I,n:x.ss.length}},AI_EX);assert.deepStrictEqual(r.E,[]);assert.deepStrictEqual(r.I.filter(x=>!/Compétences de la séquence/.test(x)),[],'aucun champ inconnu dans l’exemple');assert.strictEqual(r.n,4);
+ const a=pr.indexOf('=== FORMAT JSON ==='),b=pr.indexOf('=== FIN DU FORMAT ===');assert.ok(a>0&&b>a);const sk=JSON.parse(pr.slice(a+19,b).replace(/«[^»]*»/g,'x'));assert.strictEqual(sk.format,'createdocmath-ai-sequence');assert.strictEqual(sk.version,'1.0');
+ for(const k of ['titre','niveau','classe','domaine','theme','problematique','duree_previsionnelle','objectifs_generaux','prerequis','reference_bo','contenus_bo','capacites_attendues','competences','cadre_general','progression','recommandations'])assert.ok(k in sk.sequence,'sequence.'+k);
+ for(const k of ['numero','titre','type','duree','date','objectifs','prerequis','prerequis_tice','phases','objectifs_fin','travail_personnel','activite_titre','activite','trace_ecrite','difficultes','aides','competences','competences_justification','evaluation','bilan','introduction','moment_cours','entrainement','remarque_pedagogique'])assert.ok(k in sk.seances[0],'seances.'+k);
+ for(const k of ['duree','nom','contenu','commentaire','modalite','support','materiel'])assert.ok(k in sk.seances[0].phases[0],'phases.'+k);
+ assert.deepStrictEqual(c.errs,[]);await c.close()});
 
 (async()=>{await new Promise(r=>srv.listen(0,'127.0.0.1',r));BASE='http://localhost:'+srv.address().port;browser=await chromium.launch();
  let fail=0;const only=process.argv[2];for(const t of results){if(only&&!t.name.includes(only))continue;const t0=Date.now();try{await Promise.race([t.fn(),new Promise((_,j)=>setTimeout(()=>j(new Error('délai dépassé (90 s)')),90000))]);console.log('  ✓',t.name,'('+(Date.now()-t0)+' ms)')}catch(e){fail++;console.log('  ✗',t.name,'\n     ',String(e.message).split('\n').slice(0,6).join('\n      '))}}

@@ -112,6 +112,15 @@ Tout fonctionne dans le navigateur : les données restent sur votre appareil.
 - **Mode classe** : minuteur par phase en plein écran (tablette, VPI), affichage de la mise en œuvre, phase suivante, +1 min, signal sonore à l'échéance, écran maintenu allumé. Raccourcis : Espace (démarrer / pause), ← →, Échap.
 - **PWA** : installable et utilisable hors connexion (voir ci-dessous).
 
+## Nouveauté : import d'une séquence produite par une IA (NotebookLM / Gemini)
+
+- **Fichier ▸ 🤖 Importer une séquence depuis une IA (.json)…** : crée automatiquement une **nouvelle séquence** et toutes ses séances à partir d'un fichier JSON au format `createdocmath-ai-sequence` (version 1.0), sans copier-coller.
+- Une fenêtre d'**aperçu** (séances dépliables, durées, nombre de phases, informations à compléter, avertissements, champs non importés, doublon éventuel) précède toute importation ; rien n'est ajouté avant votre confirmation, rien n'est jamais écrasé.
+- L'import est « tout ou rien » (retour arrière si l'enregistrement échoue), annulable par **Ctrl + Z**, et vérifié après écriture dans IndexedDB.
+- Le contenu du fichier est traité comme du texte non fiable (aucun HTML ni script exécuté) ; rien n'est envoyé sur Internet.
+- Les fichiers JSON natifs et les anciennes sauvegardes `.json` restent acceptés par la même entrée (flux d'import habituel, inchangé).
+- Documentation complète, format, tableau de correspondance, exemple et **prompt NotebookLM prêt à copier** : [`docs/IMPORT-IA.md`](docs/IMPORT-IA.md).
+
 ## Correctifs 2.2.1 : iPhone / tactile
 
 - La barre de menus n'est plus un conteneur à défilement sur petit écran (Safari iOS peut rogner ou rendre non cliquables des menus positionnés dans un tel conteneur) : elle passe sur deux lignes et ses menus s'affichent sous elle. Word, PDF, annuler/rétablir, mode sombre et aide sont dans le menu *Fichier* sur téléphone.
@@ -186,6 +195,7 @@ Tout fonctionne dans le navigateur : les données restent sur votre appareil.
 | `manifest.json`, `sw.js`, `icon-192.png`, `icon-512.png` | PWA (installation, hors-ligne) |
 | `vendor/` | KaTeX 0.16.45, JSZip 3.10.1 et docx 9.6.1 (tous MIT) embarqués, avec leurs licences |
 | `tests/` | Tests Playwright (`node tests/run.js`) |
+| `docs/IMPORT-IA.md`, `docs/exemple-sequence-ia.json`, `docs/prompt-notebooklm.txt` | Import d'une séquence produite par une IA : format, exemple, prompt NotebookLM |
 | `MIGRATION.md` | Migration depuis l'ancien stockage, sauvegarde / restauration, publication |
 
 Tous les fichiers doivent rester **dans le même dossier**.
