@@ -119,7 +119,7 @@ body.dark #th>div{background:#17212b!important}body.dark ::placeholder{color:#7d
 #boot{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--ink)}#boot[hidden]{display:none}
 .mdl{position:fixed;inset:0;z-index:90;background:#000b;display:flex;align-items:center;justify-content:center;padding:12px}
 .mdb{background:#fff;color:#1f2a37;border-radius:8px;max-width:680px;width:100%;max-height:92vh;overflow:auto;padding:16px 18px;box-shadow:0 8px 30px #0008}
-.mdb h3{margin:0 0 8px;color:var(--nv)}.mda{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.aip p{white-space:pre-line}.aip .ai-w{color:#8a5a00}.aip ul,.aip ol{margin:4px 0 6px 18px;padding:0}.aip details{margin:4px 0;padding:0 8px}.aip summary{padding:6px 0;font-size:13px}.aip details[open]>summary{margin-bottom:4px}.mdb h3{margin:0 0 8px;color:var(--nv)}.mda{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
 .mdb .btn{padding:8px 14px;font-size:14px}.mdb .btn.pri{background:var(--acc);color:#fff;border-color:var(--acc)}.mdb .btn.dng{background:var(--warn);color:#fff;border-color:var(--warn)}
 .mdb table{border-collapse:collapse;width:100%;font-size:13px}.mdb td,.mdb th{border:1px solid var(--line);padding:3px 6px;text-align:left;vertical-align:top}
 .mdb input{margin-top:6px}.mdb :focus-visible,#side :focus-visible,#vt :focus-visible{outline:2px solid #4fb3c8;outline-offset:2px}
@@ -201,7 +201,7 @@ button,[role=button],[data-a],[data-menu],.cch,.cd,.ckit,.chv,#side a,.sq[data-q
 <header id="mbar" role="toolbar" aria-label="Menu principal">
  <button class="mb dsk ic" data-a="vside" title="Afficher / masquer la liste des fiches" aria-label="Afficher ou masquer la liste des fiches">☰</button>
  <div class="mm"><button class="mb" data-menu="f" aria-haspopup="true" aria-expanded="false">Fichier ▾</button><div class="mp" role="menu" hidden>
-  <button role="menuitem" data-a="imp">📂 Importer (sauvegarde .zip ou .json)…</button><button role="menuitem" data-a="exp">💾 Exporter une sauvegarde (.zip)</button>
+  <button role="menuitem" data-a="imp">📂 Importer (sauvegarde .zip ou .json)…</button><button role="menuitem" data-a="aiimp" title="Fichier .json produit par NotebookLM / Gemini : aperçu puis création d’une nouvelle séquence">🤖 Importer une séquence depuis une IA (.json)…</button><button role="menuitem" data-a="exp">💾 Exporter une sauvegarde (.zip)</button>
   <hr><button role="menuitem" data-a="exps" title="Une seule séance, à partager avec un collègue">📤 Partager cette séance (.json)</button><button role="menuitem" data-a="expq" title="Fichier à partager avec un collègue">📤 Partager cette séquence (.json)</button>
   <hr><button role="menuitem" data-a="bank">📚 Banque d’exercices…</button><button role="menuitem" data-a="stor" title="État du stockage, sauvegardes, import, copies de sécurité">🛟 Stockage et sauvegardes…</button>
   <hr class="msm"><button class="msm" role="menuitem" data-a="docx">📝 Exporter en Word</button><button class="msm" role="menuitem" data-a="print">🖨️ Imprimer / enregistrer en PDF</button><button class="msm" role="menuitem" data-a="hundo">↶ Annuler</button><button class="msm" role="menuitem" data-a="hredo">↷ Rétablir</button><button class="msm" role="menuitem" data-a="dark">🌙 Mode sombre</button><button class="msm" role="menuitem" data-a="help">? Raccourcis et aide</button><hr class="msm">
@@ -231,7 +231,7 @@ button,[role=button],[data-a],[data-menu],.cch,.cd,.ckit,.chv,#side a,.sq[data-q
   <div id="list"></div>
   <details id="dbil"><summary>Compétences de la séquence</summary><div id="bil"></div></details>
   <details id="dchk"><summary id="chks">Contrôle de la fiche</summary><div id="chk"></div></details>
-  <input type="file" id="impf" accept=".json,.zip" hidden>
+  <input type="file" id="impf" accept=".json,.zip" hidden><input type="file" id="aif" accept=".json,application/json" hidden>
   <div id="gauge"></div><div id="st" role="status" aria-live="polite"></div>
 </div>
 <div id="formw"><div id="kb"></div><div id="form"></div></div>
@@ -543,6 +543,154 @@ async function importFlow(d,o){const R=o.R||{errors:[],warnings:[]};
  await stFlush();let D=[];try{D=STORE==='idb'?await stVerify():[]}catch(e){D=[errMsg(e)]}
  await info('Rapport d’import',rep+(W.length?'<p>'+W.length+' avertissement(s).</p>':'')+(STORE==='idb'?(D.length?'<p style="color:#b3261e">⚠ Vérification en base : '+esc(D[0])+'</p>':'<p>✓ Vérification : les données enregistrées correspondent au contenu importé.</p>'):''));return true}
 
+/* ---------- import d’une séquence produite par une IA (NotebookLM / Gemini) : format « createdocmath-ai-sequence » ----------
+   Adaptateur pur (aiConvert : aucune écriture dans db), aperçu, puis ajout atomique d’une NOUVELLE séquence.
+   Le JSON s’adapte à l’application (champs existants), jamais l’inverse. Toutes les valeurs sont traitées comme du texte non fiable. */
+const AI_FORMAT='createdocmath-ai-sequence',AI_MAX={bytes:5e6,seances:60,phases:30,text:20000,list:200};
+const AI_KEYS={
+ q:['titre','niveau','classe','domaine','theme','problematique','duree_previsionnelle','objectifs_generaux','prerequis','reference_bo','contenus_bo','capacites_attendues','competences','cadre_general','progression','recommandations'],
+ s:['numero','titre','type','duree','date','objectifs','prerequis','prerequis_tice','phases','objectifs_fin','travail_personnel','activite_titre','activite','trace_ecrite','difficultes','aides','competences','competences_justification','evaluation','bilan','introduction','moment_cours','entrainement','remarque_pedagogique'],
+ p:['duree','nom','contenu','commentaire','modalite','modalites','support','materiel']};
+const aiPlain=v=>v&&typeof v==='object'&&!Array.isArray(v);
+/* Réparation prudente des barres obliques inverses non doublées dans le JSON (\frac → saut de page + « rac », \times → tabulation + « imes »…) */
+function aiFix(s,R){let n=0;const c=()=>{n++;return};
+ const r=s.replace(/\f(?=[a-zA-Z])/g,()=>{c();return'\\f'}).replace(/\x08(?=[a-zA-Z])/g,()=>{c();return'\\b'})
+  .replace(/\t(?=(?:imes|heta|ext|an|au|riangle|op|o|frac)(?![a-zA-Z]))/g,()=>{c();return'\\t'}).replace(/\r(?=(?:ightarrow|ight|ho|m|angle)(?![a-zA-Z]))/g,()=>{c();return'\\r'});
+ if(n&&R)R.fix+=n;return r}
+function aiTxt(v,R,where,bul){if(v==null)return'';
+ if(Array.isArray(v)){const L=v.slice(0,AI_MAX.list).map(x=>typeof x==='string'||typeof x==='number'?String(x).trim():'').filter(Boolean);
+  if(L.length<v.length)R.W.push(where+' : des éléments vides ou non textuels ont été ignorés');
+  v=L.length>1||(bul&&L.length)?L.map(x=>'- '+aiFix(x,R).replace(/^[-•]\s+/,'')).join('\n'):(L[0]?aiFix(L[0],R):'')}
+ else if(typeof v==='number'||typeof v==='boolean')v=String(v);
+ else if(typeof v!=='string'){R.W.push(where+' : valeur ignorée (du texte était attendu)');return''}
+ else v=aiFix(v,R);
+ v=v.replace(/\r\n?/g,'\n').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u2028\u2029]/g,'').replace(/\n{4,}/g,'\n\n\n').trim();
+ if(v.length>AI_MAX.text){v=v.slice(0,AI_MAX.text);R.W.push(where+' : texte tronqué à '+AI_MAX.text+' caractères')}return v}
+function aiNum(v){if(v===''||v==null||typeof v==='boolean')return null;const n=typeof v==='number'?v:parseFloat(String(v).replace(',','.'));return Number.isFinite(n)?n:NaN}
+function aiMode(v){const x=norm(String(v||'')).replace(/[^a-z ]/g,' ').trim();if(!x)return null;
+ if(/individuel|binome|groupe|autonom|actif|eleve|pair|equipe|recherche|atelier|petits/.test(x))return'a';if(/collectif|plenier|magistral|classe|enseignant|cours|oral/.test(x))return'c';return undefined}
+/* Convertit le JSON IA en {q,ss,R}. R = {E:erreurs bloquantes, W:avertissements, I:champs non importés, M:regroupements, fix} */
+function aiConvert(d){const R={E:[],W:[],I:[],M:[],fix:0},out={q:null,ss:[],R};
+ if(!aiPlain(d)||d.format!==AI_FORMAT){R.E.push('format inconnu : « '+AI_FORMAT+' » attendu');return out}
+ const vs=d.version==null?'1.0':String(d.version),mj=parseInt(vs,10);
+ if(d.version==null)R.W.push('version absente : version 1.0 supposée');
+ else if(mj!==1)R.E.push('version « '+vs+' » non prise en charge (version 1.x attendue)');
+ else if(!/^1(\.0+)?$/.test(vs))R.W.push('version « '+vs+' » plus récente que la 1.0 : les champs inconnus seront ignorés');
+ const sq=d.sequence;if(!aiPlain(sq))R.E.push('la rubrique « sequence » est absente');
+ if(!Array.isArray(d.seances)||!d.seances.length)R.E.push('aucune séance dans le fichier (rubrique « seances »)');
+ else if(d.seances.length>AI_MAX.seances)R.E.push('trop de séances ('+d.seances.length+') : '+AI_MAX.seances+' au maximum');
+ Object.keys(d).forEach(k=>{if(!['format','version','sequence','seances'].includes(k))R.I.push('Champ inconnu « '+k+' » (ignoré)')});
+ if(R.E.length)return out;
+ const T=(v,w,b)=>aiTxt(v,R,w,b),q={id:uid(),nom:'',niveau:'',classe:'',boRef:'',bo:'',capacites:'',cadre:'',reco:''};
+ q.nom=T(sq.titre,'Titre de la séquence').replace(/\n+/g,' ').slice(0,200);
+ if(!q.nom){R.E.push('la séquence n’a pas de titre');return out}
+ q.niveau=T(sq.niveau,'Niveau').replace(/\n+/g,' ').slice(0,40);q.classe=T(sq.classe,'Classe').replace(/\n+/g,' ').slice(0,40);
+ if(!q.niveau)R.W.push('niveau de la séquence non renseigné');
+ q.boRef=T(sq.reference_bo,'Référence du B.O.').replace(/\n+/g,' ').slice(0,300);
+ q.bo=T(sq.contenus_bo,'Contenus du B.O.',true);q.capacites=T(sq.capacites_attendues,'Capacités attendues',true);q.reco=T(sq.recommandations,'Recommandations');
+ /* informations de séquence sans champ propre : regroupées dans « Cadre général et progression » (aucun champ ajouté) */
+ const P=[],add=(h,t)=>{if(t)P.push(h?'## '+h+'\n'+t:t)},cg=T(sq.cadre_general,'Cadre général'),dom=T(sq.domaine,'Domaine'),the=T(sq.theme,'Thème'),pb=T(sq.problematique,'Problématique'),og=T(sq.objectifs_generaux,'Objectifs généraux',true),pr=T(sq.prerequis,'Pré-requis de la séquence',true),pg=T(sq.progression,'Progression');
+ add('',cg);
+ if(dom||the){add('Domaine et thème',[dom&&'Domaine : '+dom,the&&'Thème : '+the].filter(Boolean).map(x=>'- '+x).join('\n'));R.M.push('domaine / thème')}
+ if(pb){add('Problématique',pb);R.M.push('problématique')}
+ if(og){add('Objectifs généraux de la séquence',og);R.M.push('objectifs généraux')}
+ if(pr){add('Pré-requis de la séquence',pr);R.M.push('pré-requis de la séquence')}
+ if(pg){add('Progression',pg);R.M.push('progression')}
+ const dp=aiNum(sq.duree_previsionnelle);
+ if(dp!==null){if(Number.isNaN(dp)||dp<=0||dp>6000)R.W.push('durée prévisionnelle de la séquence invalide : ignorée');else{add('Durée prévisionnelle',Math.round(dp)+' min');R.M.push('durée prévisionnelle')}}
+ q.cadre=P.join('\n\n');
+ const ck=T(sq.competences,'Compétences de la séquence');if(ck)R.I.push('Compétences de la séquence : non importées telles quelles (le bilan des compétences est calculé à partir des séances)');
+ Object.keys(sq).forEach(k=>{if(!AI_KEYS.q.includes(k))R.I.push('Séquence : champ inconnu « '+k+' » (ignoré)')});
+ const raw=d.seances.map((x,i)=>[x,i]).filter(([x,i])=>{if(!aiPlain(x)){R.W.push('élément n°'+(i+1)+' de « seances » ignoré : objet attendu');return false}return true});
+ raw.forEach(([x,i])=>{const n=aiNum(x.numero);x.__n=Number.isFinite(n)&&n>0?n:1e9+i});
+ raw.sort((a,b)=>a[0].__n-b[0].__n||a[1]-b[1]);
+ const nm=new Map(COMP.map(c=>[norm(c),c])),lost=new Set();
+ raw.forEach(([x,i],k)=>{const no=k+1,W0=R.W.length,w=t=>R.W.push('Séance '+no+' : '+t);
+  const t=(v,l,b)=>aiTxt(v,R,'Séance '+no+' · '+l,b);
+  const s={id:uid(),seq:q.id,numero:no,nom:'',date:'',duree:55,objectifs:'',prereq:'',tice:'',phases:[],objFin:'',travail:'',choixProbleme:'',imgs:[],difficultes:'',supp:'',comp:[],compTexte:'',choixTravail:'',
+   type:'',statut:'',activiteTitre:'',activite:'',trace:'',aides:'',evalBilan:'',introS:'',coursS:'',entrS:'',remLabel:'',rem:''};
+  if(Number.isFinite(aiNum(x.numero))&&aiNum(x.numero)!==no)w('le numéro « '+x.numero+' » a été remplacé par '+no+' (numéros uniques et consécutifs)');
+  else if(x.numero==null||!Number.isFinite(aiNum(x.numero)))w('numéro absent ou invalide : numéroté '+no+' dans l’ordre du fichier');
+  s.nom=t(x.titre,'Titre').replace(/\n+/g,' ').slice(0,200);if(!s.nom){s.nom='Séance '+no;w('titre absent : « Séance '+no+' » utilisé')}
+  const ty=norm(t(x.type,'Type'));if(ty){if(/eval|controle|devoir surveille|\bds\b|test|bilan/.test(ty))s.type='eval';else if(!/apprentissage|decouverte|cours|entrainement|exercice|probleme/.test(ty))w('type « '+x.type+' » inconnu : « apprentissage » utilisé')}
+  const dt=t(x.date,'Date');if(dt){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(dt),D=m&&new Date(+m[1],+m[2]-1,+m[3]);if(m&&D.getFullYear()===+m[1]&&D.getMonth()===+m[2]-1&&D.getDate()===+m[3])s.date=dt;else w('date « '+dt.slice(0,20)+' » invalide (AAAA-MM-JJ attendu) : ignorée')}
+  s.objectifs=t(x.objectifs,'Objectifs');s.prereq=t(x.prerequis,'Pré-requis',true);s.tice=t(x.prerequis_tice,'Pré-requis TICE');
+  s.objFin=t(x.objectifs_fin,'Objectifs de fin de séance');s.travail=t(x.travail_personnel,'Travail personnel');
+  s.activiteTitre=t(x.activite_titre,'Titre de l’activité').replace(/\n+/g,' ').slice(0,200);s.activite=t(x.activite,'Activité');s.trace=t(x.trace_ecrite,'Trace écrite');
+  s.difficultes=t(x.difficultes,'Difficultés',true);s.aides=t(x.aides,'Aides',true);s.compTexte=t(x.competences_justification,'Justification des compétences');
+  s.introS=t(x.introduction,'Introduction');s.coursS=t(x.moment_cours,'Moment de cours');s.entrS=t(x.entrainement,'Entraînement');s.rem=t(x.remarque_pedagogique,'Remarque pédagogique');
+  const ev=t(x.evaluation,'Évaluation'),bi=t(x.bilan,'Bilan');s.evalBilan=ev&&bi?'**Évaluation :** '+ev+'\n\n**Bilan :** '+bi:ev||bi;
+  const cl=Array.isArray(x.competences)?x.competences:(x.competences==null||x.competences===''?[]:[x.competences]);
+  cl.forEach(c=>{const k=nm.get(norm(String(c==null?'':c)).replace(/\s+/g,' ').trim());if(k){if(!s.comp.includes(k))s.comp.push(k)}else if(String(c||'').trim()){w('compétence « '+String(c).slice(0,40)+' » inconnue : non importée');lost.add(String(c).slice(0,40))}});
+  s.comp=COMP.filter(c=>s.comp.includes(c));
+  /* phases */
+  let ph=x.phases;if(ph!=null&&!Array.isArray(ph)){w('« phases » doit être une liste : ignorée');ph=[]}ph=(ph||[]);
+  if(ph.length>AI_MAX.phases){w('trop de phases ('+ph.length+') : seules les '+AI_MAX.phases+' premières sont importées');ph=ph.slice(0,AI_MAX.phases)}
+  ph.forEach((p,j)=>{if(!aiPlain(p)){w('phase '+(j+1)+' ignorée (objet attendu)');return}
+   const pt=(v,l)=>aiTxt(v,R,'Séance '+no+' · phase '+(j+1)+' · '+l),h={duree:0,nom:pt(p.nom,'nom').replace(/\n+/g,' ').slice(0,200),contenu:pt(p.contenu,'contenu'),comment:pt(p.commentaire,'commentaire'),mode:'a',support:'',modalites:''};
+   if(!h.nom&&!h.contenu&&!h.comment){w('phase '+(j+1)+' vide : ignorée');return}
+   if(!h.nom){h.nom='Phase '+(s.phases.length+1);w('phase '+(j+1)+' sans nom : « '+h.nom+' » utilisé')}
+   const n=aiNum(p.duree);if(n===null)w('phase « '+h.nom+' » sans durée : 0 min (à compléter)');else if(Number.isNaN(n)||n<0||n>600)w('phase « '+h.nom+' » : durée invalide, mise à 0 min (à compléter)');else h.duree=Math.round(n);
+   const raw=p.modalite!=null?p.modalite:p.modalites,mo=aiMode(pt(raw,'modalité'));
+   if(mo===undefined){w('phase « '+h.nom+' » : modalité « '+String(raw).slice(0,30)+' » inconnue, « élèves actifs » utilisé')}else if(mo)h.mode=mo;
+   h.modalites=pt(p.modalites!=null?p.modalites:p.modalite,'modalités').replace(/\n+/g,' ').slice(0,200);if(h.modalites&&p.modalites==null)h.modalites=h.modalites.charAt(0).toUpperCase()+h.modalites.slice(1);
+   h.support=[pt(p.support,'support'),pt(p.materiel,'matériel')].filter(Boolean).join(' ; ').replace(/\n+/g,' ').slice(0,300);
+   Object.keys(p).forEach(k=>{if(!AI_KEYS.p.includes(k))R.I.push('Séance '+no+' · phase '+(j+1)+' : champ inconnu « '+k+' » (ignoré)')});
+   s.phases.push(h)});
+  const sum=s.phases.reduce((a,p)=>a+p.duree,0),dn=aiNum(x.duree);
+  if(dn===null){if(sum>0){s.duree=sum;w('durée absente : somme des phases utilisée ('+sum+' min)')}else w('durée absente : 55 min par défaut')}
+  else if(Number.isNaN(dn)||dn<=0||dn>600){s.duree=sum>0?sum:55;w('durée invalide : '+s.duree+' min utilisées')}else s.duree=Math.round(dn);
+  if(s.phases.length&&sum!==s.duree&&dn!==null&&!Number.isNaN(dn))w('les phases totalisent '+sum+' min pour '+s.duree+' min de séance');
+  Object.keys(x).forEach(k=>{if(k!=='__n'&&!AI_KEYS.s.includes(k))R.I.push('Séance '+no+' : champ inconnu « '+k+' » (ignoré)')});delete x.__n;
+  s.__miss=[['objectifs','objectifs'],['prereq','pré-requis'],['activite','activité'],['trace','trace écrite'],['difficultes','difficultés']].filter(([k])=>!s[k]).map(a=>a[1]);if(!s.phases.length)s.__miss.unshift('phases');if(!s.comp.length)s.__miss.push('compétences');
+  out.ss.push(s)});
+ if(!out.ss.length){R.E.push('aucune séance exploitable dans le fichier');return out}
+ if(R.fix)R.W.push(R.fix+' formule(s) corrigée(s) : barre oblique inverse non doublée dans le JSON (vérifiez les formules)');
+ out.q=q;return out}
+/* données d’aperçu / durée totale ; les champs techniques __miss sont retirés avant l’enregistrement */
+const aiClean=s=>{const c={...s};delete c.__miss;return c};
+function aiPreviewHTML(r,dup){const q=r.q,R=r.R,ss=r.ss,tot=ss.reduce((a,s)=>a+(+s.duree||0),0),ul=(a,c)=>a.length?'<ul class="'+c+'">'+a.slice(0,12).map(x=>'<li>'+esc(x)+'</li>').join('')+(a.length>12?'<li>… et '+(a.length-12)+' autre(s)</li>':'')+'</ul>':'',
+ ex=(t,n)=>{t=(t||'').trim();return t.length>n?esc(t.slice(0,n))+'…':esc(t)};
+ let h='<div class="aip"><p><b>'+esc(q.nom)+'</b>'+(q.niveau?' · '+esc(q.niveau):'')+(q.classe?' · classe '+esc(q.classe):'')+'</p>'
+  +'<p><b>'+ss.length+'</b> séance(s) · <b>'+tot+'</b> min au total · '+ss.reduce((a,s)=>a+s.phases.length,0)+' phase(s)</p>';
+ if(dup)h+='<p class="ai-w">⚠ Une séquence « '+esc(q.nom)+' »'+(q.niveau?' ('+esc(q.niveau)+')':'')+' existe déjà. L’import créera une <b>nouvelle</b> séquence, sans toucher à l’existante.</p>';
+ if(R.M.length)h+='<p><small>Regroupés dans « Cadre général et progression » : '+esc(R.M.join(', '))+'.</small></p>';
+ if(R.W.length)h+='<p class="ai-w"><b>Avertissements ('+R.W.length+')</b></p>'+ul(R.W,'ai-w');
+ if(R.I.length)h+='<p><b>Non importé ('+R.I.length+')</b></p>'+ul(R.I,'');
+ h+=ss.map(s=>{const t=s.phases.reduce((a,p)=>a+p.duree,0);
+  return '<details><summary>S'+s.numero+' – '+esc(s.nom)+' <small>('+s.duree+' min · '+s.phases.length+' phase(s)'+(s.type==='eval'?' · évaluation':'')+')</small>'+(s.__miss.length?' <small class="ai-w">à compléter : '+esc(s.__miss.join(', '))+'</small>':'')+'</summary>'
+   +(s.objectifs?'<p><b>Objectifs :</b> '+ex(s.objectifs,300)+'</p>':'')+(s.prereq?'<p><b>Pré-requis :</b> '+ex(s.prereq,200)+'</p>':'')
+   +(s.phases.length?'<ol>'+s.phases.map(p=>'<li>'+p.duree+' min · '+esc(p.nom)+' <small>('+(p.mode==='c'?'collectif':'élèves actifs')+')</small></li>').join('')+'</ol>':'')
+   +(s.activite?'<p><b>Activité :</b> '+ex(s.activite,240)+'</p>':'')+(s.trace?'<p><b>Trace écrite :</b> '+ex(s.trace,240)+'</p>':'')+(s.difficultes?'<p><b>Difficultés :</b> '+ex(s.difficultes,200)+'</p>':'')
+   +(s.comp.length?'<p><b>Compétences :</b> '+esc(s.comp.join(', '))+'</p>':'')+'</details>'}).join('');
+ return h+'</div>'}
+/* ajout atomique : tout ou rien (retour arrière si l’enregistrement échoue) */
+async function aiCommit(r){const q=r.q,ss=r.ss.map(aiClean),cur0=db.cur,bv0=bv;
+ db.seqs.push(q);ss.forEach(s=>db.seances.push(s));db.cur=ss[0].id;bv='';OQ.set(q.id,true);
+ try{show();await stFlush();if(sv.err||sv.stale)throw sv.err||new Error('enregistrement refusé (modification dans un autre onglet)')}
+ catch(e){db.seqs=db.seqs.filter(x=>x.id!==q.id);db.seances=db.seances.filter(x=>x.seq!==q.id);db.cur=cur0;if(!S())db.cur=(db.seances[0]||{}).id||null;bv=bv0;sv.err=null;sv.stale=false;
+  try{if(!db.seqs.length)addSeq();show();await stFlush()}catch(x){}return{ok:false,err:e}}
+ let D=[];try{D=STORE==='idb'?await stVerify():[]}catch(e){D=[errMsg(e)]}return{ok:true,D}}
+function aiParse(txt,R){let t=String(txt||'').replace(/^\uFEFF/,'').trim();const f=/^```[a-zA-Z]*\s*\n([\s\S]*?)\n?```$/.exec(t);if(f){t=f[1].trim();R&&R.push('le fichier était entouré d’un bloc de code Markdown : retiré')}
+ try{return JSON.parse(t)}catch(e){throw new Error('Ce fichier n’est pas un JSON valide ('+String(e.message).slice(0,90)+'). Il manque peut-être une virgule, une accolade ou un guillemet ; dans les formules, chaque barre oblique inverse doit être doublée (\\\\frac). Demandez à l’IA de corriger et de régénérer le fichier.')}}
+async function aiImportFile(f){
+ try{if(!f)return;
+  if(!/\.json$/i.test(f.name)&&!/json/.test(f.type||''))throw new Error('Choisissez un fichier « .json ». Pour une sauvegarde « .zip », utilisez Fichier ▸ Importer.');
+  if(f.size>AI_MAX.bytes)throw new Error('Fichier trop volumineux ('+fmtB(f.size)+') : '+fmtB(AI_MAX.bytes)+' au maximum.');
+  const note=[],d=aiParse(await f.text(),note);
+  if(aiPlain(d)&&d.format!==AI_FORMAT&&Array.isArray(d.seqs)&&Array.isArray(d.seances)){const v=validateDb(d);if(v.E.length)throw new Error('Fichier invalide : '+v.E.slice(0,3).join(' · '));normalizeDb(d);return await importFlow(d,{name:f.name,R:{errors:[],warnings:v.W}})}
+  if(!aiPlain(d)||d.format!==AI_FORMAT)throw new Error('Format non reconnu : ce fichier n’est ni un export de cette application ni un fichier « '+AI_FORMAT+' ». Vérifiez que l’IA a bien suivi le prompt fourni.');
+  const r=aiConvert(d);note.forEach(x=>r.R.W.push(x));
+  if(r.R.E.length){await info('Import impossible','<p>Le fichier ne peut pas être importé :</p><ul>'+r.R.E.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul><p>Vos fiches actuelles n’ont pas été modifiées.</p>');return false}
+  const dup=db.seqs.some(x=>norm((x.nom||'').trim())===norm(r.q.nom)&&norm((x.niveau||'').trim())===norm(r.q.niveau));
+  const c=await modal('Importer une séquence depuis une IA',aiPreviewHTML(r,dup),[['go','Importer comme nouvelle séquence','pri'],['cancel','Annuler']],{esc:'cancel'});
+  if(c!=='go')return false;
+  const res=await aiCommit(r);
+  if(!res.ok){await info('Import annulé','<p>L’enregistrement a échoué ('+esc(errMsg(res.err))+'). <b>Rien n’a été ajouté</b> : vos fiches sont inchangées.</p>');return false}
+  await info('Séquence importée','<p>La séquence « <b>'+esc(r.q.nom)+'</b> » a été créée avec <b>'+r.ss.length+'</b> séance(s).</p>'+(r.R.W.length?'<p>'+r.R.W.length+' avertissement(s) : relisez les séances concernées.</p>':'')+(res.D.length?'<p style="color:#b3261e">⚠ Vérification en base : '+esc(res.D[0])+'</p>':STORE==='idb'?'<p>✓ Vérification : les données enregistrées correspondent au contenu importé.</p>':'')+'<p>Vous pouvez maintenant relire et modifier chaque séance dans l’éditeur habituel (↶ pour annuler l’import).</p>');
+  return true}
+ catch(x){await info('Import impossible','<p>'+esc(errMsg(x))+'</p><p>Vos fiches actuelles n’ont pas été modifiées.</p>');return false}}
+
 /* --- panneau « Stockage et sauvegardes », copies internes, suppression de l’ancien stockage --- */
 async function storPanel(){for(;;){let est=null,pers=null;try{est=navigator.storage&&navigator.storage.estimate&&await navigator.storage.estimate()}catch(e){}try{pers=navigator.storage&&navigator.storage.persisted&&await navigator.storage.persisted()}catch(e){}
  const bk=STORE==='idb'?await sAll('backups'):[],mg=sv.mig,raw=lsRaw();
@@ -754,6 +902,7 @@ $('impf').addEventListener('change',async e=>{const f=e.target.files[0];e.target
   if(d.seances.length===1&&d.seqs.length===1&&confirm('Ajouter la séance « '+d.seances[0].nom+' » à la séquence en cours « '+Q().nom+' » ?\nOK = l’ajouter à cette séquence\nAnnuler = autres options')){const c=JSON.parse(JSON.stringify(d.seances[0]));c.id=uid();c.seq=S().seq;c.numero=Math.max(0,...db.seances.filter(x=>x.seq===c.seq).map(x=>+x.numero||0))+1;db.seances.push(c);db.cur=c.id;bv='';show()}
   else await importFlow(d,{name:f.name,R:{errors:[],warnings:v.W}})}
  catch(x){await info('Import impossible','<p>'+esc(errMsg(x))+'</p><p>Vos fiches actuelles n’ont pas été modifiées.</p>')}});
+$('aif').addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';if(f)aiImportFile(f)});
 const imgOf=dt=>[...(dt.files||[])].find(f=>f.type.startsWith('image/'));
 $('formw').addEventListener('dragover',e=>{if([...e.dataTransfer.types].includes('Files'))e.preventDefault()});
 $('formw').addEventListener('drop',e=>{const f=imgOf(e.dataTransfer);if(f){e.preventDefault();addImg(f)}});
@@ -884,6 +1033,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b
  else if(a==='fixdur'){s.duree=s.phases.reduce((t,p)=>t+(+p.duree||0),0);document.querySelector('[data-s="duree"]').value=s.duree;changed()}
  else if(a==='exp')exportBackup();
  else if(a==='imp')$('impf').click();
+ else if(a==='aiimp')$('aif').click();
  else if(a==='docx')exportDocx();
  else if(['seq','all','eleve','texte','annee','cov','comp'].includes(a)){bv=a;preview();if(smallScr())mvGo('prev')}
  else if(a==='vback'){bv='';preview();if(smallScr())mvGo('prev')}
