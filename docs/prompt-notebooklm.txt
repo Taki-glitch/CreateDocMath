@@ -1,0 +1,99 @@
+Tu es un enseignant de mathématiques expérimenté (collège / lycée, France). À partir des sources de ce carnet NotebookLM, produis une séquence pédagogique COMPLÈTE sous la forme d'UN SEUL fichier JSON au format « createdocmath-ai-sequence » version 1.0, destiné à être importé dans l'application CreateDocMaths.
+
+DEMANDE (à compléter avant d'envoyer) :
+- Niveau : …
+- Notion ou chapitre : …
+- Nombre de séances : … (dont … séance(s) d'évaluation) ; durée de chaque séance : … minutes
+- Classe (facultatif) : …
+- Consignes particulières (facultatif) : …
+
+SOURCES ET RIGUEUR
+1. Appuie-toi d'abord sur les sources du carnet (programmes officiels, manuels, documents fournis).
+2. N'invente AUCUNE référence officielle : n'écris une référence de programme, un contenu ou une capacité attendue dans « reference_bo », « contenus_bo » ou « capacites_attendues » que s'ils figurent dans les sources. Sinon laisse la chaîne vide ("") ou la liste vide ([]).
+3. Distingue clairement trois catégories d'information :
+   a) ce qui est issu des sources : reprends-le fidèlement ;
+   b) tes propositions pédagogiques (activités, ordre des notions, durées) : tu peux les proposer librement ;
+   c) ce qui doit être vérifié par l'enseignant (point incertain, source manquante) : commence le texte concerné par « À VÉRIFIER : ».
+4. N'invente jamais une information pour remplir un champ : en cas de doute, laisse le champ vide.
+
+CONTENU ATTENDU
+- Une progression cohérente, qui respecte le programme du niveau demandé ; une problématique de séquence.
+- Pour CHAQUE séance : objectifs, pré-requis, phases minutées (la somme des durées des phases doit être égale à la durée de la séance), activités mathématiques pertinentes, consignes rédigées pour les élèves, corrections et éléments de réponse (dans « activite », après chaque question, sur une ligne commençant par « → Correction : »), trace écrite, difficultés et erreurs classiques anticipées, aides et différenciation, compétences travaillées (parmi : Chercher, Modéliser, Représenter, Calculer, Raisonner, Communiquer) avec une justification, critères de réussite (dans « evaluation »).
+- Pour chaque phase : durée en minutes, nom, description de l'activité des élèves (« contenu »), commentaire pour l'enseignant, modalité de travail.
+
+RÈGLES DU FICHIER (strictes)
+- Réponds par UN SEUL objet JSON syntaxiquement valide : guillemets doubles, aucune virgule finale, aucun commentaire.
+- AUCUN texte avant ou après le JSON, AUCUNE balise Markdown, AUCUN bloc de code (pas de ```).
+- Si tu peux créer un fichier téléchargeable, crée un fichier « sequence.json » contenant uniquement ce JSON ; sinon affiche uniquement le JSON brut.
+- Retour à la ligne dans une chaîne : \n. Guillemet dans une chaîne : \".
+- Formules mathématiques : LaTeX entre dollars, et CHAQUE barre oblique inverse doit être DOUBLÉE dans le JSON. Exemple : "$\\frac{1}{2}+\\sqrt{x^2}$". Formule centrée : "$$\\frac{a}{b}$$".
+- Mise en forme autorisée dans les textes : **gras**, __souligné__, une puce par ligne commençant par "- ", un sous-titre sur une ligne commençant par "## ". Aucun HTML.
+- « type » : "apprentissage" ou "evaluation". « modalite » : "individuel" ou "collectif" (travail en binôme ou en groupe : "individuel").
+- « date » : laisse "" sauf si l'enseignant en fournit (format AAAA-MM-JJ).
+- Les durées sont des nombres entiers de minutes. Les numéros de séance commencent à 1.
+- N'ajoute aucun champ autre que ceux du format. Un champ inconnu reste "" (texte) ou [] (liste).
+
+=== FORMAT JSON ===
+{
+  "format": "createdocmath-ai-sequence",
+  "version": "1.0",
+  "sequence": {
+    "titre": "« titre de la séquence »",
+    "niveau": "« 6e, 5e, 4e, 3e, 2de, 1re… »",
+    "classe": "",
+    "domaine": "« domaine du programme »",
+    "theme": "« thème »",
+    "problematique": "« question qui guide la séquence »",
+    "duree_previsionnelle": 0,
+    "objectifs_generaux": ["« objectif »"],
+    "prerequis": ["« pré-requis »"],
+    "reference_bo": "« référence exacte issue des sources, sinon vide »",
+    "contenus_bo": ["« contenu issu des sources »"],
+    "capacites_attendues": ["« capacité issue des sources »"],
+    "competences": ["Chercher", "Modéliser", "Représenter", "Calculer", "Raisonner", "Communiquer"],
+    "cadre_general": "« organisation générale de la séquence »",
+    "progression": "« enchaînement des séances »",
+    "recommandations": "« conseils, différenciation »"
+  },
+  "seances": [
+    {
+      "numero": 1,
+      "titre": "« titre de la séance »",
+      "type": "apprentissage",
+      "duree": 55,
+      "date": "",
+      "objectifs": "« objectifs de la séance »",
+      "prerequis": "« pré-requis de la séance »",
+      "prerequis_tice": "« calculatrice, tableur, GeoGebra… »",
+      "phases": [
+        {
+          "duree": 10,
+          "nom": "« nom de la phase »",
+          "contenu": "« activité des élèves »",
+          "commentaire": "« commentaire pour l'enseignant »",
+          "modalite": "individuel",
+          "support": "« diaporama, fiche… »",
+          "materiel": "« matériel »"
+        }
+      ],
+      "objectifs_fin": "« ce que les élèves doivent savoir faire à la fin »",
+      "travail_personnel": "« travail donné à la maison »",
+      "activite_titre": "« titre de l'activité »",
+      "activite": "« énoncé, questions, puis → Correction : … »",
+      "trace_ecrite": "« cours / bilan à retenir »",
+      "difficultes": "« erreurs classiques anticipées »",
+      "aides": "« aides et différenciation »",
+      "competences": ["Chercher", "Calculer"],
+      "competences_justification": "« pourquoi ces compétences »",
+      "evaluation": "« critères de réussite »",
+      "bilan": "",
+      "introduction": "« résumé de l'introduction »",
+      "moment_cours": "« résumé du moment de cours »",
+      "entrainement": "« résumé de l'entraînement »",
+      "remarque_pedagogique": "« point de vigilance »"
+    }
+  ]
+}
+=== FIN DU FORMAT ===
+
+Produis maintenant le JSON complet de la séquence demandée, avec TOUTES les séances, en respectant exactement ce format.

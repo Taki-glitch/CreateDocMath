@@ -1,0 +1,231 @@
+{
+  "format": "createdocmath-ai-sequence",
+  "version": "1.0",
+  "sequence": {
+    "titre": "Additionner et soustraire des fractions",
+    "niveau": "5e",
+    "classe": "5A",
+    "domaine": "Nombres et calculs",
+    "theme": "Fractions",
+    "problematique": "Comment additionner deux quantités exprimées avec des fractions de dénominateurs différents ?",
+    "duree_previsionnelle": 220,
+    "objectifs_generaux": [
+      "Comprendre qu’une fraction est un nombre et la placer sur une droite graduée",
+      "Reconnaître et produire des fractions égales",
+      "Additionner et soustraire des fractions dont les dénominateurs sont multiples l’un de l’autre"
+    ],
+    "prerequis": [
+      "Connaître les tables de multiplication",
+      "Savoir lire une fraction simple (demi, tiers, quart)"
+    ],
+    "reference_bo": "Programme de mathématiques du cycle 4 (annexe 2)",
+    "contenus_bo": [
+      "Additionner et soustraire des fractions de dénominateurs quelconques",
+      "Comparer des fractions"
+    ],
+    "capacites_attendues": [
+      "Il additionne ou soustrait des fractions dont les dénominateurs sont égaux ou multiples l’un de l’autre",
+      "Il reconnaît et produit des fractions égales"
+    ],
+    "competences": [
+      "Chercher",
+      "Représenter",
+      "Calculer",
+      "Raisonner",
+      "Communiquer"
+    ],
+    "cadre_general": "Séquence de quatre séances : une activité de découverte, un cours, un temps d’entraînement et une évaluation.",
+    "progression": "S1 sens de la fraction et fractions égales ; S2 addition à dénominateur multiple ; S3 entraînement et problèmes ; S4 évaluation.",
+    "recommandations": "Prévoir des bandes de papier à plier pour les élèves en difficulté."
+  },
+  "seances": [
+    {
+      "numero": 1,
+      "titre": "Partager une unité : fractions égales",
+      "type": "apprentissage",
+      "duree": 55,
+      "date": "2026-11-09",
+      "objectifs": "Reconnaître que $\\frac{1}{2}=\\frac{2}{4}$ et produire des fractions égales.",
+      "prerequis": [
+        "Lire une fraction simple",
+        "Tables de multiplication"
+      ],
+      "prerequis_tice": "Aucun.",
+      "phases": [
+        {
+          "duree": 10,
+          "nom": "Questions flash",
+          "contenu": "Calculer mentalement $3\\times 4$, $12\\div 3$, la moitié de 18.",
+          "commentaire": "Rituel de mise au travail.",
+          "modalite": "individuel",
+          "support": "Diaporama",
+          "materiel": "ardoises"
+        },
+        {
+          "duree": 20,
+          "nom": "Recherche : plier des bandes",
+          "contenu": "Plier une bande en 2, en 4 puis en 8 et colorier la même longueur.",
+          "commentaire": "Observer les procédures, repérer les erreurs de partage.",
+          "modalite": "binome"
+        },
+        {
+          "duree": 15,
+          "nom": "Mise en commun",
+          "contenu": "Faire verbaliser : « $\\frac{1}{2}$ et $\\frac{4}{8}$ représentent la même part ».",
+          "commentaire": "Institutionnaliser le vocabulaire.",
+          "modalite": "collectif"
+        },
+        {
+          "duree": 10,
+          "nom": "Trace écrite",
+          "contenu": "Copier le cours et traiter deux exemples.",
+          "commentaire": "",
+          "modalite": "individuel"
+        }
+      ],
+      "objectifs_fin": "Chaque élève sait écrire deux fractions égales à $\\frac{3}{4}$.",
+      "travail_personnel": "Exercices 5 et 6 page 42 pour jeudi.",
+      "activite_titre": "Activité : les bandes de papier",
+      "activite": "Voici trois bandes de même longueur.\n\n1. Plier la première en 2 parts égales : quelle fraction représente une part ?\n2. Plier la deuxième en 4 parts égales.\n3. Que remarques-tu pour $\\frac{1}{2}$ et $\\frac{2}{4}$ ?",
+      "trace_ecrite": "## Fractions égales\nPour tout nombre $k$ non nul : $$\\frac{a}{b}=\\frac{a\\times k}{b\\times k}$$\nExemple : $\\frac{1}{2}=\\frac{3}{6}$.",
+      "difficultes": [
+        "Confusion entre numérateur et dénominateur",
+        "Partages non égaux lors du pliage"
+      ],
+      "aides": [
+        "Bandes déjà graduées",
+        "Fiche d’aide avec les tables"
+      ],
+      "competences": [
+        "Chercher",
+        "Représenter",
+        "Communiquer"
+      ],
+      "competences_justification": "Les élèves manipulent, représentent puis expliquent leur démarche.",
+      "evaluation": "Critère : produit au moins deux fractions égales correctes.",
+      "bilan": "À compléter après la séance.",
+      "introduction": "Pliage de bandes de papier.",
+      "moment_cours": "Définition des fractions égales (10 min).",
+      "entrainement": "Deux exemples guidés.",
+      "remarque_pedagogique": "Ne pas écrire de règle avant la manipulation."
+    },
+    {
+      "numero": 2,
+      "titre": "Additionner avec un dénominateur multiple",
+      "type": "apprentissage",
+      "duree": 55,
+      "objectifs": "Additionner $\\frac{1}{2}+\\frac{1}{4}$ en se ramenant au même dénominateur.",
+      "prerequis": "Fractions égales (séance 1).",
+      "phases": [
+        {
+          "duree": 8,
+          "nom": "Rituel",
+          "contenu": "Écrire de tête des fractions égales.",
+          "commentaire": "",
+          "modalite": "individuel"
+        },
+        {
+          "duree": 17,
+          "nom": "Problème : la pizza",
+          "contenu": "Léa mange $\\frac{1}{2}$ d’une pizza et Tom $\\frac{1}{4}$. Quelle part ont-ils mangée à eux deux ?",
+          "commentaire": "Laisser émerger l’erreur $\\frac{2}{6}$.",
+          "modalite": "individuel"
+        },
+        {
+          "duree": 15,
+          "nom": "Débat et institutionnalisation",
+          "contenu": "Confronter les réponses puis conclure.",
+          "commentaire": "",
+          "modalite": "collectif"
+        },
+        {
+          "duree": 15,
+          "nom": "Entraînement",
+          "contenu": "Calculer $\\frac{3}{4}+\\frac{1}{8}$ et $\\frac{5}{6}-\\frac{1}{3}$.",
+          "commentaire": "",
+          "modalite": "individuel"
+        }
+      ],
+      "activite": "Léa mange $\\frac{1}{2}$ d’une pizza et Tom $\\frac{1}{4}$ de la même pizza. Quelle fraction ont-ils mangée ?",
+      "trace_ecrite": "Pour additionner deux fractions, on les écrit avec le même dénominateur puis on additionne les numérateurs.\n$$\\frac{1}{2}+\\frac{1}{4}=\\frac{2}{4}+\\frac{1}{4}=\\frac{3}{4}$$",
+      "difficultes": "Addition des numérateurs et des dénominateurs : $\\frac{1}{2}+\\frac{1}{4}=\\frac{2}{6}$.",
+      "competences": [
+        "Modéliser",
+        "Calculer",
+        "Raisonner"
+      ],
+      "travail_personnel": "Exercice 12 page 45."
+    },
+    {
+      "numero": 3,
+      "titre": "Entraînement et problèmes",
+      "type": "apprentissage",
+      "duree": 55,
+      "objectifs": "Consolider l’addition et la soustraction de fractions.",
+      "phases": [
+        {
+          "duree": 10,
+          "nom": "Questions flash",
+          "contenu": "Série de calculs de fractions.",
+          "commentaire": "",
+          "modalite": "individuel"
+        },
+        {
+          "duree": 35,
+          "nom": "Ateliers différenciés",
+          "contenu": "Trois niveaux d’exercices en autonomie.",
+          "commentaire": "Circuler, aider les groupes de besoin.",
+          "modalite": "groupe"
+        },
+        {
+          "duree": 10,
+          "nom": "Correction",
+          "contenu": "Correction des exercices clés.",
+          "commentaire": "",
+          "modalite": "collectif"
+        }
+      ],
+      "entrainement": "Ateliers à trois niveaux.",
+      "competences": [
+        "Calculer",
+        "Raisonner"
+      ]
+    },
+    {
+      "numero": 4,
+      "titre": "Évaluation : fractions",
+      "type": "evaluation",
+      "duree": 55,
+      "objectifs": "Évaluer les capacités de la séquence.",
+      "phases": [
+        {
+          "duree": 5,
+          "nom": "Consignes",
+          "contenu": "Distribution et rappel du barème.",
+          "commentaire": "",
+          "modalite": "collectif"
+        },
+        {
+          "duree": 45,
+          "nom": "Évaluation écrite",
+          "contenu": "Quatre exercices individuels.",
+          "commentaire": "",
+          "modalite": "individuel"
+        },
+        {
+          "duree": 5,
+          "nom": "Ramassage",
+          "contenu": "",
+          "commentaire": "",
+          "modalite": "collectif"
+        }
+      ],
+      "evaluation": "Barème sur 20 : 4 exercices de 5 points.",
+      "competences": [
+        "Calculer",
+        "Raisonner",
+        "Communiquer"
+      ]
+    }
+  ]
+}
