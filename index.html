@@ -216,6 +216,7 @@ button,[role=button],[data-a],[data-menu],.cch,.cd,.ckit,.chv,#side a,.sq[data-q
   <hr><button role="menuitem" class="dng" data-a="dels">🗑 Supprimer la séance…</button></div></div>
  <div class="mm"><button class="mb" data-menu="v" aria-haspopup="true" aria-expanded="false">Affichage ▾</button><div class="mp" role="menu" hidden>
   <button role="menuitem" data-a="vback">📄 Fiche de séance</button><button role="menuitem" data-a="seq">📋 Fiche séquence</button><button role="menuitem" data-a="all">📑 Cahier complet de la séquence</button><button role="menuitem" data-a="eleve">🎒 Fiche élève</button>
+  <hr><button role="menuitem" data-a="cahier">📚 Cahier modèle de l’élève…</button>
   <hr><button role="menuitem" data-a="texte">📓 Cahier de textes</button><button role="menuitem" data-a="annee">📅 Progression annuelle</button><button role="menuitem" data-a="cov">📊 Couverture du B.O.</button><button role="menuitem" data-a="comp">🎯 Suivi des compétences</button>
   <hr><button role="menuitem" data-a="cal">🗓 Calendrier…</button>
   <hr><label><input type="checkbox" id="short">Trame seule (sans analyse didactique)</label></div></div>
@@ -1601,5 +1602,6 @@ async function boot(){await load();build();show();boInit();dfInit();fsInit();$('
 boot();
 window.addEventListener('load',()=>{if(S())preview()});
 </script>
+<script src="cahier.js"></script>
 </body>
 </html>
