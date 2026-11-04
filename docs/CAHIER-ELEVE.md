@@ -53,11 +53,36 @@ IndexedDB n'est pas partagé : il faut un backend. Proposition **Supabase** (Pos
 5. Les six types de blocs, avec champs, couleur propre, saut de page, exercices multiples, compétences, corrigé ; aperçu A4 avec formules KaTeX, corrigés affichables ou non.
 6. Enregistrement automatique dans `cdm3cahiers` avec relecture de contrôle, erreurs signalées avec « réessayer », ↶ ↷ propres au cahier, export / import `.json`, impression / PDF de l'aperçu.
 
-## 6. Limites de la phase 1 (à traiter dans les phases suivantes)
+## 6. Phase 2 — éditeur pédagogique
 
-- **Les sauvegardes ZIP ne contiennent pas encore les cahiers** : utiliser **Exporter** (`.json`) dans le cahier. Intégration au ZIP prévue en phase 4.
-- Pas encore d'images dans les blocs (modèle prêt), ni de liaison avec les séquences (phase 3), ni d'export Word, de table des matières ou de pagination automatique (phase 4), ni de publication (phase 5).
-- Pas d'import de contenu de la banque d'exercices (phase 3).
-- Édition simultanée dans deux onglets : le dernier enregistrement l'emporte (pas de détection de conflit).
-- Chaque enregistrement réécrit le cahier modifié en entier (suffisant sans images ; à revoir avec les images).
-- Un glisser-déposer sur de très longues distances dépend de l'auto-défilement du navigateur : utiliser ↑ ↓.
+**Mise en forme** (barre d'outils au-dessus de l'éditeur, agit sur le champ texte actif ; Ctrl + B / Ctrl + U) :
+
+| Syntaxe dans un champ | Rendu |
+|---|---|
+| `**gras**`, `__souligné__`, `- puce`, `## sous-titre` | mise en forme légère de l'application |
+| `@def …` `@prop …` `@thm …` `@ex …` `@meth …` `@rem …` `@att …` | encadré coloré (Définition, Propriété, Théorème, Exemple, Méthode, Remarque, Attention), jusqu'à la ligne vide |
+| `\| a \| b \|` puis `\|---\|---\|` | tableau (première ligne = en-tête si la ligne de séparation suit) |
+| `1. …`, `a) …` | question numérotée, numéro en couleur ; une ligne de suite commençant par une minuscule est recollée |
+| `$…$`, `$$…$$` | formules KaTeX ; le clavier de formules de l'application est repris |
+
+Tout est échappé avant mise en forme : aucun HTML saisi n'est interprété.
+
+**Images** : ajout par bouton, **glisser-déposer** ou **collage** (Ctrl + V) dans un bloc ou dans un exercice. Réduction à 900 px (JPEG), taille 25 / 50 / 75 / 100 %, alignement centré ou à droite, légende, déplacement, suppression. Largeur en % et hauteur automatique : **jamais déformées**, y compris à l'impression. Formats PNG, JPEG, GIF, WebP (SVG refusé). Le collage hors d'un bloc n'ajoute rien, et jamais rien aux séances.
+
+**Corrigés** : réglages par bloc (affichage par défaut, accessible en ligne, inclus dans le PDF, inclus dans le Word), et trois versions de l'aperçu / impression :
+1. *Enseignant* : tous les corrigés ;
+2. *Élève avec corrigés* : selon les réglages de chaque bloc (« Voir le corrigé » déroulant à l'écran ; à l'impression, seulement les blocs cochés « PDF ») ;
+3. *Élève sans corrigés* : les corrigés **ne sont pas présents dans le HTML** (pas un simple masquage).
+
+**Nouveaux contenus** : type de bloc *Fiche de révision* (points clés, méthodes, exercices conseillés), champ *Questions intermédiaires* dans la tâche complexe, compétences et barème dans l'évaluation, images dans les exercices.
+
+**Modèle de données** : le schéma reste **v1** (changements uniquement additifs, normalisés à la lecture : `couleurs.revision`, `imgs[].id`, `items[].imgs`, `v.questions`). Les cahiers de la phase 1 se chargent sans migration ni copie de sécurité (testé). L'historique ↶ ↷ référence les images par clé pour ne pas dupliquer leur poids en mémoire.
+
+## 7. Limites (à traiter dans les phases suivantes)
+
+- **Les sauvegardes ZIP ne contiennent pas encore les cahiers** : utiliser **Exporter** (`.json`, images comprises) dans le cahier. Intégration au ZIP prévue en phase 4.
+- Pas de recadrage d'image dans le cahier, ni de table des matières, de pagination automatique, d'en-tête / pied de page configurables ni d'export Word (phase 4) ; pas de liaison avec les séquences ni de banque d'exercices (phase 3) ; pas de publication (phase 5).
+- Les réglages « Word » des corrigés sont enregistrés mais ne seront utilisés qu'avec l'export Word (phase 4).
+- Édition simultanée dans deux onglets : le dernier enregistrement l'emporte.
+- Chaque enregistrement réécrit le cahier modifié en entier, images comprises : à optimiser (stockage binaire séparé) si des cahiers très illustrés posent problème.
+- Le glisser-déposer sur de longues distances dépend de l'auto-défilement du navigateur : utiliser ↑ ↓.
