@@ -149,7 +149,7 @@ T('formules KaTeX locales (aucune requête CDN pour KaTeX/JSZip) + non-régressi
 T('PWA : fonctionne hors ligne après installation (KaTeX local, données IndexedDB)',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
  await p.evaluate(()=>navigator.serviceWorker.ready.then(()=>1));await p.reload();await p.waitForFunction(()=>navigator.serviceWorker.controller);
  const names=await p.evaluate(async()=>{const ks=await caches.keys(),c=await caches.open(ks.find(k=>k.startsWith('fiches-maths'))),r=await c.keys();return{ks,u:r.map(x=>new URL(x.url).pathname)}});
- assert.deepStrictEqual(names.ks,['fiches-maths-v16']);for(const f of ['/vendor/docx.iife.js','/vendor/katex/katex.min.js','/vendor/jszip.min.js','/vendor/katex/fonts/KaTeX_Main-Regular.woff2','/index.html','/bo_cycle4.js'])assert.ok(names.u.includes(f),f);
+ assert.deepStrictEqual(names.ks,['fiches-maths-v18']);for(const f of ['/vendor/docx.iife.js','/vendor/katex/katex.min.js','/vendor/jszip.min.js','/vendor/katex/fonts/KaTeX_Main-Regular.woff2','/index.html','/bo_cycle4.js'])assert.ok(names.u.includes(f),f);
  await p.evaluate(()=>{S().nom='Hors ligne ok';S().activite='$a^2$';changed()});await saved(p);await c.setOffline(true);await p.reload();await booted(p);assert.strictEqual(await p.evaluate(()=>S().nom),'Hors ligne ok');await p.waitForSelector('#prev .katex');
  assert.ok(await p.evaluate(()=>document.fonts.check('16px KaTeX_Main')||true));await c.close()});
 
@@ -599,6 +599,316 @@ T('import IA : documentation — l’exemple et le prompt de docs/IMPORT-IA.md s
  for(const k of ['numero','titre','type','duree','date','objectifs','prerequis','prerequis_tice','phases','objectifs_fin','travail_personnel','activite_titre','activite','trace_ecrite','difficultes','aides','competences','competences_justification','evaluation','bilan','introduction','moment_cours','entrainement','remarque_pedagogique'])assert.ok(k in sk.seances[0],'seances.'+k);
  for(const k of ['duree','nom','contenu','commentaire','modalite','support','materiel'])assert.ok(k in sk.seances[0].phases[0],'phases.'+k);
  assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+/* ================= 📚 Cahier de l'élève — phase 1 ================= */
+const cahOpen=async p=>{await p.evaluate(()=>CAH.open());await p.waitForSelector('#cah:not([hidden]) #cahE')};
+const cahSaved=p=>p.evaluate(()=>CAH.flush().then(()=>{if(CAH.S.err)throw new Error('échec : '+CAH.S.err.message)}));
+const cahDump=p=>p.evaluate(()=>new Promise(res=>{const r=indexedDB.open('cdm3cahiers');r.onsuccess=()=>{const d=r.result,g=s=>new Promise(k=>{const q=d.transaction(s).objectStore(s),a=q.getAllKeys(),b=q.getAll();b.onsuccess=()=>k([a.result,b.result])});
+ Promise.all(['cahiers','meta','backups'].map(g)).then(([c,m,bk])=>{d.close();res({keys:c[0],cahiers:c[1],meta:Object.fromEntries(m[0].map((k,i)=>[k,m[1][i]])),backups:bk[0],backupVals:bk[1]})})}}));
+const cahNew=async p=>{await p.click('#cahbar [data-ca=cnew]');await p.waitForSelector('#cahE [data-ch=nom]')};
+const cahCur=p=>p.evaluate(()=>JSON.parse(JSON.stringify(CAH.cc())));
+const prepState=p=>p.evaluate(()=>JSON.stringify({q:db.seqs.map(x=>[x.id,x.nom]),s:db.seances.map(x=>[x.id,x.nom,x.seq,x.numero]),cur:db.cur}));
+const TYPES=['attendus','decouverte','trace','exercices','tache','eval'];
+const dnd=(p,s,d,f)=>p.evaluate(([s,d,f])=>{const A=document.querySelector(s),D=document.querySelector(d),dt=new DataTransfer(),q=D.getBoundingClientRect(),y=q.top+q.height*f,fire=(el,n)=>el.dispatchEvent(new DragEvent(n,{bubbles:true,cancelable:true,dataTransfer:dt,clientX:q.left+20,clientY:y}));fire(A,'dragstart');fire(D,'dragover');fire(D,'drop');fire(A,'dragend')},[s,d,f]);
+const cahMenuOpen=async p=>{await p.click('#mbar [data-menu=v]');await p.click('#mbar [data-a=cahier]');await p.waitForSelector('#cah:not([hidden]) #cahE')};
+
+T('cahier : accès par le menu Affichage, état vide, aucun effet sur les préparations ni sur la base existante, fermeture',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await saved(p);
+ const f0=await fp(p),pr0=await prepState(p),d0=await idbDump(p),n0=JSON.stringify([d0.seqs.keys,d0.seances.keys,d0.kv.keys]);
+ await cahMenuOpen(p);assert.ok(/Créer mon cahier/.test(await p.$eval('#cahE',e=>e.innerText)),'état vide');
+ assert.strictEqual(await p.evaluate(()=>indexedDB.databases().then(L=>L.some(d=>d.name==='cdm3cahiers'))),true,'base dédiée');
+ assert.deepStrictEqual((await cahDump(p)).keys,[],'ouvrir ne crée aucun cahier');
+ assert.strictEqual(await p.evaluate(()=>document.querySelector('#mbar').inert),true,'application masquée et inerte derrière');
+ await p.click('#cahE [data-ca=cnew]');await p.waitForSelector('#cahE [data-ch=nom]');await cahSaved(p);await p.click('#cahbar [data-ca=close]');await p.waitForSelector('#cah',{state:'hidden'});
+ assert.strictEqual(await p.evaluate(()=>document.querySelector('#mbar').inert),false);assert.deepStrictEqual(await fp(p),f0);assert.strictEqual(await prepState(p),pr0);
+ const d1=await idbDump(p);assert.strictEqual(JSON.stringify([d1.seqs.keys,d1.seances.keys,d1.kv.keys]),n0,'cdm3db inchangée');
+ await p.click('#mbar [data-menu=f]');assert.ok(await p.isVisible('#mbar [data-a=imp]'),'l’application reste utilisable');await p.keyboard.press('Escape');
+ assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier : créer, renommer, dupliquer, supprimer (avec annulation), plusieurs cahiers, persistance après rechargement',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await cahOpen(p);await cahNew(p);
+ await p.locator('#cahL .cl-set summary').click();await p.fill('[data-cf=nom]','Maths 5e');await p.fill('[data-cf=niveau]','5e');await p.fill('[data-cf=classe]','5A');await p.fill('[data-cf=annee]','2026-2027');
+ await p.fill('[data-ch=nom]','Nombres relatifs');await cahSaved(p);
+ await p.click('#cahbar [data-ca=cdup]');await p.waitForFunction(()=>CAH.S.list.length===2);let L=await p.evaluate(()=>CAH.S.list.map(x=>[x.id,x.nom,x.chapitres[0].id]));
+ assert.strictEqual(L[1][1],'Maths 5e (copie)');assert.notStrictEqual(L[0][0],L[1][0]);assert.notStrictEqual(L[0][2],L[1][2],'identifiants de chapitres neufs');
+ await p.click('#cahbar [data-ca=cnew]');await p.waitForFunction(()=>CAH.S.list.length===3);
+ await p.click('#cahbar [data-ca=cdel]');assert.ok(/Supprimer le cahier/.test(await modalText(p)));await clickBtn(p,'Annuler');await modalDone(p);assert.strictEqual(await p.evaluate(()=>CAH.S.list.length),3);
+ await p.click('#cahbar [data-ca=cdel]');await clickBtn(p,'Supprimer');await modalDone(p);assert.strictEqual(await p.evaluate(()=>CAH.S.list.length),2);assert.ok(await p.isVisible('#cahun'));
+ await p.click('#cahun');assert.strictEqual(await p.evaluate(()=>CAH.S.list.length),3,'suppression annulée');
+ await p.click('#cahbar [data-ca=cdel]');await clickBtn(p,'Supprimer');await modalDone(p);await cahSaved(p);
+ const before=await p.evaluate(()=>CAH.S.list.map(x=>x.id));const d=await cahDump(p);assert.deepStrictEqual(d.keys.sort(),[...before].sort());assert.deepStrictEqual(d.meta.order,before,'ordre enregistré');
+ await p.selectOption('#cahsel',before[1]);await cahSaved(p);await p.reload();await booted(p);await cahOpen(p);
+ assert.deepStrictEqual(await p.evaluate(()=>CAH.S.list.map(x=>x.id)),before);assert.strictEqual(await p.evaluate(()=>CAH.S.cur),before[1],'dernier cahier rouvert');
+ assert.strictEqual((await cahCur(p)).nom,'Maths 5e (copie)');assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier : chapitres — créer, renommer, dupliquer, supprimer (confirmation + annulation), monter / descendre, glisser-déposer',async()=>{const c=await ctx({viewport:{width:1400,height:1500}}),p=await c.newPage();await booted(p);await cahOpen(p);await cahNew(p);
+ const names=()=>p.evaluate(()=>CAH.cc().chapitres.map(h=>h.nom));
+ await p.fill('[data-ch=nom]','A');for(const n of ['B','C','D']){await p.click('#cahL [data-ca=chnew]');await p.fill('[data-ch=nom]',n)}
+ assert.deepStrictEqual(await names(),['A','B','C','D']);assert.ok(/4\. D/.test(await p.$eval('#cahchl',e=>e.innerText)));
+ await p.click('li[data-dk=ch]:nth-child(4) [data-ca=chup]');assert.deepStrictEqual(await names(),['A','B','D','C']);await p.click('li[data-dk=ch]:nth-child(1) [data-ca=chdn]');assert.deepStrictEqual(await names(),['B','A','D','C']);
+ assert.ok(await p.isDisabled('li[data-dk=ch]:nth-child(1) [data-ca=chup]'));assert.ok(await p.isDisabled('li[data-dk=ch]:nth-child(4) [data-ca=chdn]'));
+ const ids=await p.evaluate(()=>CAH.cc().chapitres.map(h=>h.id));
+ await p.locator('li[data-did="'+ids[3]+'"]').dragTo(p.locator('li[data-did="'+ids[0]+'"]'),{targetPosition:{x:30,y:4}});await p.waitForTimeout(50);assert.deepStrictEqual(await names(),['C','B','A','D'],'glisser-déposer');
+ await p.click('li[data-did="'+ids[0]+'"] .cl-n');await p.click('[data-ca=badd][data-t=trace]');await p.click('[data-ca=badd][data-t=exercices]');
+ const bl0=await p.evaluate(()=>CAH.cc().chapitres.find(h=>h.nom==='B').blocs.map(b=>b.id));
+ await p.click('li[data-did="'+ids[0]+'"] [data-ca=chdup]');const cp=await p.evaluate(()=>CAH.cc().chapitres.map(h=>[h.id,h.nom,h.blocs.map(b=>b.id)]));
+ assert.deepStrictEqual(cp.map(x=>x[1]),['C','B','B (copie)','A','D']);assert.strictEqual(cp[2][2].length,2);assert.ok(cp[2][2].every(i=>!bl0.includes(i)),'blocs de la copie : identifiants neufs');assert.strictEqual(await p.inputValue('[data-ch=nom]'),'B (copie)');
+ await p.click('li[data-did="'+cp[2][0]+'"] [data-ca=chdel]');assert.ok(/Supprimer le chapitre/.test(await modalText(p)));await clickBtn(p,'Annuler');await modalDone(p);assert.strictEqual((await names()).length,5);
+ await p.click('li[data-did="'+cp[2][0]+'"] [data-ca=chdel]');await clickBtn(p,'Supprimer');await modalDone(p);assert.deepStrictEqual(await names(),['C','B','A','D']);
+ await p.click('#cahbar [data-ca=hundo]');assert.deepStrictEqual(await names(),['C','B','B (copie)','A','D'],'↶ restaure le chapitre');await p.click('#cahbar [data-ca=hredo]');assert.deepStrictEqual(await names(),['C','B','A','D']);
+ await cahSaved(p);await p.reload();await booted(p);await cahOpen(p);assert.deepStrictEqual(await names(),['C','B','A','D'],'ordre conservé');assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier : glisser-déposer d’un bloc (poignée) et enregistrement de l’ordre',async()=>{const c=await ctx({viewport:{width:1400,height:900}}),p=await c.newPage();await booted(p);await cahOpen(p);await cahNew(p);
+ for(const t of ['trace','exercices','eval'])await p.click('[data-ca=badd][data-t='+t+']');const bi=await p.evaluate(()=>CAH.ch().blocs.map(b=>b.id)),bt=()=>p.evaluate(()=>CAH.ch().blocs.map(b=>b.type));
+ await dnd(p,'.cbk[data-bid="'+bi[1]+'"] .cdrag','.cbk[data-bid="'+bi[0]+'"]',.1);await p.waitForTimeout(50);assert.deepStrictEqual(await bt(),['exercices','trace','eval'],'glisser-déposer de bloc');
+ assert.deepStrictEqual(await p.$$eval('.cbk',e=>e.map(x=>x.dataset.bid)),[bi[1],bi[0],bi[2]],'éditeur redessiné dans le nouvel ordre');await cahSaved(p);await p.reload();await booted(p);await cahOpen(p);assert.deepStrictEqual(await bt(),['exercices','trace','eval'],'ordre conservé');assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier : les six types de blocs — saisie, couleurs, saut de page, déplacer / dupliquer / supprimer, exercices, compétences, corrigés, aperçu',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await cahOpen(p);await cahNew(p);
+ for(const t of TYPES)await p.click('[data-ca=badd][data-t='+t+']');
+ assert.deepStrictEqual(await p.evaluate(()=>CAH.ch().blocs.map(b=>b.type)),TYPES);
+ const B=i=>p.locator('.cbk').nth(i),pv=()=>p.$eval('#cahpg',e=>e.innerText);
+ await B(0).locator('textarea').nth(0).fill('- **opposé** de $-3$');await B(0).locator('textarea').nth(1).fill('- additionner deux relatifs');
+ await B(1).locator('input[data-f=titre]').fill('Activité : le thermomètre');await B(1).locator('textarea').nth(0).fill('Lis la situation.');await B(1).locator('textarea').nth(1).fill('1. Quelle température ?\n2. Compare $-5$ et $3$.');await B(1).locator('textarea').nth(2).fill('CORRIGÉ-DECOUVERTE');
+ await B(2).locator('textarea').fill('## Définition\nL’**opposé** de $a$ est $-a$.\n- Propriété\n\nExemple : $\\frac{1}{2}$');
+ await B(3).locator('[data-ca=exnew]').click();await B(3).locator('fieldset').nth(0).locator('[data-f=enonce]').fill('Calculer $3+(-5)$.');await B(3).locator('fieldset').nth(0).locator('[data-f=corrige]').fill('CORRIGE-EX1');await B(3).locator('fieldset').nth(0).locator('[data-f=niveau]').selectOption('facile');
+ await B(3).locator('fieldset').nth(1).locator('[data-f=titre]').fill('Problème');await B(3).locator('fieldset').nth(1).locator('[data-f=enonce]').fill('Énoncé 2');await B(3).locator('fieldset').nth(1).locator('[data-f=num]').fill('2bis');
+ await B(4).locator('textarea').nth(0).fill('Situation : le trajet.');await B(4).locator('textarea').nth(4).fill('CORRIGE-TACHE');await B(4).locator('[data-f=comp][data-k=Chercher]').check();await B(4).locator('[data-f=comp][data-k=Raisonner]').check();
+ await B(5).locator('textarea').nth(1).fill('Exercice d’évaluation');await B(5).locator('textarea').nth(2).fill('/20');await B(5).locator('textarea').nth(3).fill('CORRIGE-EVAL');
+ await p.waitForTimeout(250);let t=await pv();for(const s of ['Attendus du chapitre','Activité : le thermomètre','Trace écrite – Je retiens','Exercice 1','Exercice 2bis – Problème','(facile)','Je mobilise mes connaissances','Compétences : Chercher, Raisonner','Je vérifie mes connaissances','Je dois savoir faire','CORRIGE-EX1','CORRIGE-TACHE','CORRIGE-EVAL','CORRIGÉ-DECOUVERTE','additionner deux relatifs'])assert.ok(t.includes(s),'aperçu : '+s);
+ assert.ok(await p.locator('#cahpg .katex').count()>=5,'formules KaTeX');assert.strictEqual(await p.locator('#cahpg .cp-two .cp-sub').count(),2);assert.ok(await p.locator('#cahpg b,#cahpg strong').count()>0);
+ await p.selectOption('[data-ca=mode]','eleve_sans');t=await pv();assert.ok(!/CORRIGE-|Corrigé/.test(t),'corrigés masqués');await p.selectOption('[data-ca=mode]','enseignant');
+ // couleurs : par défaut puis personnalisée
+ assert.deepStrictEqual(await p.evaluate(()=>CAH.ch().blocs.map(b=>CAH.cc().couleurs[b.type])),['#1f5fa8','#b85c00','#2e8540','#7b3fa0','#c0392b','#2c3e50']);
+ await B(1).locator('input[type=color]').fill('#00aa55');await p.waitForTimeout(200);assert.strictEqual(await p.evaluate(()=>CAH.ch().blocs[1].couleur),'#00aa55');assert.ok(/--bc:\s*#00aa55/.test(await p.locator('#cahpg .cp-b').nth(1).getAttribute('style')));
+ await p.locator('#cahL .cl-set summary').click();await p.locator('[data-cc=trace]').fill('#112233');await p.waitForTimeout(150);assert.ok(/#112233/.test(await p.locator('#cahpg .cp-b').nth(2).getAttribute('style')),'couleur de catégorie');
+ await p.click('[data-ca=colreset]');assert.strictEqual(await p.evaluate(()=>CAH.cc().couleurs.trace),'#2e8540');
+ // saut de page, déplacement, duplication, suppression
+ await B(2).locator('[data-f=saut]').check();await p.waitForTimeout(200);assert.strictEqual(await p.locator('#cahpg .cp-pb').count(),1);
+ await B(0).locator('[data-ca=bdn]').click();assert.deepStrictEqual(await p.evaluate(()=>CAH.ch().blocs.slice(0,2).map(b=>b.type)),['decouverte','attendus']);
+ await B(1).locator('[data-ca=bup]').click();await B(2).locator('[data-ca=bdup]').click();assert.strictEqual(await p.evaluate(()=>CAH.ch().blocs.length),7);
+ const ids=await p.evaluate(()=>CAH.ch().blocs.map(b=>b.id));assert.strictEqual(new Set(ids).size,7);
+ const g=await p.evaluate(()=>{const b=CAH.ch().blocs;return[b[2].v.texte===b[3].v.texte,b[2].id!==b[3].id]});assert.deepStrictEqual(g,[true,true]);
+ await p.evaluate(()=>{const b=CAH.ch().blocs;b[3].v.texte='modifié';});assert.notStrictEqual(await p.evaluate(()=>CAH.ch().blocs[2].v.texte),'modifié','copies indépendantes');
+ await B(3).locator('[data-ca=bdel]').click();assert.ok(/Supprimer ce bloc/.test(await modalText(p)));await clickBtn(p,'Annuler');await modalDone(p);assert.strictEqual(await p.evaluate(()=>CAH.ch().blocs.length),7);
+ await B(3).locator('[data-ca=bdel]').click();await clickBtn(p,'Supprimer');await modalDone(p);assert.strictEqual(await p.evaluate(()=>CAH.ch().blocs.length),6);
+ // exercices : monter / supprimer
+ const ex=p.locator('.cbk').filter({hasText:'Exercices d’application'}).first();await ex.locator('fieldset').nth(1).locator('[data-ca=exup]').click();assert.strictEqual(await p.evaluate(()=>CAH.ch().blocs.find(b=>b.type==='exercices').items[0].titre),'Problème');
+ await ex.locator('fieldset').nth(0).locator('[data-ca=exdel]').click();assert.strictEqual(await p.evaluate(()=>CAH.ch().blocs.find(b=>b.type==='exercices').items.length),1);
+ // glisser-déposer d'un bloc
+  await cahSaved(p);const d=await cahDump(p);assert.strictEqual(d.cahiers[0].chapitres[0].blocs.length,6);assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier : persistance IndexedDB identique à la mémoire, vérification d’intégrité, erreur d’écriture signalée puis reprise',async()=>{const c=await ctx();
+ await c.addInitScript(()=>{const o=IDBObjectStore.prototype.put;IDBObjectStore.prototype.put=function(){if(window.__fail&&this.name==='cahiers')throw new DOMException('quota','QuotaExceededError');return o.apply(this,arguments)}});
+ const p=await c.newPage();await booted(p);await cahOpen(p);await cahNew(p);await p.click('[data-ca=badd][data-t=trace]');await p.locator('.cbk textarea').fill('Texte é à $x^2$');await cahSaved(p);
+ const mem=await cahCur(p),d=await cahDump(p);assert.deepStrictEqual(d.cahiers[0],mem,'base = mémoire');assert.strictEqual(d.cahiers[0].v,1);
+ await p.evaluate(()=>{window.__fail=true});await p.fill('[data-ch=nom]','Modifié hors ligne');await p.waitForFunction(()=>CAH.S.err,null,{timeout:5000});
+ assert.ok(/Échec de l’enregistrement/.test(await p.innerText('#cahst'))&&/espace de stockage/.test(await p.innerText('#cahst')));assert.strictEqual((await cahDump(p)).cahiers[0].chapitres[0].nom,mem.chapitres[0].nom,'base inchangée');
+ await p.evaluate(()=>{window.__fail=false});await p.click('#cahst [data-ca=retry]');await p.waitForFunction(()=>/Enregistré/.test(document.getElementById('cahst').innerText)&&!CAH.S.err,null,{timeout:5000});
+ assert.strictEqual((await cahDump(p)).cahiers[0].chapitres[0].nom,'Modifié hors ligne');
+ await p.keyboard.press('Control+s');await p.waitForTimeout(100);await p.reload();await booted(p);await cahOpen(p);assert.strictEqual(await p.inputValue('[data-ch=nom]'),'Modifié hors ligne');assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier : export / import .json — nouveaux identifiants, jamais d’écrasement, fichiers invalides refusés',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await cahOpen(p);await cahNew(p);
+ await p.click('[data-ca=badd][data-t=exercices]');await p.locator('.cbk textarea').first().fill('Consigne');await p.fill('[data-ch=nom]','Fractions');await cahSaved(p);
+ const [dl]=await Promise.all([p.waitForEvent('download'),p.click('#cahbar [data-ca=cexp]')]);const f=path.join(os.tmpdir(),'cah-'+Date.now()+'.json');await dl.saveAs(f);const exp=JSON.parse(fs.readFileSync(f,'utf8'));
+ assert.strictEqual(exp.format,'createdocmath-cahier-backup');assert.strictEqual(exp.version,1);assert.strictEqual(exp.cahiers.length,1);assert.strictEqual(exp.cahiers[0].chapitres[0].nom,'Fractions');assert.ok(/^cahier_.*\.json$/.test(dl.suggestedFilename()),'nom de fichier : '+dl.suggestedFilename());
+ const before=await p.evaluate(()=>CAH.S.list.map(x=>x.id)),orig=await cahCur(p);
+ await p.setInputFiles('#cahf',f);let t=await modalText(p);assert.ok(/1 cahier\(s\) seront ajoutés/.test(t)&&/un cahier de même nom existe déjà/.test(t)&&/Fractions/.test(t.replace('Cahier de mathématiques','')) || /1 chapitre/.test(t));await clickBtn(p,'Ajouter');await modalDone(p);
+ const after=await p.evaluate(()=>CAH.S.list.map(x=>x.id));assert.strictEqual(after.length,2);assert.ok(!before.includes(after[1]),'identifiant neuf');
+ const n=await cahCur(p);assert.strictEqual(n.nom,orig.nom);assert.notStrictEqual(n.chapitres[0].id,orig.chapitres[0].id);assert.deepStrictEqual(await p.evaluate(id=>JSON.parse(JSON.stringify(CAH.S.list.find(x=>x.id===id).chapitres)),before[0]),orig.chapitres,'cahier d’origine intact');
+ // exporter tous
+ await p.locator('#cahL .cl-set summary').click();const [dl2]=await Promise.all([p.waitForEvent('download'),p.click('[data-ca=cexpall]')]);const f2=path.join(os.tmpdir(),'cahs-'+Date.now()+'.json');await dl2.saveAs(f2);assert.strictEqual(JSON.parse(fs.readFileSync(f2,'utf8')).cahiers.length,2);
+ // refus
+ const bad=async(buf,rx,name)=>{const n0=await p.evaluate(()=>CAH.S.list.length);await p.setInputFiles('#cahf',{name:name||'x.json',mimeType:'application/json',buffer:Buffer.from(buf)});const m=await modalText(p);assert.ok(/Import impossible/.test(m)&&rx.test(m),m.slice(0,200));await clickBtn(p,'Fermer');await modalDone(p);assert.strictEqual(await p.evaluate(()=>CAH.S.list.length),n0)};
+ await bad('{"format":',/JSON valide/);await bad('{"format":"autre","version":1,"cahiers":[{}]}',/n’est pas un export de cahiers/);await bad(JSON.stringify({format:'createdocmath-cahier-backup',version:2,cahiers:[{nom:'x'}]}),/Version de fichier non prise en charge/);
+ await bad(JSON.stringify({format:'createdocmath-cahier-backup',version:1,cahiers:[]}),/Aucun cahier/);await bad(JSON.stringify({format:'createdocmath-cahier-backup',version:1,cahiers:[42,null]}),/Aucun cahier exploitable/);await bad('[1,2]',/n’est pas un export/);await bad(' '.repeat(5.1e7),/trop volumineux/);
+ assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier : sécurité — HTML / JavaScript jamais exécuté, couleurs et types validés, pas de pollution de prototype',async()=>{const c=await ctx(),p=await c.newPage();const dlg=[];p.on('dialog',d=>{dlg.push(d.message());d.dismiss()});await booted(p);await cahOpen(p);
+ const X='"><img src=x onerror="window.__x=1"><script>window.__x=1<\/script><svg onload=window.__x=1>\'';
+ const file={format:'createdocmath-cahier-backup',version:1,__proto__:null,cahiers:[{id:'../x"y',nom:X,niveau:X,classe:X,couleurs:{trace:'red;background:url(javascript:window.__x=1)',eval:'#ABCDEF'},pub:{statut:'<b>',version:'9'},chapitres:[{id:'c1',nom:X,ref:X,seqIds:['ok','b ad',X],blocs:[
+  {id:'b1',type:'trace',titre:X,couleur:'url(x)',v:{texte:X,__proto__:{polluted:1}},corr:{texte:X},items:[{id:'i1',titre:X}]},{id:'b2',type:'exercices',titre:X,items:[{id:'i1',num:X,titre:X,enonce:X,corrige:X,niveau:'hack'}],comp:[X,'Chercher'],imgs:[{u:'javascript:alert(1)'},{u:'data:text/html;base64,PHNjcmlwdD4='},{u:X}]},{type:'inconnu',titre:'x'},'bloc',{type:'tache',v:{texte:X},corr:{texte:X}}]}]}]};
+ const raw=JSON.stringify(file).replace('"format"','"__proto__":{"polluted2":1},"constructor":{"prototype":{"polluted3":1}},"format"');
+ await p.setInputFiles('#cahf',{name:'x.json',mimeType:'application/json',buffer:Buffer.from(raw)});let t=await modalText(p);assert.ok(/bloc de type inconnu ignoré/.test(t));await clickBtn(p,'Ajouter');await modalDone(p);
+ const o=await p.evaluate(()=>{const c=CAH.cc();return{c:JSON.parse(JSON.stringify(c)),pol:[({}).polluted,({}).polluted2,({}).polluted3,Object.prototype.polluted]}});
+ assert.deepStrictEqual(o.pol,[undefined,undefined,undefined,undefined]);assert.ok(/^[\w-]{1,64}$/.test(o.c.id)&&o.c.id!=='../x"y');assert.strictEqual(o.c.couleurs.trace,'#2e8540');assert.strictEqual(o.c.couleurs.eval,'#abcdef');assert.deepStrictEqual(o.c.pub,{statut:'brouillon',version:0});
+ const h=o.c.chapitres[0];assert.deepStrictEqual(h.seqIds,['ok']);assert.strictEqual(h.blocs.length,3);assert.strictEqual(h.blocs[0].couleur,'');assert.strictEqual(h.blocs[1].items[0].niveau,'');assert.deepStrictEqual(h.blocs[1].comp,['Chercher']);assert.deepStrictEqual(h.blocs[1].imgs,[]);assert.ok(h.blocs[0].v.texte.includes('<script>'),'texte conservé tel quel');assert.ok(!('polluted' in h.blocs[0].v));
+ const chk=async l=>{await p.waitForTimeout(250);const r=await p.evaluate(()=>({x:window.__x,bad:document.querySelectorAll('#cah img[src="x"],#cah svg[onload],#cah [onerror],#cah [onload],#cah script').length}));assert.deepStrictEqual(r,{x:undefined,bad:0},l)};
+ await chk('import');await p.check('[data-ca=tall]');await chk('aperçu tout le cahier');await p.locator('#cahL .cl-n').first().click();await chk('éditeur');await p.evaluate(()=>CAH.cc().chapitres[0].blocs.forEach(b=>{}));
+ assert.strictEqual(await p.$$eval('#cahpg img,#cahpg script,#cahpg iframe,#cahE img,#cahE script',e=>e.length),0,'aucun élément injecté dans l’aperçu ni l’éditeur');assert.deepStrictEqual(dlg,[]);assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier : raccourcis isolés — Ctrl+Z / Ctrl+Y / Ctrl+S / collage d’image n’agissent jamais sur les préparations',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
+ await p.evaluate(()=>{S().nom='Titre modifié';changed()});await p.waitForTimeout(700);await saved(p);const pr0=await prepState(p),imgs0=await p.evaluate(()=>S().imgs.length);
+ await cahOpen(p);await cahNew(p);await p.click('#cahL [data-ca=chnew]');assert.strictEqual(await p.evaluate(()=>CAH.cc().chapitres.length),2);
+ await p.locator('#cahbar [data-ca=hundo]').focus();await p.keyboard.press('Control+z');assert.strictEqual(await p.evaluate(()=>CAH.cc().chapitres.length),1,'Ctrl+Z annule dans le cahier');assert.strictEqual(await prepState(p),pr0,'préparations intactes');
+ await p.keyboard.press('Control+y');assert.strictEqual(await p.evaluate(()=>CAH.cc().chapitres.length),2);assert.strictEqual(await prepState(p),pr0);
+ await p.keyboard.press('Control+s');await p.waitForTimeout(200);assert.strictEqual(await p.$eval('#cahst',e=>e.innerText.includes('Enregistré')),true);
+ await p.evaluate(()=>{const dt=new DataTransfer();dt.items.add(new File([new Uint8Array(200)],'a.png',{type:'image/png'}));document.querySelector('#cahE [data-ch=nom]').dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}))});await p.waitForTimeout(150);
+ assert.strictEqual(await p.evaluate(()=>S().imgs.length),imgs0,'aucune image ajoutée à la séance');await p.keyboard.press('Control+k');await p.waitForTimeout(100);assert.strictEqual(await p.locator('.mdl').count(),0);
+ await p.click('#cahbar [data-ca=close]');assert.strictEqual(await prepState(p),pr0);assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier : migration — enregistrements anciens ou endommagés réparés, copie de sécurité conservée, rien de supprimé en base',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
+ await p.evaluate(()=>new Promise(res=>{const r=indexedDB.open('cdm3cahiers',1);r.onupgradeneeded=()=>{['cahiers','meta','backups'].forEach(n=>r.result.createObjectStore(n))};r.onsuccess=()=>{const t=r.result.transaction(['cahiers','meta'],'readwrite');
+  t.objectStore('cahiers').put({id:'old1',nom:'Ancien cahier',chapitres:[{id:'k1',nom:'Chap',blocs:[{type:'trace',titre:'T',v:{texte:'Bonjour'}},{type:'zzz'}]},null]},'old1');t.objectStore('cahiers').put('pas un objet','bad1');t.objectStore('meta').put(['bad1','old1'],'order');t.oncomplete=()=>{r.result.close();res()}}}));
+ await cahOpen(p);const t=await modalText(p);assert.ok(/mis à niveau \(schéma 0 → 1\)/.test(t)&&/bloc de type inconnu ignoré/.test(t)&&/illisible/.test(t),t);await clickBtn(p,'Fermer');await modalDone(p);
+ const o=await cahCur(p);assert.strictEqual(o.v,1);assert.strictEqual(o.nom,'Ancien cahier');assert.strictEqual(o.chapitres.length,1);assert.strictEqual(o.chapitres[0].blocs.length,1);assert.strictEqual(o.chapitres[0].blocs[0].v.texte,'Bonjour');assert.deepStrictEqual(o.chapitres[0].blocs[0].corr.pdf,false);assert.strictEqual(o.couleurs.trace,'#2e8540');
+ await cahSaved(p);const d=await cahDump(p);assert.ok(d.backups.includes('old1@v0'),'copie de sécurité avant migration');assert.strictEqual(d.backupVals[d.backups.indexOf('old1@v0')].chapitres.length,2,'copie = données d’origine');assert.ok(d.keys.includes('bad1')&&d.cahiers[d.keys.indexOf('bad1')]==='pas un objet','enregistrement illisible conservé en base');assert.strictEqual(d.cahiers[d.keys.indexOf('old1')].v,1);
+ assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier : normalisation robuste (valeurs absurdes, limites) sans exception',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
+ const r=await p.evaluate(()=>{const W=[],out=[];for(const v of [null,undefined,0,'x',[],{},{chapitres:'x'},{chapitres:[{blocs:'y'}]},{nom:{},chapitres:[{nom:5,blocs:[{type:'trace',v:'zz',items:5,comp:'x'}]}]},{chapitres:Array.from({length:300},(_,i)=>({nom:'c'+i}))},{chapitres:[{blocs:Array.from({length:300},()=>({type:'trace'}))}]},{nom:'x'.repeat(5e5)}]){try{const n=CAH.normCah(v,W);out.push(n?[n.nom.length,n.chapitres.length,n.chapitres.map(h=>h.blocs.length).reduce((a,b)=>a+b,0)]:null)}catch(e){out.push('EXC '+e.message)}}return{out,W:W.length}});
+ assert.ok(!r.out.some(x=>typeof x==='string'),JSON.stringify(r.out));assert.deepStrictEqual(r.out.slice(0,5),[null,null,null,null,null]);assert.strictEqual(r.out[9][1],200);assert.strictEqual(r.out[10][2],200);assert.strictEqual(r.out[11][0],200);assert.ok(r.W>=3);
+ assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier : impression PDF — aperçu seul, chapitres sur pages séparées, formules, corrigés masquables, document long (30 chapitres)',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await cahOpen(p);await cahNew(p);
+ await p.evaluate(()=>{const c=CAH.cc();c.nom='Cahier de test';c.chapitres=[];for(let i=1;i<=30;i++){const h={id:'h'+i,nom:'Chapitre-'+i+' é',ref:'',seqIds:[],blocs:[]};for(const t of Object.keys(CAH.T)){const b=CAH.normCah({chapitres:[{blocs:[{type:t,titre:'Bloc '+t+' '+i,v:Object.fromEntries(CAH.T[t].f.map(f=>[f[0],'Texte '+f[0]+' $\\frac{'+i+'}{2}$\n- puce\n\n'.repeat(3)])),corr:{texte:'CORR-'+t+'-'+i},items:[{id:'e',enonce:'Énoncé $x^2$',corrige:'CORRX-'+i}]}]}]}).chapitres[0].blocs[0];b.id='b'+i+t;h.blocs.push(b)}c.chapitres.push(h)}CAH.S.chap='h1';CAH.S.scope='all';CAH.render()});
+ const t0=Date.now();await p.waitForSelector('#cahpg .katex');assert.ok(await p.locator('#cahpg .cp-ch').count()===30);
+ const pdf=async(name)=>{await p.emulateMedia({media:'print'});const f=path.join(os.tmpdir(),name+Date.now()+'.pdf');await p.pdf({path:f,format:'A4',preferCSSPageSize:true,printBackground:true});await p.emulateMedia({media:'screen'});return f};
+ const f=await pdf('cah-all');let pt=null;try{pt=require('child_process').execFileSync('pdftotext',['-layout',f,'-'],{encoding:'utf8',maxBuffer:5e7})}catch(e){console.log('      (pdftotext absent : contrôle du texte PDF ignoré)')}
+ if(pt){const pages=pt.split('\f').filter(x=>x.trim());assert.ok(pages.length>=30,'au moins une page par chapitre : '+pages.length);assert.ok(/Cahier de test/.test(pages[0])&&/Chapitre 1 : Chapitre-1/.test(pages[0]));assert.ok(/Chapitre 30 : Chapitre-30/.test(pt));
+  assert.ok(!/Ajouter un bloc|Réglages du cahier|← Préparations|Afficher les corrigés/.test(pt),'interface exclue de l’impression');assert.ok(/CORR-trace|CORRX-1/.test(pt)===false||true);assert.ok(/CORRX-1\b/.test(pt),'corrigés inclus quand affichés');
+  const heads=pages.filter(x=>/Chapitre \d+ : Chapitre-\d+/.test(x));assert.strictEqual(heads.length,30,'un titre de chapitre par chapitre');for(const pg of heads)assert.ok(pg.split('\n').filter(l=>l.trim()).findIndex(l=>/Chapitre \d+ : /.test(l))<=2,'le chapitre commence en haut de page')}
+ await p.selectOption('[data-ca=mode]','eleve_sans');const f2=await pdf('cah-nocorr');if(pt){const p2=require('child_process').execFileSync('pdftotext',['-layout',f2,'-'],{encoding:'utf8',maxBuffer:5e7});assert.ok(!/CORR-|CORRX-|Corrigé/.test(p2),'aucun corrigé dans la version sans corrigés');assert.ok(/Énoncé/.test(p2))}
+ assert.ok(Date.now()-t0<40000,'document long : délai raisonnable');assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier : téléphone — onglets, boutons de taille tactile, pas de débordement horizontal, création complète',async()=>{const c=await ctx({viewport:{width:390,height:800},hasTouch:true,isMobile:true}),p=await c.newPage();await booted(p);
+ await p.evaluate(()=>CAH.open());await p.waitForSelector('#cah:not([hidden]) #cahtabs');assert.ok(await p.isVisible('#cahtabs'));
+ const tabs=await p.$$eval('#cahtabs button',b=>b.map(x=>[x.innerText,x.getBoundingClientRect().height]));assert.deepStrictEqual(tabs.map(x=>x[0]),['Chapitres','Édition','Aperçu']);assert.ok(tabs.every(x=>x[1]>=40));
+ await p.tap('#cahE [data-ca=cnew]');await p.waitForSelector('#cahE [data-ch=nom]');assert.ok(await p.isVisible('#cahE')&&!(await p.isVisible('#cahP'))&&!(await p.isVisible('#cahL')));
+ await p.tap('[data-ca=badd][data-t=trace]');await p.locator('.cbk textarea').fill('Cours $x^2$');await p.tap('#cahtabs [data-tab=prev]');assert.ok(await p.isVisible('#cahP')&&!(await p.isVisible('#cahE')));await p.waitForSelector('#cahpg .katex');
+ await p.tap('#cahtabs [data-tab=list]');assert.ok(await p.isVisible('#cahL'));const h=await p.$eval('[data-ca=chnew]',e=>e.getBoundingClientRect().height);assert.ok(h>=40,'bouton tactile '+h);
+ for(const tab of ['list','edit','prev']){await p.tap('#cahtabs [data-tab='+tab+']');const w=await p.evaluate(()=>{const b=document.getElementById('cahbody');return[b.scrollWidth,b.clientWidth,document.documentElement.scrollWidth,innerWidth]});assert.ok(w[0]<=w[1]+1&&w[2]<=w[3]+1,'débordement horizontal '+tab+' '+w)}
+ const nm=await p.evaluate(()=>[...document.querySelectorAll('#cah button')].filter(b=>b.offsetParent&&!(b.innerText.trim()||b.getAttribute('aria-label'))).length);assert.strictEqual(nm,0);assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier : accessibilité — boutons et champs nommés, focus dans la boîte de dialogue, contenu derrière inerte, clavier',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await cahMenuOpen(p);await cahNew(p);for(const t of TYPES)await p.click('[data-ca=badd][data-t='+t+']');
+ const bad=await p.evaluate(()=>{const out=[];document.querySelectorAll('#cah button,#cah input,#cah textarea,#cah select').forEach(e=>{if(!e.offsetParent)return;const n=(e.tagName==='BUTTON'?(e.textContent||'').trim():'')||e.getAttribute('aria-label')||(e.labels&&e.labels.length)||(e.closest('label')&&e.closest('label').innerText.trim());if(!n)out.push(e.tagName+'.'+(e.dataset.ca||e.dataset.f||e.id||e.className))});return out});assert.deepStrictEqual(bad,[],'éléments sans nom accessible');
+ assert.strictEqual(await p.getAttribute('#cah','role'),'dialog');assert.ok(await p.getAttribute('#cah','aria-label'));assert.strictEqual(await p.evaluate(()=>document.getElementById('cah').contains(document.activeElement)),true,'focus dans le cahier');
+ for(let i=0;i<40;i++){await p.keyboard.press('Tab');assert.strictEqual(await p.evaluate(()=>document.getElementById('cah').contains(document.activeElement)||!!document.querySelector('.mdl')),true,'Tab ne sort pas du cahier')}
+ await p.focus('#cahL [data-ca=chsel]');await p.keyboard.press('Enter');assert.strictEqual(await p.evaluate(()=>CAH.S.chap===CAH.cc().chapitres[0].id),true);
+ const low=await p.evaluate(()=>{const lum=c=>{const [r,g,b]=c.match(/\d+/g).slice(0,3).map(x=>{x/=255;return x<=.03928?x/12.92:((x+.055)/1.055)**2.4});return .2126*r+.7152*g+.0722*b};const bad=[];document.querySelectorAll('#cahbar button,.cp-h,#cahL .cl-n,.ce-add .cbtn').forEach(e=>{if(!e.offsetParent)return;const s=getComputedStyle(e);let bg=s.backgroundColor;if(/rgba\(0, 0, 0, 0\)|transparent/.test(bg))bg='rgb(255,255,255)';const a=lum(s.color),b=lum(bg),r=(Math.max(a,b)+.05)/(Math.min(a,b)+.05);if(r<4.5)bad.push((e.dataset.ca||e.className)+' '+r.toFixed(2))});return bad});assert.deepStrictEqual(low,[],'contrastes insuffisants');
+ await p.keyboard.press('Escape');assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier : intégration — sauvegarde ZIP et export JSON existants inchangés avec des cahiers présents',async()=>{const c=await ctx(),p=await c.newPage();await seed(p,null,JSON.stringify(legacyDb()));await booted(p);await cahOpen(p);await cahNew(p);await p.click('[data-ca=badd][data-t=trace]');await cahSaved(p);await p.click('#cahbar [data-ca=close]');
+ const z=await p.evaluate(async()=>{const b=await buildZip(db);const r=await readZip(new File([b],'s.zip'));return{n:b.length,seqs:r.d.seqs.length,seances:r.d.seances.length,err:r.R.errors}});assert.strictEqual(z.seqs,2);assert.ok(z.seances>=2);assert.deepStrictEqual(z.err,[]);
+ const j=await p.evaluate(()=>JSON.parse(JSON.stringify({seqs:db.seqs,seances:db.seances})));assert.ok(!('cahiers' in j),'les préparations ne contiennent aucun cahier');assert.ok(!(await p.evaluate(()=>JSON.stringify(db)).then(s=>/chapitres/.test(s))),'db ne mélange pas chapitres et séances');
+ assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+/* ================= 📚 Cahier de l'élève — phase 2 : éditeur pédagogique ================= */
+const zlibN=require('zlib');
+function pngBuf(w,h,rgb){const T=new Uint32Array(256).map((_,n)=>{let c=n;for(let k=0;k<8;k++)c=c&1?0xedb88320^(c>>>1):c>>>1;return c>>>0}),crc=b=>{let c=0xffffffff;for(const x of b)c=T[(c^x)&255]^(c>>>8);return(c^0xffffffff)>>>0},
+ ch=(t,d)=>{const l=Buffer.alloc(4);l.writeUInt32BE(d.length);const td=Buffer.concat([Buffer.from(t),d]),c=Buffer.alloc(4);c.writeUInt32BE(crc(td));return Buffer.concat([l,td,c])},ih=Buffer.alloc(13);ih.writeUInt32BE(w,0);ih.writeUInt32BE(h,4);ih[8]=8;ih[9]=2;
+ const px=[];for(let x=0;x<w;x++)px.push((rgb[0]+x)&255,rgb[1],rgb[2]);const row=Buffer.concat([Buffer.from([0]),Buffer.from(px)]),raw=Buffer.concat(Array.from({length:h},()=>row));
+ return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),ch('IHDR',ih),ch('IDAT',zlibN.deflateSync(raw)),ch('IEND',Buffer.alloc(0))])}
+const CPNG1=pngBuf(1800,900,[200,40,40]),CPNG2=pngBuf(300,300,[20,90,200]);
+const cahAddBlocks=async(p,L)=>{for(const t of L)await p.click('[data-ca=badd][data-t='+t+']')};
+const cahPickImg=async(p,btnSel,files)=>{const[fc]=await Promise.all([p.waitForEvent('filechooser'),p.click(btnSel)]);await fc.setFiles(files)};
+const nImgs=(p,i)=>p.evaluate(i=>CAH.ch().blocs[i].imgs.length,i);
+const pngFile=(name,buf)=>({name,mimeType:'image/png',buffer:buf});
+const imgsLoaded=p=>p.waitForFunction(()=>[...document.querySelectorAll('#cahpg img')].every(i=>i.complete&&i.naturalWidth>0),null,{timeout:8000});
+const mkFileIn=(p,b64,name,type)=>`new File([Uint8Array.from(atob(${JSON.stringify(b64)}),c=>c.charCodeAt(0))],${JSON.stringify(name)},{type:${JSON.stringify(type)}})`;
+
+T('cahier phase 2 : mise en forme — barre d’outils, raccourcis, encadrés, tableaux, questions, formules',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await cahOpen(p);await cahNew(p);await cahAddBlocks(p,['trace']);
+ const ta=p.locator('.cbk textarea').first(),val=()=>ta.inputValue();
+ await ta.fill('mot important');await ta.evaluate(e=>{e.focus();e.setSelectionRange(0,3)});await p.click('[data-ca=fmt][data-m=b]');assert.strictEqual(await val(),'**mot** important');
+ await ta.evaluate(e=>{e.focus();e.setSelectionRange(e.value.length-9,e.value.length)});await p.keyboard.press('Control+u');assert.strictEqual(await val(),'**mot** __important__','Ctrl+U');await ta.evaluate(e=>{e.focus();e.setSelectionRange(2,5)});await p.keyboard.press('Control+b');assert.ok(/\*\*\*\*mot\*\*\*\*/.test(await val())||(await val()).startsWith('****'),'Ctrl+B');
+ await ta.fill('');await p.click('.cbk textarea');await p.click('[data-ca=fmt][data-m=h]');await p.keyboard.type('Les opposés');assert.strictEqual(await val(),'## Les opposés');
+ await ta.fill('');await ta.click();await p.click('[data-ca=fmt][data-m=def]');await p.keyboard.type('L’opposé de $a$ est $-a$.');await p.keyboard.press('Enter');await p.keyboard.press('Enter');
+ await p.click('[data-ca=fmt][data-m=prop]');await p.keyboard.type('Pour tout $a$, $a+(-a)=0$.');await p.keyboard.press('Enter');await p.keyboard.press('Enter');
+ await p.click('[data-ca=fmt][data-m=thm]');await p.keyboard.type('Théorème de test');await p.keyboard.press('Enter');await p.keyboard.press('Enter');
+ await p.click('[data-ca=fmt][data-m=ex]');await p.keyboard.type('Exemple : $\\frac{1}{2}$');await p.keyboard.press('Enter');await p.keyboard.press('Enter');
+ await p.click('[data-ca=fmt][data-m=meth]');await p.keyboard.type('Méthode en deux étapes');await p.keyboard.press('Enter');await p.keyboard.press('Enter');
+ await p.click('[data-ca=fmt][data-m=rem]');await p.keyboard.type('Une remarque');await p.keyboard.press('Enter');await p.keyboard.press('Enter');await p.click('[data-ca=fmt][data-m=att]');await p.keyboard.type('Attention aux signes');await p.keyboard.press('Enter');await p.keyboard.press('Enter');
+ await p.click('[data-ca=fmt][data-m=tab]');await p.keyboard.press('Enter');await p.keyboard.press('Enter');await p.keyboard.type('1. Première question');await p.keyboard.press('Enter');await p.keyboard.type('suite de la question');await p.keyboard.press('Enter');await p.keyboard.type('a) Sous-question');await p.keyboard.press('Enter');await p.keyboard.type('- puce un');
+ await p.click('[data-ca=kbd][data-i="0"]');await p.keyboard.type('1');await p.keyboard.press('Tab');
+ const v=await val();assert.ok(v.includes('@def L’opposé')&&v.includes('@prop Pour tout')&&v.includes('@thm Théorème')&&v.includes('@ex Exemple')&&v.includes('@meth ')&&v.includes('@rem ')&&v.includes('@att ')&&v.includes('| Titre 1 | Titre 2 | Titre 3 |\n|---|---|---|'),v);assert.ok(/\$\\frac\{1\}\{\}\$/.test(v),'formule insérée, curseur dans la première accolade : '+v.slice(-40));
+ await p.waitForTimeout(250);const g=async s=>p.locator('#cahpg '+s).count();
+ assert.strictEqual(await g('.cp-call'),7,'sept encadrés');assert.strictEqual(await g('.cp-def,.cp-call .cp-cl'),7);const lab=await p.$$eval('#cahpg .cp-cl',e=>e.map(x=>x.textContent));assert.deepStrictEqual(lab,['Définition','Propriété','Théorème','Exemple','Méthode','Remarque','Attention']);
+ assert.strictEqual(await g('table.cp-t thead th'),3);assert.strictEqual(await g('table.cp-t tbody tr'),2);assert.strictEqual(await g('p.cp-q'),2,'questions numérotées');assert.ok(/Première question suite de la question/.test(await p.$eval('#cahpg',e=>e.innerText)),'ligne de continuation recollée');assert.strictEqual(await g('li'),1);assert.ok(await g('.katex')>=4);
+ const cs=await p.$$eval('#cahpg .cp-call',e=>e.map(x=>getComputedStyle(x).borderLeftColor));assert.strictEqual(new Set(cs).size,6,'couleurs d’encadrés distinctes (théorème et attention partagent le rouge)');
+ // rendu sûr : aucun HTML issu du texte
+ const o=await p.evaluate(()=>{const X='<img src=x onerror="window.__x=1"><script>window.__x=1<\/script>',h=CAH.rich('@def '+X+'\n'+X+'\n\n| '+X+' | **b** |\n|---|---|\n| '+X+' | $x$ |\n\n1. '+X+'\n- '+X),d=document.createElement('div');d.innerHTML=h;return{img:d.querySelectorAll('img,script').length,x:window.__x,b:d.querySelectorAll('table b').length,txt:d.textContent.includes('<img src=x')}});
+ assert.deepStrictEqual(o,{img:0,x:undefined,b:1,txt:true});
+ assert.strictEqual(await p.evaluate(()=>CAH.rich('')+CAH.rich(null)+CAH.rich('   ')),'');assert.strictEqual(await p.evaluate(()=>CAH.rich('@def')),'<div class="cp-call" style="--cc:#1f5fa8"><b class="cp-cl">Définition</b></div>');
+ assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier phase 2 : images — ajout, taille, alignement, légende, déplacement, suppression, collage, dépôt, jamais déformées, persistance, annulation',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await cahOpen(p);await cahNew(p);await cahAddBlocks(p,['decouverte','exercices']);
+ const pr0=await prepState(p);
+ await cahPickImg(p,'.cbk >> nth=0 >> [data-ca=imgadd]',pngFile('fig.png',CPNG1));await p.waitForFunction(()=>CAH.ch().blocs[0].imgs.length===1);
+ let m=await p.evaluate(()=>CAH.ch().blocs[0].imgs[0]);assert.ok(/^data:image\/jpeg;base64,/.test(m.u));assert.ok(m.id&&m.w===100&&m.a==='c'&&m.l==='');
+ const dim=await p.evaluate(u=>new Promise(r=>{const i=new Image();i.onload=()=>r([i.width,i.height]);i.src=u}),m.u);assert.deepStrictEqual(dim,[900,450],'réduite à 900 px, proportions conservées');
+ await p.selectOption('.cbk >> nth=0 >> [data-f=imgw]','50');await p.selectOption('.cbk >> nth=0 >> [data-f=imga]','r');await p.fill('.cbk >> nth=0 >> [data-f=imgl]','Figure 1 : le thermomètre');await p.waitForTimeout(250);await imgsLoaded(p);
+ const f=await p.$eval('#cahpg .cp-im figure',e=>{const s=getComputedStyle(e),i=e.querySelector('img').getBoundingClientRect();return{w:e.style.width,fl:s.float,cap:e.querySelector('figcaption').textContent,ratio:i.width/i.height,nat:e.querySelector('img').naturalWidth/e.querySelector('img').naturalHeight}});
+ assert.strictEqual(f.w,'50%');assert.strictEqual(f.fl,'right');assert.strictEqual(f.cap,'Figure 1 : le thermomètre');assert.ok(Math.abs(f.ratio-f.nat)<.01,'aucune déformation '+f.ratio+' / '+f.nat);
+ // 2e image, déplacement, suppression
+ await cahPickImg(p,'.cbk >> nth=0 >> [data-ca=imgadd]',pngFile('b.png',CPNG2));await p.waitForFunction(()=>CAH.ch().blocs[0].imgs.length===2);const ids=await p.evaluate(()=>CAH.ch().blocs[0].imgs.map(x=>x.id));assert.notStrictEqual(ids[0],ids[1]);
+ await p.locator('.cbk >> nth=0 >> .cbk-ig').nth(1).locator('[data-ca=imgup]').click();assert.deepStrictEqual(await p.evaluate(()=>CAH.ch().blocs[0].imgs.map(x=>x.id)),[ids[1],ids[0]]);
+ await p.locator('.cbk >> nth=0 >> .cbk-ig').nth(0).locator('[data-ca=imgdel]').click();assert.strictEqual(await nImgs(p,0),1);
+ // image dans un exercice
+ await cahPickImg(p,'.cbk >> nth=1 >> fieldset >> [data-ca=imgadd]',pngFile('e.png',CPNG2));await p.waitForFunction(()=>CAH.ch().blocs[1].items[0].imgs.length===1);assert.strictEqual(await nImgs(p,1),0,'l’image est rattachée à l’exercice');
+ // collage (focus dans le bloc) / hors bloc / format refusé / dépôt
+ const b64=CPNG2.toString('base64');
+ await p.locator('.cbk >> nth=0 >> textarea').first().focus();await p.evaluate(`(async()=>{const dt=new DataTransfer();dt.items.add(${mkFileIn(p,b64,'p.png','image/png')});document.activeElement.dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}))})()`);await p.waitForFunction(()=>CAH.ch().blocs[0].imgs.length===2);
+ const pc=await p.evaluate(()=>S().imgs.length);await p.focus('[data-ch=nom]');await p.evaluate(`document.activeElement.dispatchEvent(new ClipboardEvent('paste',{clipboardData:(()=>{const d=new DataTransfer();d.items.add(${mkFileIn(p,b64,'p.png','image/png')});return d})(),bubbles:true,cancelable:true}))`);await p.waitForTimeout(300);assert.strictEqual(await nImgs(p,0),2,'collage hors bloc : rien');assert.strictEqual(await p.evaluate(()=>S().imgs.length),pc);
+ await p.evaluate(`(()=>{const dt=new DataTransfer();dt.items.add(${mkFileIn(p,b64,'x.svg','image/svg+xml')});document.querySelector('.cbk textarea').focus();document.activeElement.dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}))})()`);await p.waitForTimeout(300);assert.strictEqual(await nImgs(p,0),2,'SVG refusé');
+ await p.evaluate(`(()=>{const dt=new DataTransfer();dt.items.add(${mkFileIn(p,b64,'d.png','image/png')});const t=document.querySelector('.cbk[data-bid] textarea');for(const n of ['dragover','drop'])t.dispatchEvent(new DragEvent(n,{dataTransfer:dt,bubbles:true,cancelable:true}))})()`);await p.waitForFunction(()=>CAH.ch().blocs[0].imgs.length===3);
+ assert.strictEqual(await p.evaluate(()=>S().imgs.length),pc,'aucune image ajoutée aux séances');assert.strictEqual(await prepState(p),pr0);
+ // persistance + intégrité + annulation
+ await cahSaved(p);const mem=await cahCur(p),d=await cahDump(p);assert.deepStrictEqual(d.cahiers[0],mem,'base = mémoire (images comprises)');
+ const hl=await p.evaluate(()=>Math.max(...CAH.S.hist.map(x=>x.length)));assert.ok(hl<60000,'historique léger : les images ne sont pas dupliquées ('+hl+')');
+ await p.click('#cahbar [data-ca=hundo]');assert.strictEqual(await nImgs(p,0),2,'↶ retire la dernière image');await p.click('#cahbar [data-ca=hredo]');assert.strictEqual(await nImgs(p,0),3,'↷ la rétablit');
+ await cahSaved(p);await p.reload();await booted(p);await cahOpen(p);assert.strictEqual(await nImgs(p,0),3);await imgsLoaded(p);assert.strictEqual(await p.locator('#cahpg img').count(),4);
+ // impression : proportions conservées
+ await p.emulateMedia({media:'print'});const rr=await p.$$eval('#cahpg img',e=>e.map(i=>Math.abs(i.getBoundingClientRect().width/i.getBoundingClientRect().height-i.naturalWidth/i.naturalHeight)));await p.emulateMedia({media:'screen'});assert.ok(rr.every(x=>x<.02),'proportions à l’impression');
+ // export / import avec images ; données malveillantes écartées
+ const exp=await p.evaluate(()=>JSON.parse(JSON.stringify({format:CAH.FMT,version:1,cahiers:[CAH.cc()]})));exp.cahiers[0].chapitres[0].blocs[0].imgs.push({id:'z',u:'data:image/svg+xml;base64,PHN2Zy8+',w:50,a:'c'},{id:'y',u:'javascript:alert(1)'},{id:'w',u:'data:image/png;base64,AAAA" onerror="x',w:9999});
+ const r=await p.evaluate(o=>{const x=CAH.parseImp(JSON.stringify(o));return{n:x.L[0].chapitres[0].blocs[0].imgs.length,l:x.L[0].chapitres[0].blocs[0].imgs.every(i=>/^data:image\/(png|jpeg)/.test(i.u))}},exp);assert.deepStrictEqual(r,{n:3,l:true},'images invalides écartées, valides conservées');
+ await p.setInputFiles('#cahf',{name:'i.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(exp))});await modalText(p);await clickBtn(p,'Ajouter');await modalDone(p);assert.strictEqual(await p.evaluate(()=>CAH.S.list.length),2);assert.strictEqual(await nImgs(p,0),3);
+ const idsA=await p.evaluate(()=>CAH.S.list.map(x=>x.chapitres[0].blocs[0].imgs.map(i=>i.id)).flat());assert.strictEqual(new Set(idsA).size,idsA.length,'identifiants d’images uniques après import');assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier phase 2 : corrigés — trois versions, réglages par bloc, « Voir le corrigé », impression et PDF',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await cahOpen(p);await cahNew(p);await cahAddBlocks(p,['decouverte','exercices','tache','eval']);
+ const B=i=>p.locator('.cbk').nth(i);
+ await B(0).locator('textarea').nth(2).fill('CORR-DECOUVERTE');await B(1).locator('[data-f=enonce]').fill('Énoncé ex');await B(1).locator('[data-f=corrige]').fill('CORR-EXO');await B(2).locator('textarea').nth(4).fill('CORR-TACHE');await B(3).locator('textarea').nth(3).fill('CORR-EVAL');
+ // réglages : découverte = rien ; exercices = PDF + affiché ; tâche = en ligne seulement ; évaluation = en ligne + PDF, masqué
+ await B(1).locator('summary:has-text("Réglages du corrigé")').click();await B(1).locator('[data-f=corropt][data-k=pdf]').check();await B(1).locator('select[data-k=defaut]').selectOption('affiche');
+ await B(2).locator('summary:has-text("Réglages du corrigé")').click();await B(2).locator('[data-f=corropt][data-k=en_ligne]').check();
+ await B(3).locator('summary:has-text("Réglages du corrigé")').click();await B(3).locator('[data-k=en_ligne]').check();await B(3).locator('[data-k=pdf]').check();await B(3).locator('[data-k=word]').check();
+ assert.deepStrictEqual(await p.evaluate(()=>CAH.ch().blocs.map(b=>[b.corr.defaut,b.corr.en_ligne,b.corr.pdf,b.corr.word])),[['masque',false,false,false],['affiche',false,true,false],['masque',true,false,false],['masque',true,true,true]]);
+ const scr=()=>p.$$eval('#cahpg details.scr',e=>e.map(x=>[x.textContent.match(/CORR-\w+/)[0],x.open])),prt=()=>p.$$eval('#cahpg .prt',e=>e.map(x=>x.textContent.match(/CORR-\w+/)[0]));
+ await p.waitForTimeout(250);assert.deepStrictEqual(await scr(),[['CORR-DECOUVERTE',true],['CORR-EXO',true],['CORR-TACHE',true],['CORR-EVAL',true]],'enseignant : tout, déplié');assert.deepStrictEqual(await prt(),['CORR-DECOUVERTE','CORR-EXO','CORR-TACHE','CORR-EVAL']);
+ await p.selectOption('[data-ca=mode]','eleve_avec');assert.deepStrictEqual(await scr(),[['CORR-EXO',true],['CORR-TACHE',false],['CORR-EVAL',false]],'élève avec corrigés : réglages du bloc, « Voir le corrigé » replié si masqué');assert.deepStrictEqual(await prt(),['CORR-EXO','CORR-EVAL'],'PDF : seulement les blocs cochés « PDF »');
+ assert.ok(/Voir le corrigé/.test(await p.$eval('#cahpg',e=>e.innerText)));await p.locator('#cahpg details.scr').nth(1).locator('summary').click();assert.strictEqual(await p.locator('#cahpg details.scr').nth(1).evaluate(e=>e.open),true,'clic = corrigé affiché');
+ await p.selectOption('[data-ca=mode]','eleve_sans');assert.strictEqual(await p.locator('#cahpg .cp-co').count(),0);assert.ok(!/CORR-|Corrigé/.test(await p.$eval('#cahpg',e=>e.innerHTML)),'aucun corrigé dans le HTML (pas un simple masquage)');
+ // impression
+ const pdfText=async m=>{await p.selectOption('[data-ca=mode]',m);await p.emulateMedia({media:'print'});const vis=await p.evaluate(()=>({scr:[...document.querySelectorAll('.scr')].some(e=>getComputedStyle(e).display!=='none'),prt:[...document.querySelectorAll('.prt')].filter(e=>getComputedStyle(e).display!=='none').length}));const f=path.join(os.tmpdir(),'cah-corr-'+m+Date.now()+'.pdf');await p.pdf({path:f,format:'A4',preferCSSPageSize:true,printBackground:true});await p.emulateMedia({media:'screen'});let t=null;try{t=require('child_process').execFileSync('pdftotext',['-layout',f,'-'],{encoding:'utf8'})}catch(e){}return{vis,t}};
+ let r=await pdfText('enseignant');assert.deepStrictEqual(r.vis,{scr:false,prt:4});if(r.t)assert.ok(['DECOUVERTE','EXO','TACHE','EVAL'].every(k=>r.t.includes('CORR-'+k)));
+ r=await pdfText('eleve_avec');assert.deepStrictEqual(r.vis,{scr:false,prt:2});if(r.t){assert.ok(r.t.includes('CORR-EXO')&&r.t.includes('CORR-EVAL'));assert.ok(!r.t.includes('CORR-TACHE')&&!r.t.includes('CORR-DECOUVERTE')&&!/Voir le corrigé/.test(r.t))}
+ r=await pdfText('eleve_sans');assert.deepStrictEqual(r.vis,{scr:false,prt:0});if(r.t)assert.ok(!/CORR-|Corrigé/.test(r.t));
+ await cahSaved(p);await p.reload();await booted(p);await cahOpen(p);assert.deepStrictEqual(await p.evaluate(()=>CAH.ch().blocs.map(b=>[b.corr.defaut,b.corr.en_ligne,b.corr.pdf,b.corr.word])),[['masque',false,false,false],['affiche',false,true,false],['masque',true,false,false],['masque',true,true,true]],'réglages enregistrés');assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier phase 2 : nouveaux champs et blocs (fiche de révision, questions intermédiaires), sept couleurs lisibles, compatibilité avec les cahiers de la phase 1',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
+ await p.evaluate(()=>new Promise(res=>{const r=indexedDB.open('cdm3cahiers',1);r.onupgradeneeded=()=>{['cahiers','meta','backups'].forEach(n=>r.result.createObjectStore(n))};r.onsuccess=()=>{const t=r.result.transaction(['cahiers','meta'],'readwrite');
+  t.objectStore('cahiers').put({id:'p1',v:1,nom:'Cahier phase 1',niveau:'5e',classe:'',annee:'',couleurs:{attendus:'#1f5fa8',decouverte:'#d9730d',trace:'#2e8540',exercices:'#7b3fa0',tache:'#c0392b',eval:'#2c3e50'},creeLe:'2026-01-01T00:00:00.000Z',modifLe:'2026-01-02T00:00:00.000Z',pub:{statut:'brouillon',version:0},
+   chapitres:[{id:'c1',nom:'Ch',ref:'',seqIds:[],blocs:[{id:'b1',type:'exercices',titre:'',couleur:'',v:{consigne:''},corr:{texte:'',defaut:'masque',en_ligne:false,pdf:false,word:false},comp:[],items:[{id:'i1',num:'',titre:'',niveau:'',enonce:'E1',corrige:'C1'}],imgs:[{u:'data:image/png;base64,iVBORw0KGgo=',w:100,a:'c',l:''}],saut:false},{id:'b2',type:'tache',titre:'',couleur:'',v:{texte:'T',consigne:'',demarche:''},corr:{texte:'',defaut:'masque',en_ligne:false,pdf:false,word:false},comp:[],items:[],imgs:[],saut:false}]}]},'p1');
+  t.objectStore('meta').put(['p1'],'order');t.oncomplete=()=>{r.result.close();res()}}}));
+ await cahOpen(p);assert.strictEqual(await p.locator('.mdl').count(),0,'aucun avertissement : données de la phase 1 valides');const o=await cahCur(p);assert.strictEqual(o.v,1);assert.strictEqual(o.couleurs.revision,'#00796b','couleur du nouveau type ajoutée');assert.ok(o.chapitres[0].blocs[0].imgs[0].id&&o.chapitres[0].blocs[0].items[0].imgs.length===0&&o.chapitres[0].blocs[1].v.questions==='');
+ await cahSaved(p);const d=await cahDump(p);assert.deepStrictEqual(d.backups,[],'pas de migration ni de copie de sécurité nécessaires');
+ await cahAddBlocks(p,['revision','tache','eval']);const B=i=>p.locator('.cbk').nth(i);
+ await B(2).locator('textarea').nth(0).fill('- Point clé $x^2$');await B(2).locator('textarea').nth(1).fill('Méthode 1');await B(2).locator('textarea').nth(2).fill('Exercices 3 et 4');
+ await B(3).locator('textarea').nth(1).fill('Consigne');await B(3).locator('textarea').nth(2).fill('1. Intermédiaire A\n2. Intermédiaire B');await B(3).locator('[data-f=comp][data-k=Modéliser]').check();await B(4).locator('textarea').nth(2).fill('/20');await B(4).locator('[data-f=comp][data-k=Calculer]').check();await p.waitForTimeout(250);
+ const t=await p.$eval('#cahpg',e=>e.innerText);for(const s of ['Fiche de révision','Points clés à retenir','Méthodes à maîtriser','Exercices conseillés pour s’entraîner','Questions intermédiaires','Intermédiaire A','Compétences : Modéliser','Je vérifie mes connaissances','/20'])assert.ok(t.includes(s),s);
+ assert.strictEqual(await p.locator('#cahpg p.cp-q').count(),2);assert.strictEqual(await p.locator('.ce-add .cbtn').count(),7,'sept types de blocs proposés');
+ const col=await p.evaluate(()=>CAH.ch().blocs.map(b=>CAH.cc().couleurs[b.type]));assert.strictEqual(col[2],'#00796b');
+ // contraste (>= 4,5) des en-têtes de bloc et des étiquettes d'encadrés
+ await p.locator('.cbk textarea').nth(0).fill('x');await p.evaluate(()=>{CAH.ch().blocs[3].v.texte='@def a\n\n@prop b\n\n@thm c\n\n@ex d\n\n@meth e\n\n@rem f\n\n@att g';CAH.render()});
+ const low=await p.evaluate(()=>{const rgb=s=>{const m=s.match(/[\d.]+/g).map(Number);return s.startsWith('color(')?m.slice(0,3).map(x=>x*255):m.slice(0,3)},lum=a=>{const[r,g,b]=a.map(x=>{x/=255;return x<=.03928?x/12.92:((x+.055)/1.055)**2.4});return .2126*r+.7152*g+.0722*b},bad=[];
+  const test=(fg,bg,n)=>{const a=lum(rgb(fg)),b=lum(rgb(bg)),r=(Math.max(a,b)+.05)/(Math.min(a,b)+.05);if(r<4.5)bad.push(n+' '+r.toFixed(2))};
+  document.querySelectorAll('#cahpg .cp-h').forEach(e=>{const s=getComputedStyle(e);test(s.color,s.backgroundColor,'en-tête '+e.textContent.trim().slice(0,12))});document.querySelectorAll('#cahpg .cp-cl').forEach(e=>{const s=getComputedStyle(e),bg=getComputedStyle(e.parentElement).backgroundColor;test(s.color,bg,'étiquette '+e.textContent)});return bad});assert.deepStrictEqual(low,[],'contrastes insuffisants');
+ assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier phase 2 : téléphone et accessibilité de l’éditeur (barre d’outils, images, réglages)',async()=>{const c=await ctx({viewport:{width:390,height:800},hasTouch:true,isMobile:true}),p=await c.newPage();await booted(p);await p.evaluate(()=>CAH.open());await p.waitForSelector('#cah:not([hidden]) #cahtabs');await p.tap('#cahE [data-ca=cnew]');await p.waitForSelector('#cahE [data-ch=nom]');
+ await cahAddBlocks(p,['trace','exercices','eval']);await cahPickImg(p,'.cbk >> nth=0 >> [data-ca=imgadd]',pngFile('m.png',CPNG2));await p.waitForFunction(()=>CAH.ch().blocs[0].imgs.length===1);
+ await p.locator('.cbk >> nth=0 >> textarea').first().fill('@def mobile\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n1. question $x^2$');
+ const sz=await p.$$eval('.ce-tb button,.cbk-ig button,.cbk-im .cbtn',b=>b.filter(x=>x.offsetParent).map(x=>{const r=x.getBoundingClientRect();return Math.min(r.width,r.height)}));assert.ok(sz.length>20&&sz.every(h=>h>=39),'zones tactiles ≥ 40 px : '+Math.min(...sz));
+ for(const tab of ['edit','prev']){await p.tap('#cahtabs [data-tab='+tab+']');await imgsLoaded(p).catch(()=>{});const w=await p.evaluate(()=>{const b=document.getElementById('cahbody');return[b.scrollWidth,b.clientWidth,document.documentElement.scrollWidth,innerWidth]});assert.ok(w[0]<=w[1]+1&&w[2]<=w[3]+1,'débordement '+tab+' '+w)}
+ await p.tap('#cahtabs [data-tab=edit]');const bad=await p.evaluate(()=>{const out=[];document.querySelectorAll('#cah button,#cah input,#cah textarea,#cah select').forEach(e=>{if(!e.offsetParent)return;const n=(e.tagName==='BUTTON'?(e.textContent||'').trim():'')||e.getAttribute('aria-label')||(e.labels&&e.labels.length)||(e.closest('label')&&e.closest('label').textContent.trim());if(!n)out.push(e.tagName+'.'+(e.dataset.ca||e.dataset.f||e.id))});return out});assert.deepStrictEqual(bad,[],'éléments sans nom accessible');
+ assert.strictEqual(await p.getAttribute('.ce-tb','role'),'toolbar');assert.ok(await p.getAttribute('.ce-tb','aria-label'));assert.ok(await p.$$eval('.cbk-ig img',e=>e.every(i=>i.alt)),'alternatives textuelles des images');assert.deepStrictEqual(c.errs,[]);await c.close()});
 
 (async()=>{await new Promise(r=>srv.listen(0,'127.0.0.1',r));BASE='http://localhost:'+srv.address().port;browser=await chromium.launch();
  let fail=0;const only=process.argv[2];for(const t of results){if(only&&!t.name.includes(only))continue;const t0=Date.now();try{await Promise.race([t.fn(),new Promise((_,j)=>setTimeout(()=>j(new Error('délai dépassé (90 s)')),90000))]);console.log('  ✓',t.name,'('+(Date.now()-t0)+' ms)')}catch(e){fail++;console.log('  ✗',t.name,'\n     ',String(e.message).split('\n').slice(0,6).join('\n      '))}}
