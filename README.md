@@ -112,6 +112,13 @@ Tout fonctionne dans le navigateur : les données restent sur votre appareil.
 - **Mode classe** : minuteur par phase en plein écran (tablette, VPI), affichage de la mise en œuvre, phase suivante, +1 min, signal sonore à l'échéance, écran maintenu allumé. Raccourcis : Espace (démarrer / pause), ← →, Échap.
 - **PWA** : installable et utilisable hors connexion (voir ci-dessous).
 
+## Nouveauté : 📚 Cahier de l'élève (phases 1 et 2)
+
+- **Affichage ▸ 📚 Cahier de l'élève…** ouvre un espace dédié pour construire le cahier de mathématiques des élèves : un cahier par classe, des chapitres réordonnables, six types de blocs colorés (attendus, activité de découverte, trace écrite, exercices, tâche complexe, évaluation) avec aperçu en direct, formules KaTeX, corrigés masquables et impression PDF.
+- Les cahiers sont enregistrés automatiquement dans une base IndexedDB **séparée** (`cdm3cahiers`) : vos séquences et séances ne sont pas modifiées. Export / import `.json` des cahiers. **Les sauvegardes ZIP n'incluent pas encore les cahiers.**
+- **Phase 2 — éditeur pédagogique** : barre de mise en forme (encadrés Définition / Propriété / Théorème / Exemple / Méthode…, tableaux, questions numérotées, clavier de formules), images (ajout, glisser-déposer, collage, taille, légende), fiche de révision, et trois versions du cahier : enseignant, élève avec corrigés, élève sans corrigés.
+- Architecture, modèle de données, plan de publication en ligne et limites : [`docs/CAHIER-ELEVE.md`](docs/CAHIER-ELEVE.md).
+
 ## Nouveauté : import d'une séquence produite par une IA (NotebookLM / Gemini)
 
 - **Fichier ▸ 🤖 Importer une séquence depuis une IA (.json)…** : crée automatiquement une **nouvelle séquence** et toutes ses séances à partir d'un fichier JSON au format `createdocmath-ai-sequence` (version 1.0), sans copier-coller.
@@ -195,6 +202,7 @@ Tout fonctionne dans le navigateur : les données restent sur votre appareil.
 | `manifest.json`, `sw.js`, `icon-192.png`, `icon-512.png` | PWA (installation, hors-ligne) |
 | `vendor/` | KaTeX 0.16.45, JSZip 3.10.1 et docx 9.6.1 (tous MIT) embarqués, avec leurs licences |
 | `tests/` | Tests Playwright (`node tests/run.js`) |
+| `cahier.js`, `docs/CAHIER-ELEVE.md` | Module « Cahier de l'élève » et son architecture |
 | `docs/IMPORT-IA.md`, `docs/exemple-sequence-ia.json`, `docs/prompt-notebooklm.txt` | Import d'une séquence produite par une IA : format, exemple, prompt NotebookLM |
 | `MIGRATION.md` | Migration depuis l'ancien stockage, sauvegarde / restauration, publication |
 
