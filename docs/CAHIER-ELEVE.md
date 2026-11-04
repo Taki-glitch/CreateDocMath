@@ -78,10 +78,46 @@ Tout est échappé avant mise en forme : aucun HTML saisi n'est interprété.
 
 **Modèle de données** : le schéma reste **v1** (changements uniquement additifs, normalisés à la lecture : `couleurs.revision`, `imgs[].id`, `items[].imgs`, `v.questions`). Les cahiers de la phase 1 se chargent sans migration ni copie de sécurité (testé). L'historique ↶ ↷ référence les images par clé pour ne pas dupliquer leur poids en mémoire.
 
-## 7. Limites (à traiter dans les phases suivantes)
+## 7. Phase 3 — liaison avec les préparations et la banque
+
+Nouveau fichier `cahier-liaison.js`, **chargé à la demande** (au premier clic sur une fonction de liaison) : sans lui, le reste du cahier fonctionne ; il est dans le cache hors ligne (`sw.js`).
+
+**Associer** : dans un chapitre, « 🔗 Associer une séquence… » (liste avec nom, niveau, classe, nombre de séances, dates ; recherche ; plusieurs séquences possibles). L'association ne copie rien : elle enregistre les identifiants dans `seqIds` et propose ensuite d'importer. « + Chapitre depuis une séquence… » crée le chapitre, l'associe et ouvre l'import. Une séquence supprimée de la préparation apparaît comme « séquence introuvable » (le cahier garde tout).
+
+**Importer** : « ⤓ Importer des contenus » ouvre la liste des contenus récupérables, regroupés (chapitre, attendus, une rubrique par séance), avec case à cocher, destination modifiable et **aperçu** de chaque élément ; « Tout sélectionner / désélectionner », compteur, import impossible si rien n'est coché.
+
+| Source dans la préparation | Destination proposée (modifiable) | Coché par défaut |
+|---|---|---|
+| Nom de la séquence | Titre du chapitre | oui, si le chapitre porte encore son nom par défaut |
+| Référence du B.O. | Sous-titre du chapitre | oui, si vide |
+| Contenus du B.O. | Attendus ▸ Je dois savoir | oui |
+| Capacités attendues | Attendus ▸ Je dois savoir faire | oui |
+| Objectifs généraux (section « ## Objectifs généraux » du cadre, ex. import IA) | Attendus ▸ Je dois savoir faire | oui |
+| Objectif(s) d'une séance | Attendus ▸ Je dois savoir faire | non |
+| Activité d'une séance (+ images de la zone « activité ») | Activité de découverte | oui |
+| … si la séance est étiquetée « problème » / « tâche complexe » | Tâche complexe | oui |
+| … si la séance est de type évaluation | Évaluation | oui |
+| Trace écrite (+ images de la zone « trace écrite ») | Trace écrite | oui (non pour une évaluation) |
+| Problème supplémentaire | Exercices | non |
+| Lignes « → Correction : … » de l'activité | Corrigé du bloc (séparé de l'énoncé, numéro de question conservé) | option « Séparer les corrigés » cochée |
+
+**Banque d'exercices** : « 📚 Insérer depuis la banque… » (barre du chapitre, ou dans un bloc Exercices pour cibler ce bloc). Recherche (sans accents, titre / énoncé / correction / notions / mots-clés), filtres par type et niveau, favoris d'abord, aperçu. Récupère énoncé, correction (→ corrigé), image, niveau (difficulté 1/2/3 → facile / moyen / difficile), compétences ; les notions sont gardées dans l'origine. Destination par type : exercice, flash, calcul, remédiation, diagnostic → Exercices ; problème → Tâche complexe ; activité de découverte → Activité ; trace écrite et exemple corrigé → Trace écrite.
+
+**Garanties**
+- **Copies indépendantes** : textes et images sont copiés (nouveaux identifiants). Modifier la préparation, la banque ou le cahier après import ne change pas l'autre ; supprimer la source ne change rien au cahier. Les préparations et la banque ne sont **jamais écrites**.
+- **Jamais d'écrasement** : on ajoute des blocs, des exercices ou des lignes. Attendus : les lignes déjà présentes (insensible à la casse, aux accents et aux puces) ne sont pas répétées. Un contenu déjà importé dans le chapitre est signalé « déjà importé » et décoché ; le forcer ajoute une copie sans toucher à votre version personnalisée.
+- **Annulation** : tout l'import s'annule d'un coup avec ↶.
+- **Confidentialité** : ne sont jamais proposés ni copiés les commentaires de phases, l'analyse didactique, les difficultés, les aides, la justification des compétences, les pré-requis, les recommandations, ni les images de la zone « analyse ». Vérifié par test (dans la fenêtre, le cahier, l'aperçu et l'export).
+- **Sécurité** : tout texte est échappé ; images validées (SVG, `javascript:` et données mal formées écartés) ; textes bornés à 100 000 caractères.
+
+**Modèle de données** : le schéma reste **v1** (ajouts normalisés à la lecture) : `src` sur les blocs et exercices importés (`{t:'seance'|'sequence'|'banque', q, s, f, bi, h, at, n}`) sert à repérer les doublons et préparera la future fonction « Comparer avec la source » ; `h` est l'empreinte du texte importé. **La projection de publication (phase 5) devra retirer `src` et `seqIds`.**
+
+## 8. Limites (à traiter dans les phases suivantes)
 
 - **Les sauvegardes ZIP ne contiennent pas encore les cahiers** : utiliser **Exporter** (`.json`, images comprises) dans le cahier. Intégration au ZIP prévue en phase 4.
-- Pas de recadrage d'image dans le cahier, ni de table des matières, de pagination automatique, d'en-tête / pied de page configurables ni d'export Word (phase 4) ; pas de liaison avec les séquences ni de banque d'exercices (phase 3) ; pas de publication (phase 5).
+- Pas de recadrage d'image dans le cahier, ni de table des matières, de pagination automatique, d'en-tête / pied de page configurables ni d'export Word (phase 4) ; pas de publication (phase 5) ; pas encore de « Comparer avec la source » (les empreintes sont enregistrées).
+- L'import reprend l'activité d'une séance en un seul bloc (les questions ne sont pas découpées en exercices) : choisissez « Exercices » comme destination pour la traiter comme un exercice.
+- Les « tâches complexes » sont reconnues par l'étiquette de la séance (« problème », « tâche complexe ») : sinon, changez la destination dans la fenêtre d'import.
 - Les réglages « Word » des corrigés sont enregistrés mais ne seront utilisés qu'avec l'export Word (phase 4).
 - Édition simultanée dans deux onglets : le dernier enregistrement l'emporte.
 - Chaque enregistrement réécrit le cahier modifié en entier, images comprises : à optimiser (stockage binaire séparé) si des cahiers très illustrés posent problème.
