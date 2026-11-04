@@ -1,0 +1,1210 @@
+diff -ruN '--exclude=node_modules' '--exclude=vendor' '--exclude=*.png' '--exclude=*.zip' orig/CreateDocMath-main/README.md z/CreateDocMath-main/README.md
+--- a/README.md	2026-10-27 18:03:34.000000000 +0000
++++ b/README.md	2026-11-02 12:35:30.197688373 +0000
+@@ -112,6 +112,15 @@
+ - **Mode classe** : minuteur par phase en plein écran (tablette, VPI), affichage de la mise en œuvre, phase suivante, +1 min, signal sonore à l'échéance, écran maintenu allumé. Raccourcis : Espace (démarrer / pause), ← →, Échap.
+ - **PWA** : installable et utilisable hors connexion (voir ci-dessous).
+ 
++## Nouveauté : import d'une séquence produite par une IA (NotebookLM / Gemini)
++
++- **Fichier ▸ 🤖 Importer une séquence depuis une IA (.json)…** : crée automatiquement une **nouvelle séquence** et toutes ses séances à partir d'un fichier JSON au format `createdocmath-ai-sequence` (version 1.0), sans copier-coller.
++- Une fenêtre d'**aperçu** (séances dépliables, durées, nombre de phases, informations à compléter, avertissements, champs non importés, doublon éventuel) précède toute importation ; rien n'est ajouté avant votre confirmation, rien n'est jamais écrasé.
++- L'import est « tout ou rien » (retour arrière si l'enregistrement échoue), annulable par **Ctrl + Z**, et vérifié après écriture dans IndexedDB.
++- Le contenu du fichier est traité comme du texte non fiable (aucun HTML ni script exécuté) ; rien n'est envoyé sur Internet.
++- Les fichiers JSON natifs et les anciennes sauvegardes `.json` restent acceptés par la même entrée (flux d'import habituel, inchangé).
++- Documentation complète, format, tableau de correspondance, exemple et **prompt NotebookLM prêt à copier** : [`docs/IMPORT-IA.md`](docs/IMPORT-IA.md).
++
+ ## Correctifs 2.2.1 : iPhone / tactile
+ 
+ - La barre de menus n'est plus un conteneur à défilement sur petit écran (Safari iOS peut rogner ou rendre non cliquables des menus positionnés dans un tel conteneur) : elle passe sur deux lignes et ses menus s'affichent sous elle. Word, PDF, annuler/rétablir, mode sombre et aide sont dans le menu *Fichier* sur téléphone.
+@@ -186,6 +195,7 @@
+ | `manifest.json`, `sw.js`, `icon-192.png`, `icon-512.png` | PWA (installation, hors-ligne) |
+ | `vendor/` | KaTeX 0.16.45, JSZip 3.10.1 et docx 9.6.1 (tous MIT) embarqués, avec leurs licences |
+ | `tests/` | Tests Playwright (`node tests/run.js`) |
++| `docs/IMPORT-IA.md`, `docs/exemple-sequence-ia.json`, `docs/prompt-notebooklm.txt` | Import d'une séquence produite par une IA : format, exemple, prompt NotebookLM |
+ | `MIGRATION.md` | Migration depuis l'ancien stockage, sauvegarde / restauration, publication |
+ 
+ Tous les fichiers doivent rester **dans le même dossier**.
+diff -ruN '--exclude=node_modules' '--exclude=vendor' '--exclude=*.png' '--exclude=*.zip' orig/CreateDocMath-main/docs/IMPORT-IA.md z/CreateDocMath-main/docs/IMPORT-IA.md
+--- a/docs/IMPORT-IA.md	1970-01-01 00:00:00.000000000 +0000
++++ b/docs/IMPORT-IA.md	2026-11-02 12:34:15.362953094 +0000
+@@ -0,0 +1,467 @@
++# Importer une séquence produite par une IA (NotebookLM / Gemini)
++
++CreateDocMaths peut créer **une séquence et toutes ses séances** à partir d'un fichier JSON produit par NotebookLM (ou Gemini), sans copier-coller. L'import crée de vraies séquences et séances natives : vous les modifiez ensuite dans l'éditeur habituel.
++
++Rien n'est envoyé sur Internet : le fichier est lu et converti **dans votre navigateur**.
++
++## 1. Procédure
++
++1. Dans NotebookLM, chargez vos sources (programme, manuel…) puis envoyez le **prompt** de la section 6 (complété avec le niveau, la notion, le nombre de séances).
++2. Demandez le fichier `.json` et téléchargez-le. Si l'IA n'en propose pas, copiez le JSON brut dans un fichier texte enregistré avec l'extension `.json`.
++3. Dans CreateDocMaths : **Fichier ▸ 🤖 Importer une séquence depuis une IA (.json)…** et choisissez le fichier.
++4. Une fenêtre d'**aperçu** présente : titre, niveau, nombre de séances, durée et nombre de phases de chacune (dépliable), les informations à compléter, les **avertissements**, les **champs non importés** et un éventuel **doublon**. Rien n'est importé tant que vous n'avez pas confirmé.
++5. **Importer comme nouvelle séquence** ou **Annuler**.
++6. La séquence apparaît dans la liste, la première séance est ouverte. **↶ (Ctrl + Z)** retire l'import si besoin.
++
++L'import **ne remplace jamais** une séquence existante : il en crée toujours une nouvelle. Si une séquence de même nom et de même niveau existe déjà, l'aperçu le signale (sans bloquer : vous pouvez vouloir une nouvelle version ou une autre classe).
++
++Le même bouton accepte aussi les fichiers JSON « natifs » (export « Partager cette séquence », anciennes sauvegardes `.json`) : ils passent par le flux d'import habituel (fusion). Les sauvegardes `.zip` restent à importer avec **Fichier ▸ Importer**.
++
++## 2. Format `createdocmath-ai-sequence` (version 1.0)
++
++Le format est volontairement indépendant de la structure interne : c'est l'application qui convertit le JSON vers ses champs.
++
++Racine : `format` (obligatoire, valeur exacte `createdocmath-ai-sequence`), `version` (`"1.0"` ; absente = 1.0 supposée), `sequence` (obligatoire), `seances` (obligatoire, liste de 1 à 60 séances).
++
++### 2.1 `sequence`
++
++| Champ JSON | Obligatoire | Type | Champ CreateDocMaths | Si absent / remarque |
++|---|---|---|---|---|
++| `titre` | **oui** | texte | Nom de la séquence | import refusé |
++| `niveau` | non (conseillé) | texte | Niveau | avertissement |
++| `classe` | non | texte | Classe | vide |
++| `reference_bo` | non | texte | Référence du B.O. | vide |
++| `contenus_bo` | non | liste ou texte | Contenus du B.O. (une puce par élément) | vide |
++| `capacites_attendues` | non | liste ou texte | Capacités attendues | vide |
++| `recommandations` | non | texte | Recommandations pédagogiques | vide |
++| `cadre_general` | non | texte | Cadre général et progression | vide |
++| `progression` | non | texte | Cadre général, sous-titre « Progression » | rien |
++| `problematique` | non | texte | Cadre général, sous-titre « Problématique » | rien |
++| `objectifs_generaux` | non | liste ou texte | Cadre général, sous-titre « Objectifs généraux de la séquence » | rien |
++| `prerequis` | non | liste ou texte | Cadre général, sous-titre « Pré-requis de la séquence » | rien |
++| `domaine`, `theme` | non | texte | Cadre général, sous-titre « Domaine et thème » | rien |
++| `duree_previsionnelle` | non | nombre (minutes) | Cadre général, sous-titre « Durée prévisionnelle » | rien |
++| `competences` | non | liste | **non importé** : le bilan des compétences est calculé à partir des séances ; signalé dans l'aperçu | – |
++
++Les informations sans champ propre (problématique, objectifs généraux, pré-requis de séquence, domaine, thème, durée) sont **regroupées dans « Cadre général et progression »** : rien n'est perdu et le schéma de l'application n'est pas modifié.
++
++### 2.2 `seances[]`
++
++| Champ JSON | Type | Champ CreateDocMaths | Si absent / remarque |
++|---|---|---|---|
++| `numero` | entier | N° de séance | les séances sont triées puis **numérotées 1, 2, 3…** (un numéro différent est signalé) |
++| `titre` | texte | Nom de la séance | « Séance N » + avertissement |
++| `type` | `apprentissage` \| `evaluation` | Type de séance | apprentissage ; autre valeur : avertissement |
++| `duree` | entier > 0 (min) | Durée | somme des phases, sinon 55 min ; avertissement |
++| `date` | `AAAA-MM-JJ` | Date | vide ; date invalide : avertissement |
++| `objectifs` | texte | Objectif(s) de la séance | vide |
++| `prerequis` | texte ou liste | Pré-requis | vide |
++| `prerequis_tice` | texte | Pré-requis TICE | vide |
++| `phases` | liste | Déroulement envisagé | aucune phase |
++| `objectifs_fin` | texte | Objectifs de fin de séance | vide |
++| `travail_personnel` | texte | Travail personnel donné | vide |
++| `activite_titre` | texte | Titre du focus sur l'activité | vide |
++| `activite` | texte | Focus sur l'activité (énoncé, corrections) | vide |
++| `trace_ecrite` | texte | Contenu de la trace écrite | vide |
++| `difficultes` | texte ou liste | Difficultés potentielles | vide |
++| `aides` | texte ou liste | Aides et différenciation prévues | vide |
++| `competences` | liste | Compétences cochées | une valeur inconnue est signalée et non importée |
++| `competences_justification` | texte | Justification du lien avec les compétences | vide |
++| `evaluation`, `bilan` | texte | Évaluation et bilan de la séance (`**Évaluation :**` et `**Bilan :**` si les deux sont présents) | vide |
++| `introduction` | texte | Fiche séquence : Introduction | vide |
++| `moment_cours` | texte | Fiche séquence : Moment de cours | vide |
++| `entrainement` | texte | Fiche séquence : Entraînement & tâche | vide |
++| `remarque_pedagogique` | texte | Fiche séquence : Remarque pédagogique | vide |
++
++### 2.3 `phases[]`
++
++| Champ JSON | Type | Champ CreateDocMaths | Remarque |
++|---|---|---|---|
++| `duree` | entier ≥ 0 (min) | Durée de la phase | absente ou invalide : 0 min + avertissement |
++| `nom` | texte | Nom de la phase | « Phase N » si absent ; une phase entièrement vide est ignorée |
++| `contenu` | texte | Description des activités des élèves | |
++| `commentaire` | texte | Commentaire sur la phase (analyse didactique) | |
++| `modalite` | texte | Mode (élèves actifs / collectif) **et** colonne « Modalités » | voir 3 |
++| `modalites` | texte | Colonne « Modalités » (texte libre, prioritaire sur `modalite` pour l'affichage) | facultatif |
++| `support`, `materiel` | texte | Support | regroupés en une ligne |
++
++## 3. Valeurs reconnues
++
++- **Type de séance** : `apprentissage` (défaut) ; `evaluation` (aussi `évaluation`, `eval`, `contrôle`, `DS`, `test`).
++- **Modalité d'une phase** : l'application distingue deux modes. *Élèves actifs* : `individuel`, `binôme`, `groupe`, `autonomie`, `recherche`, `atelier`… *Collectif* : `collectif`, `plénière`, `classe entière`, `magistral`… Une valeur mixte (« individuel puis collectif ») compte comme *élèves actifs*. Valeur absente : *élèves actifs*. Valeur inconnue : *élèves actifs* + avertissement. Le texte d'origine est conservé dans la colonne « Modalités » de la fiche.
++- **Compétences** : `Chercher`, `Modéliser`, `Représenter`, `Calculer`, `Raisonner`, `Communiquer` (casse et accents indifférents).
++- **Texte** : mise en forme légère de l'application (`**gras**`, `__souligné__`, `- puce`, `## sous-titre`), formules LaTeX entre `$…$` ou `$$…$$` (barres obliques inverses **doublées** dans le JSON). Une liste de textes devient une liste à puces.
++
++## 4. Contrôles, erreurs et sécurité
++
++- **Refusé** (rien n'est modifié, message en français) : extension autre que `.json`, fichier de plus de 5 Mo, JSON mal formé, format inconnu, version autre que 1.x, séquence sans titre, absence de la rubrique `sequence`, aucune séance (ou aucune exploitable), plus de 60 séances.
++- **Accepté avec avertissement** : séance sans titre, durée absente ou invalide, phase sans durée / vide / de modalité inconnue, compétence inconnue, date invalide, numéros en double, valeurs non textuelles (ignorées), textes de plus de 20 000 caractères (tronqués), plus de 30 phases par séance (les 30 premières), fichier entouré de balises Markdown (retirées), formules dont les barres obliques n'étaient pas doublées (`\frac`, `\times`, `\theta`… sont réparées ; **vérifiez-les**).
++- **Identifiants** : tout identifiant fourni par l'IA est ignoré ; l'application crée ses propres identifiants et rattache elle-même chaque séance à la séquence.
++- **Champs inconnus** : jamais importés, toujours listés dans « Non importé ».
++- **Sécurité** : tout le contenu est traité comme du texte non fiable (échappé à l'affichage, dans l'aperçu comme dans les fiches, les exports Word et PDF). Aucun HTML ni JavaScript du fichier n'est exécuté.
++- **Intégrité** : l'import est « tout ou rien ». Si l'enregistrement échoue, la séquence n'est pas ajoutée et vos fiches restent inchangées. Après enregistrement, les données sont relues et comparées à l'import (message de vérification).
++
++## 5. Exemple complet
++
++Fichier : `docs/exemple-sequence-ia.json` (4 séances dont une évaluation, formules, toutes les rubriques).
++
++```json
++{
++  "format": "createdocmath-ai-sequence",
++  "version": "1.0",
++  "sequence": {
++    "titre": "Additionner et soustraire des fractions",
++    "niveau": "5e",
++    "classe": "5A",
++    "domaine": "Nombres et calculs",
++    "theme": "Fractions",
++    "problematique": "Comment additionner deux quantités exprimées avec des fractions de dénominateurs différents ?",
++    "duree_previsionnelle": 220,
++    "objectifs_generaux": [
++      "Comprendre qu’une fraction est un nombre et la placer sur une droite graduée",
++      "Reconnaître et produire des fractions égales",
++      "Additionner et soustraire des fractions dont les dénominateurs sont multiples l’un de l’autre"
++    ],
++    "prerequis": [
++      "Connaître les tables de multiplication",
++      "Savoir lire une fraction simple (demi, tiers, quart)"
++    ],
++    "reference_bo": "Programme de mathématiques du cycle 4 (annexe 2)",
++    "contenus_bo": [
++      "Additionner et soustraire des fractions de dénominateurs quelconques",
++      "Comparer des fractions"
++    ],
++    "capacites_attendues": [
++      "Il additionne ou soustrait des fractions dont les dénominateurs sont égaux ou multiples l’un de l’autre",
++      "Il reconnaît et produit des fractions égales"
++    ],
++    "competences": [
++      "Chercher",
++      "Représenter",
++      "Calculer",
++      "Raisonner",
++      "Communiquer"
++    ],
++    "cadre_general": "Séquence de quatre séances : une activité de découverte, un cours, un temps d’entraînement et une évaluation.",
++    "progression": "S1 sens de la fraction et fractions égales ; S2 addition à dénominateur multiple ; S3 entraînement et problèmes ; S4 évaluation.",
++    "recommandations": "Prévoir des bandes de papier à plier pour les élèves en difficulté."
++  },
++  "seances": [
++    {
++      "numero": 1,
++      "titre": "Partager une unité : fractions égales",
++      "type": "apprentissage",
++      "duree": 55,
++      "date": "2026-11-09",
++      "objectifs": "Reconnaître que $\\frac{1}{2}=\\frac{2}{4}$ et produire des fractions égales.",
++      "prerequis": [
++        "Lire une fraction simple",
++        "Tables de multiplication"
++      ],
++      "prerequis_tice": "Aucun.",
++      "phases": [
++        {
++          "duree": 10,
++          "nom": "Questions flash",
++          "contenu": "Calculer mentalement $3\\times 4$, $12\\div 3$, la moitié de 18.",
++          "commentaire": "Rituel de mise au travail.",
++          "modalite": "individuel",
++          "support": "Diaporama",
++          "materiel": "ardoises"
++        },
++        {
++          "duree": 20,
++          "nom": "Recherche : plier des bandes",
++          "contenu": "Plier une bande en 2, en 4 puis en 8 et colorier la même longueur.",
++          "commentaire": "Observer les procédures, repérer les erreurs de partage.",
++          "modalite": "binome"
++        },
++        {
++          "duree": 15,
++          "nom": "Mise en commun",
++          "contenu": "Faire verbaliser : « $\\frac{1}{2}$ et $\\frac{4}{8}$ représentent la même part ».",
++          "commentaire": "Institutionnaliser le vocabulaire.",
++          "modalite": "collectif"
++        },
++        {
++          "duree": 10,
++          "nom": "Trace écrite",
++          "contenu": "Copier le cours et traiter deux exemples.",
++          "commentaire": "",
++          "modalite": "individuel"
++        }
++      ],
++      "objectifs_fin": "Chaque élève sait écrire deux fractions égales à $\\frac{3}{4}$.",
++      "travail_personnel": "Exercices 5 et 6 page 42 pour jeudi.",
++      "activite_titre": "Activité : les bandes de papier",
++      "activite": "Voici trois bandes de même longueur.\n\n1. Plier la première en 2 parts égales : quelle fraction représente une part ?\n2. Plier la deuxième en 4 parts égales.\n3. Que remarques-tu pour $\\frac{1}{2}$ et $\\frac{2}{4}$ ?",
++      "trace_ecrite": "## Fractions égales\nPour tout nombre $k$ non nul : $$\\frac{a}{b}=\\frac{a\\times k}{b\\times k}$$\nExemple : $\\frac{1}{2}=\\frac{3}{6}$.",
++      "difficultes": [
++        "Confusion entre numérateur et dénominateur",
++        "Partages non égaux lors du pliage"
++      ],
++      "aides": [
++        "Bandes déjà graduées",
++        "Fiche d’aide avec les tables"
++      ],
++      "competences": [
++        "Chercher",
++        "Représenter",
++        "Communiquer"
++      ],
++      "competences_justification": "Les élèves manipulent, représentent puis expliquent leur démarche.",
++      "evaluation": "Critère : produit au moins deux fractions égales correctes.",
++      "bilan": "À compléter après la séance.",
++      "introduction": "Pliage de bandes de papier.",
++      "moment_cours": "Définition des fractions égales (10 min).",
++      "entrainement": "Deux exemples guidés.",
++      "remarque_pedagogique": "Ne pas écrire de règle avant la manipulation."
++    },
++    {
++      "numero": 2,
++      "titre": "Additionner avec un dénominateur multiple",
++      "type": "apprentissage",
++      "duree": 55,
++      "objectifs": "Additionner $\\frac{1}{2}+\\frac{1}{4}$ en se ramenant au même dénominateur.",
++      "prerequis": "Fractions égales (séance 1).",
++      "phases": [
++        {
++          "duree": 8,
++          "nom": "Rituel",
++          "contenu": "Écrire de tête des fractions égales.",
++          "commentaire": "",
++          "modalite": "individuel"
++        },
++        {
++          "duree": 17,
++          "nom": "Problème : la pizza",
++          "contenu": "Léa mange $\\frac{1}{2}$ d’une pizza et Tom $\\frac{1}{4}$. Quelle part ont-ils mangée à eux deux ?",
++          "commentaire": "Laisser émerger l’erreur $\\frac{2}{6}$.",
++          "modalite": "individuel"
++        },
++        {
++          "duree": 15,
++          "nom": "Débat et institutionnalisation",
++          "contenu": "Confronter les réponses puis conclure.",
++          "commentaire": "",
++          "modalite": "collectif"
++        },
++        {
++          "duree": 15,
++          "nom": "Entraînement",
++          "contenu": "Calculer $\\frac{3}{4}+\\frac{1}{8}$ et $\\frac{5}{6}-\\frac{1}{3}$.",
++          "commentaire": "",
++          "modalite": "individuel"
++        }
++      ],
++      "activite": "Léa mange $\\frac{1}{2}$ d’une pizza et Tom $\\frac{1}{4}$ de la même pizza. Quelle fraction ont-ils mangée ?",
++      "trace_ecrite": "Pour additionner deux fractions, on les écrit avec le même dénominateur puis on additionne les numérateurs.\n$$\\frac{1}{2}+\\frac{1}{4}=\\frac{2}{4}+\\frac{1}{4}=\\frac{3}{4}$$",
++      "difficultes": "Addition des numérateurs et des dénominateurs : $\\frac{1}{2}+\\frac{1}{4}=\\frac{2}{6}$.",
++      "competences": [
++        "Modéliser",
++        "Calculer",
++        "Raisonner"
++      ],
++      "travail_personnel": "Exercice 12 page 45."
++    },
++    {
++      "numero": 3,
++      "titre": "Entraînement et problèmes",
++      "type": "apprentissage",
++      "duree": 55,
++      "objectifs": "Consolider l’addition et la soustraction de fractions.",
++      "phases": [
++        {
++          "duree": 10,
++          "nom": "Questions flash",
++          "contenu": "Série de calculs de fractions.",
++          "commentaire": "",
++          "modalite": "individuel"
++        },
++        {
++          "duree": 35,
++          "nom": "Ateliers différenciés",
++          "contenu": "Trois niveaux d’exercices en autonomie.",
++          "commentaire": "Circuler, aider les groupes de besoin.",
++          "modalite": "groupe"
++        },
++        {
++          "duree": 10,
++          "nom": "Correction",
++          "contenu": "Correction des exercices clés.",
++          "commentaire": "",
++          "modalite": "collectif"
++        }
++      ],
++      "entrainement": "Ateliers à trois niveaux.",
++      "competences": [
++        "Calculer",
++        "Raisonner"
++      ]
++    },
++    {
++      "numero": 4,
++      "titre": "Évaluation : fractions",
++      "type": "evaluation",
++      "duree": 55,
++      "objectifs": "Évaluer les capacités de la séquence.",
++      "phases": [
++        {
++          "duree": 5,
++          "nom": "Consignes",
++          "contenu": "Distribution et rappel du barème.",
++          "commentaire": "",
++          "modalite": "collectif"
++        },
++        {
++          "duree": 45,
++          "nom": "Évaluation écrite",
++          "contenu": "Quatre exercices individuels.",
++          "commentaire": "",
++          "modalite": "individuel"
++        },
++        {
++          "duree": 5,
++          "nom": "Ramassage",
++          "contenu": "",
++          "commentaire": "",
++          "modalite": "collectif"
++        }
++      ],
++      "evaluation": "Barème sur 20 : 4 exercices de 5 points.",
++      "competences": [
++        "Calculer",
++        "Raisonner",
++        "Communiquer"
++      ]
++    }
++  ]
++}
++```
++
++## 6. Prompt à copier dans NotebookLM
++
++Fichier : `docs/prompt-notebooklm.txt`. Complétez la rubrique « DEMANDE » (niveau, notion, nombre et durée des séances) avant de l'envoyer.
++
++```text
++Tu es un enseignant de mathématiques expérimenté (collège / lycée, France). À partir des sources de ce carnet NotebookLM, produis une séquence pédagogique COMPLÈTE sous la forme d'UN SEUL fichier JSON au format « createdocmath-ai-sequence » version 1.0, destiné à être importé dans l'application CreateDocMaths.
++
++DEMANDE (à compléter avant d'envoyer) :
++- Niveau : …
++- Notion ou chapitre : …
++- Nombre de séances : … (dont … séance(s) d'évaluation) ; durée de chaque séance : … minutes
++- Classe (facultatif) : …
++- Consignes particulières (facultatif) : …
++
++SOURCES ET RIGUEUR
++1. Appuie-toi d'abord sur les sources du carnet (programmes officiels, manuels, documents fournis).
++2. N'invente AUCUNE référence officielle : n'écris une référence de programme, un contenu ou une capacité attendue dans « reference_bo », « contenus_bo » ou « capacites_attendues » que s'ils figurent dans les sources. Sinon laisse la chaîne vide ("") ou la liste vide ([]).
++3. Distingue clairement trois catégories d'information :
++   a) ce qui est issu des sources : reprends-le fidèlement ;
++   b) tes propositions pédagogiques (activités, ordre des notions, durées) : tu peux les proposer librement ;
++   c) ce qui doit être vérifié par l'enseignant (point incertain, source manquante) : commence le texte concerné par « À VÉRIFIER : ».
++4. N'invente jamais une information pour remplir un champ : en cas de doute, laisse le champ vide.
++
++CONTENU ATTENDU
++- Une progression cohérente, qui respecte le programme du niveau demandé ; une problématique de séquence.
++- Pour CHAQUE séance : objectifs, pré-requis, phases minutées (la somme des durées des phases doit être égale à la durée de la séance), activités mathématiques pertinentes, consignes rédigées pour les élèves, corrections et éléments de réponse (dans « activite », après chaque question, sur une ligne commençant par « → Correction : »), trace écrite, difficultés et erreurs classiques anticipées, aides et différenciation, compétences travaillées (parmi : Chercher, Modéliser, Représenter, Calculer, Raisonner, Communiquer) avec une justification, critères de réussite (dans « evaluation »).
++- Pour chaque phase : durée en minutes, nom, description de l'activité des élèves (« contenu »), commentaire pour l'enseignant, modalité de travail.
++
++RÈGLES DU FICHIER (strictes)
++- Réponds par UN SEUL objet JSON syntaxiquement valide : guillemets doubles, aucune virgule finale, aucun commentaire.
++- AUCUN texte avant ou après le JSON, AUCUNE balise Markdown, AUCUN bloc de code (pas de ```).
++- Si tu peux créer un fichier téléchargeable, crée un fichier « sequence.json » contenant uniquement ce JSON ; sinon affiche uniquement le JSON brut.
++- Retour à la ligne dans une chaîne : \n. Guillemet dans une chaîne : \".
++- Formules mathématiques : LaTeX entre dollars, et CHAQUE barre oblique inverse doit être DOUBLÉE dans le JSON. Exemple : "$\\frac{1}{2}+\\sqrt{x^2}$". Formule centrée : "$$\\frac{a}{b}$$".
++- Mise en forme autorisée dans les textes : **gras**, __souligné__, une puce par ligne commençant par "- ", un sous-titre sur une ligne commençant par "## ". Aucun HTML.
++- « type » : "apprentissage" ou "evaluation". « modalite » : "individuel" ou "collectif" (travail en binôme ou en groupe : "individuel").
++- « date » : laisse "" sauf si l'enseignant en fournit (format AAAA-MM-JJ).
++- Les durées sont des nombres entiers de minutes. Les numéros de séance commencent à 1.
++- N'ajoute aucun champ autre que ceux du format. Un champ inconnu reste "" (texte) ou [] (liste).
++
++=== FORMAT JSON ===
++{
++  "format": "createdocmath-ai-sequence",
++  "version": "1.0",
++  "sequence": {
++    "titre": "« titre de la séquence »",
++    "niveau": "« 6e, 5e, 4e, 3e, 2de, 1re… »",
++    "classe": "",
++    "domaine": "« domaine du programme »",
++    "theme": "« thème »",
++    "problematique": "« question qui guide la séquence »",
++    "duree_previsionnelle": 0,
++    "objectifs_generaux": ["« objectif »"],
++    "prerequis": ["« pré-requis »"],
++    "reference_bo": "« référence exacte issue des sources, sinon vide »",
++    "contenus_bo": ["« contenu issu des sources »"],
++    "capacites_attendues": ["« capacité issue des sources »"],
++    "competences": ["Chercher", "Modéliser", "Représenter", "Calculer", "Raisonner", "Communiquer"],
++    "cadre_general": "« organisation générale de la séquence »",
++    "progression": "« enchaînement des séances »",
++    "recommandations": "« conseils, différenciation »"
++  },
++  "seances": [
++    {
++      "numero": 1,
++      "titre": "« titre de la séance »",
++      "type": "apprentissage",
++      "duree": 55,
++      "date": "",
++      "objectifs": "« objectifs de la séance »",
++      "prerequis": "« pré-requis de la séance »",
++      "prerequis_tice": "« calculatrice, tableur, GeoGebra… »",
++      "phases": [
++        {
++          "duree": 10,
++          "nom": "« nom de la phase »",
++          "contenu": "« activité des élèves »",
++          "commentaire": "« commentaire pour l'enseignant »",
++          "modalite": "individuel",
++          "support": "« diaporama, fiche… »",
++          "materiel": "« matériel »"
++        }
++      ],
++      "objectifs_fin": "« ce que les élèves doivent savoir faire à la fin »",
++      "travail_personnel": "« travail donné à la maison »",
++      "activite_titre": "« titre de l'activité »",
++      "activite": "« énoncé, questions, puis → Correction : … »",
++      "trace_ecrite": "« cours / bilan à retenir »",
++      "difficultes": "« erreurs classiques anticipées »",
++      "aides": "« aides et différenciation »",
++      "competences": ["Chercher", "Calculer"],
++      "competences_justification": "« pourquoi ces compétences »",
++      "evaluation": "« critères de réussite »",
++      "bilan": "",
++      "introduction": "« résumé de l'introduction »",
++      "moment_cours": "« résumé du moment de cours »",
++      "entrainement": "« résumé de l'entraînement »",
++      "remarque_pedagogique": "« point de vigilance »"
++    }
++  ]
++}
++=== FIN DU FORMAT ===
++
++Produis maintenant le JSON complet de la séquence demandée, avec TOUTES les séances, en respectant exactement ce format.
++```
++
++Conseils : demandez la séquence **par lots** (2 à 3 séances à la fois) si l'IA tronque sa réponse, puis fusionnez les listes `seances` (renumérotées à l'import) ; relisez systématiquement les mentions « À VÉRIFIER » et les références au programme.
++
++## 7. Compatibilité des versions
++
++- La version du format est indépendante de la version de l'application et du schéma de données (IndexedDB v2).
++- **1.0** : version actuelle. Toute évolution **1.x** n'ajoutera que des champs facultatifs : un fichier 1.x plus récent reste importable, ses champs inconnus étant ignorés et signalés. Un changement incompatible portera le numéro **2.0** : un tel fichier est refusé avec un message clair par les versions qui ne le connaissent pas.
++- Les fichiers JSON natifs (`seqs` / `seances`) et les anciennes sauvegardes continuent d'être acceptés par le flux d'import existant, inchangé.
++
++## 8. Limites connues
++
++- Les images ne sont pas importées (le format ne les prévoit pas) ; ajoutez-les ensuite dans l'éditeur.
++- Les compétences de la séquence ne sont pas importées en tant que telles (elles se déduisent des compétences cochées dans les séances).
++- Le contenu produit par l'IA peut contenir des erreurs mathématiques ou des références inexactes : **relisez et corrigez** avant utilisation en classe.
++- Les formules sont conservées en LaTeX ; une barre oblique mal doublée est réparée dans les cas courants seulement (`\f`, `\b`, `\t…`, `\r…`), d'où la consigne du prompt. Un `\u` isolé rend le JSON invalide : demandez à l'IA de régénérer le fichier.
++- Un fichier est limité à 5 Mo et 60 séances.
++- NotebookLM ne garantit pas toujours un fichier téléchargeable : copiez alors le JSON brut dans un fichier `.json`.
++
++## 9. Tests
++
++`node tests/run.js import` exécute les tests de cette fonctionnalité (1, 5 et 10 séances, phases, compétences, activités / traces, formules, champs absents, données incorrectes, JSON mal formé, format inconnu, doublon, identifiants, association séquence / séances, enregistrement IndexedDB et retour arrière, conservation des données existantes, sécurité, fiches, Word et PDF après import, cohérence de cette documentation).
+diff -ruN '--exclude=node_modules' '--exclude=vendor' '--exclude=*.png' '--exclude=*.zip' orig/CreateDocMath-main/docs/exemple-sequence-ia.json z/CreateDocMath-main/docs/exemple-sequence-ia.json
+--- a/docs/exemple-sequence-ia.json	1970-01-01 00:00:00.000000000 +0000
++++ b/docs/exemple-sequence-ia.json	2026-11-02 12:31:55.104559210 +0000
+@@ -0,0 +1,231 @@
++{
++  "format": "createdocmath-ai-sequence",
++  "version": "1.0",
++  "sequence": {
++    "titre": "Additionner et soustraire des fractions",
++    "niveau": "5e",
++    "classe": "5A",
++    "domaine": "Nombres et calculs",
++    "theme": "Fractions",
++    "problematique": "Comment additionner deux quantités exprimées avec des fractions de dénominateurs différents ?",
++    "duree_previsionnelle": 220,
++    "objectifs_generaux": [
++      "Comprendre qu’une fraction est un nombre et la placer sur une droite graduée",
++      "Reconnaître et produire des fractions égales",
++      "Additionner et soustraire des fractions dont les dénominateurs sont multiples l’un de l’autre"
++    ],
++    "prerequis": [
++      "Connaître les tables de multiplication",
++      "Savoir lire une fraction simple (demi, tiers, quart)"
++    ],
++    "reference_bo": "Programme de mathématiques du cycle 4 (annexe 2)",
++    "contenus_bo": [
++      "Additionner et soustraire des fractions de dénominateurs quelconques",
++      "Comparer des fractions"
++    ],
++    "capacites_attendues": [
++      "Il additionne ou soustrait des fractions dont les dénominateurs sont égaux ou multiples l’un de l’autre",
++      "Il reconnaît et produit des fractions égales"
++    ],
++    "competences": [
++      "Chercher",
++      "Représenter",
++      "Calculer",
++      "Raisonner",
++      "Communiquer"
++    ],
++    "cadre_general": "Séquence de quatre séances : une activité de découverte, un cours, un temps d’entraînement et une évaluation.",
++    "progression": "S1 sens de la fraction et fractions égales ; S2 addition à dénominateur multiple ; S3 entraînement et problèmes ; S4 évaluation.",
++    "recommandations": "Prévoir des bandes de papier à plier pour les élèves en difficulté."
++  },
++  "seances": [
++    {
++      "numero": 1,
++      "titre": "Partager une unité : fractions égales",
++      "type": "apprentissage",
++      "duree": 55,
++      "date": "2026-11-09",
++      "objectifs": "Reconnaître que $\\frac{1}{2}=\\frac{2}{4}$ et produire des fractions égales.",
++      "prerequis": [
++        "Lire une fraction simple",
++        "Tables de multiplication"
++      ],
++      "prerequis_tice": "Aucun.",
++      "phases": [
++        {
++          "duree": 10,
++          "nom": "Questions flash",
++          "contenu": "Calculer mentalement $3\\times 4$, $12\\div 3$, la moitié de 18.",
++          "commentaire": "Rituel de mise au travail.",
++          "modalite": "individuel",
++          "support": "Diaporama",
++          "materiel": "ardoises"
++        },
++        {
++          "duree": 20,
++          "nom": "Recherche : plier des bandes",
++          "contenu": "Plier une bande en 2, en 4 puis en 8 et colorier la même longueur.",
++          "commentaire": "Observer les procédures, repérer les erreurs de partage.",
++          "modalite": "binome"
++        },
++        {
++          "duree": 15,
++          "nom": "Mise en commun",
++          "contenu": "Faire verbaliser : « $\\frac{1}{2}$ et $\\frac{4}{8}$ représentent la même part ».",
++          "commentaire": "Institutionnaliser le vocabulaire.",
++          "modalite": "collectif"
++        },
++        {
++          "duree": 10,
++          "nom": "Trace écrite",
++          "contenu": "Copier le cours et traiter deux exemples.",
++          "commentaire": "",
++          "modalite": "individuel"
++        }
++      ],
++      "objectifs_fin": "Chaque élève sait écrire deux fractions égales à $\\frac{3}{4}$.",
++      "travail_personnel": "Exercices 5 et 6 page 42 pour jeudi.",
++      "activite_titre": "Activité : les bandes de papier",
++      "activite": "Voici trois bandes de même longueur.\n\n1. Plier la première en 2 parts égales : quelle fraction représente une part ?\n2. Plier la deuxième en 4 parts égales.\n3. Que remarques-tu pour $\\frac{1}{2}$ et $\\frac{2}{4}$ ?",
++      "trace_ecrite": "## Fractions égales\nPour tout nombre $k$ non nul : $$\\frac{a}{b}=\\frac{a\\times k}{b\\times k}$$\nExemple : $\\frac{1}{2}=\\frac{3}{6}$.",
++      "difficultes": [
++        "Confusion entre numérateur et dénominateur",
++        "Partages non égaux lors du pliage"
++      ],
++      "aides": [
++        "Bandes déjà graduées",
++        "Fiche d’aide avec les tables"
++      ],
++      "competences": [
++        "Chercher",
++        "Représenter",
++        "Communiquer"
++      ],
++      "competences_justification": "Les élèves manipulent, représentent puis expliquent leur démarche.",
++      "evaluation": "Critère : produit au moins deux fractions égales correctes.",
++      "bilan": "À compléter après la séance.",
++      "introduction": "Pliage de bandes de papier.",
++      "moment_cours": "Définition des fractions égales (10 min).",
++      "entrainement": "Deux exemples guidés.",
++      "remarque_pedagogique": "Ne pas écrire de règle avant la manipulation."
++    },
++    {
++      "numero": 2,
++      "titre": "Additionner avec un dénominateur multiple",
++      "type": "apprentissage",
++      "duree": 55,
++      "objectifs": "Additionner $\\frac{1}{2}+\\frac{1}{4}$ en se ramenant au même dénominateur.",
++      "prerequis": "Fractions égales (séance 1).",
++      "phases": [
++        {
++          "duree": 8,
++          "nom": "Rituel",
++          "contenu": "Écrire de tête des fractions égales.",
++          "commentaire": "",
++          "modalite": "individuel"
++        },
++        {
++          "duree": 17,
++          "nom": "Problème : la pizza",
++          "contenu": "Léa mange $\\frac{1}{2}$ d’une pizza et Tom $\\frac{1}{4}$. Quelle part ont-ils mangée à eux deux ?",
++          "commentaire": "Laisser émerger l’erreur $\\frac{2}{6}$.",
++          "modalite": "individuel"
++        },
++        {
++          "duree": 15,
++          "nom": "Débat et institutionnalisation",
++          "contenu": "Confronter les réponses puis conclure.",
++          "commentaire": "",
++          "modalite": "collectif"
++        },
++        {
++          "duree": 15,
++          "nom": "Entraînement",
++          "contenu": "Calculer $\\frac{3}{4}+\\frac{1}{8}$ et $\\frac{5}{6}-\\frac{1}{3}$.",
++          "commentaire": "",
++          "modalite": "individuel"
++        }
++      ],
++      "activite": "Léa mange $\\frac{1}{2}$ d’une pizza et Tom $\\frac{1}{4}$ de la même pizza. Quelle fraction ont-ils mangée ?",
++      "trace_ecrite": "Pour additionner deux fractions, on les écrit avec le même dénominateur puis on additionne les numérateurs.\n$$\\frac{1}{2}+\\frac{1}{4}=\\frac{2}{4}+\\frac{1}{4}=\\frac{3}{4}$$",
++      "difficultes": "Addition des numérateurs et des dénominateurs : $\\frac{1}{2}+\\frac{1}{4}=\\frac{2}{6}$.",
++      "competences": [
++        "Modéliser",
++        "Calculer",
++        "Raisonner"
++      ],
++      "travail_personnel": "Exercice 12 page 45."
++    },
++    {
++      "numero": 3,
++      "titre": "Entraînement et problèmes",
++      "type": "apprentissage",
++      "duree": 55,
++      "objectifs": "Consolider l’addition et la soustraction de fractions.",
++      "phases": [
++        {
++          "duree": 10,
++          "nom": "Questions flash",
++          "contenu": "Série de calculs de fractions.",
++          "commentaire": "",
++          "modalite": "individuel"
++        },
++        {
++          "duree": 35,
++          "nom": "Ateliers différenciés",
++          "contenu": "Trois niveaux d’exercices en autonomie.",
++          "commentaire": "Circuler, aider les groupes de besoin.",
++          "modalite": "groupe"
++        },
++        {
++          "duree": 10,
++          "nom": "Correction",
++          "contenu": "Correction des exercices clés.",
++          "commentaire": "",
++          "modalite": "collectif"
++        }
++      ],
++      "entrainement": "Ateliers à trois niveaux.",
++      "competences": [
++        "Calculer",
++        "Raisonner"
++      ]
++    },
++    {
++      "numero": 4,
++      "titre": "Évaluation : fractions",
++      "type": "evaluation",
++      "duree": 55,
++      "objectifs": "Évaluer les capacités de la séquence.",
++      "phases": [
++        {
++          "duree": 5,
++          "nom": "Consignes",
++          "contenu": "Distribution et rappel du barème.",
++          "commentaire": "",
++          "modalite": "collectif"
++        },
++        {
++          "duree": 45,
++          "nom": "Évaluation écrite",
++          "contenu": "Quatre exercices individuels.",
++          "commentaire": "",
++          "modalite": "individuel"
++        },
++        {
++          "duree": 5,
++          "nom": "Ramassage",
++          "contenu": "",
++          "commentaire": "",
++          "modalite": "collectif"
++        }
++      ],
++      "evaluation": "Barème sur 20 : 4 exercices de 5 points.",
++      "competences": [
++        "Calculer",
++        "Raisonner",
++        "Communiquer"
++      ]
++    }
++  ]
++}
+diff -ruN '--exclude=node_modules' '--exclude=vendor' '--exclude=*.png' '--exclude=*.zip' orig/CreateDocMath-main/docs/prompt-notebooklm.txt z/CreateDocMath-main/docs/prompt-notebooklm.txt
+--- a/docs/prompt-notebooklm.txt	1970-01-01 00:00:00.000000000 +0000
++++ b/docs/prompt-notebooklm.txt	2026-11-02 12:34:15.340973047 +0000
+@@ -0,0 +1,99 @@
++Tu es un enseignant de mathématiques expérimenté (collège / lycée, France). À partir des sources de ce carnet NotebookLM, produis une séquence pédagogique COMPLÈTE sous la forme d'UN SEUL fichier JSON au format « createdocmath-ai-sequence » version 1.0, destiné à être importé dans l'application CreateDocMaths.
++
++DEMANDE (à compléter avant d'envoyer) :
++- Niveau : …
++- Notion ou chapitre : …
++- Nombre de séances : … (dont … séance(s) d'évaluation) ; durée de chaque séance : … minutes
++- Classe (facultatif) : …
++- Consignes particulières (facultatif) : …
++
++SOURCES ET RIGUEUR
++1. Appuie-toi d'abord sur les sources du carnet (programmes officiels, manuels, documents fournis).
++2. N'invente AUCUNE référence officielle : n'écris une référence de programme, un contenu ou une capacité attendue dans « reference_bo », « contenus_bo » ou « capacites_attendues » que s'ils figurent dans les sources. Sinon laisse la chaîne vide ("") ou la liste vide ([]).
++3. Distingue clairement trois catégories d'information :
++   a) ce qui est issu des sources : reprends-le fidèlement ;
++   b) tes propositions pédagogiques (activités, ordre des notions, durées) : tu peux les proposer librement ;
++   c) ce qui doit être vérifié par l'enseignant (point incertain, source manquante) : commence le texte concerné par « À VÉRIFIER : ».
++4. N'invente jamais une information pour remplir un champ : en cas de doute, laisse le champ vide.
++
++CONTENU ATTENDU
++- Une progression cohérente, qui respecte le programme du niveau demandé ; une problématique de séquence.
++- Pour CHAQUE séance : objectifs, pré-requis, phases minutées (la somme des durées des phases doit être égale à la durée de la séance), activités mathématiques pertinentes, consignes rédigées pour les élèves, corrections et éléments de réponse (dans « activite », après chaque question, sur une ligne commençant par « → Correction : »), trace écrite, difficultés et erreurs classiques anticipées, aides et différenciation, compétences travaillées (parmi : Chercher, Modéliser, Représenter, Calculer, Raisonner, Communiquer) avec une justification, critères de réussite (dans « evaluation »).
++- Pour chaque phase : durée en minutes, nom, description de l'activité des élèves (« contenu »), commentaire pour l'enseignant, modalité de travail.
++
++RÈGLES DU FICHIER (strictes)
++- Réponds par UN SEUL objet JSON syntaxiquement valide : guillemets doubles, aucune virgule finale, aucun commentaire.
++- AUCUN texte avant ou après le JSON, AUCUNE balise Markdown, AUCUN bloc de code (pas de ```).
++- Si tu peux créer un fichier téléchargeable, crée un fichier « sequence.json » contenant uniquement ce JSON ; sinon affiche uniquement le JSON brut.
++- Retour à la ligne dans une chaîne : \n. Guillemet dans une chaîne : \".
++- Formules mathématiques : LaTeX entre dollars, et CHAQUE barre oblique inverse doit être DOUBLÉE dans le JSON. Exemple : "$\\frac{1}{2}+\\sqrt{x^2}$". Formule centrée : "$$\\frac{a}{b}$$".
++- Mise en forme autorisée dans les textes : **gras**, __souligné__, une puce par ligne commençant par "- ", un sous-titre sur une ligne commençant par "## ". Aucun HTML.
++- « type » : "apprentissage" ou "evaluation". « modalite » : "individuel" ou "collectif" (travail en binôme ou en groupe : "individuel").
++- « date » : laisse "" sauf si l'enseignant en fournit (format AAAA-MM-JJ).
++- Les durées sont des nombres entiers de minutes. Les numéros de séance commencent à 1.
++- N'ajoute aucun champ autre que ceux du format. Un champ inconnu reste "" (texte) ou [] (liste).
++
++=== FORMAT JSON ===
++{
++  "format": "createdocmath-ai-sequence",
++  "version": "1.0",
++  "sequence": {
++    "titre": "« titre de la séquence »",
++    "niveau": "« 6e, 5e, 4e, 3e, 2de, 1re… »",
++    "classe": "",
++    "domaine": "« domaine du programme »",
++    "theme": "« thème »",
++    "problematique": "« question qui guide la séquence »",
++    "duree_previsionnelle": 0,
++    "objectifs_generaux": ["« objectif »"],
++    "prerequis": ["« pré-requis »"],
++    "reference_bo": "« référence exacte issue des sources, sinon vide »",
++    "contenus_bo": ["« contenu issu des sources »"],
++    "capacites_attendues": ["« capacité issue des sources »"],
++    "competences": ["Chercher", "Modéliser", "Représenter", "Calculer", "Raisonner", "Communiquer"],
++    "cadre_general": "« organisation générale de la séquence »",
++    "progression": "« enchaînement des séances »",
++    "recommandations": "« conseils, différenciation »"
++  },
++  "seances": [
++    {
++      "numero": 1,
++      "titre": "« titre de la séance »",
++      "type": "apprentissage",
++      "duree": 55,
++      "date": "",
++      "objectifs": "« objectifs de la séance »",
++      "prerequis": "« pré-requis de la séance »",
++      "prerequis_tice": "« calculatrice, tableur, GeoGebra… »",
++      "phases": [
++        {
++          "duree": 10,
++          "nom": "« nom de la phase »",
++          "contenu": "« activité des élèves »",
++          "commentaire": "« commentaire pour l'enseignant »",
++          "modalite": "individuel",
++          "support": "« diaporama, fiche… »",
++          "materiel": "« matériel »"
++        }
++      ],
++      "objectifs_fin": "« ce que les élèves doivent savoir faire à la fin »",
++      "travail_personnel": "« travail donné à la maison »",
++      "activite_titre": "« titre de l'activité »",
++      "activite": "« énoncé, questions, puis → Correction : … »",
++      "trace_ecrite": "« cours / bilan à retenir »",
++      "difficultes": "« erreurs classiques anticipées »",
++      "aides": "« aides et différenciation »",
++      "competences": ["Chercher", "Calculer"],
++      "competences_justification": "« pourquoi ces compétences »",
++      "evaluation": "« critères de réussite »",
++      "bilan": "",
++      "introduction": "« résumé de l'introduction »",
++      "moment_cours": "« résumé du moment de cours »",
++      "entrainement": "« résumé de l'entraînement »",
++      "remarque_pedagogique": "« point de vigilance »"
++    }
++  ]
++}
++=== FIN DU FORMAT ===
++
++Produis maintenant le JSON complet de la séquence demandée, avec TOUTES les séances, en respectant exactement ce format.
+diff -ruN '--exclude=node_modules' '--exclude=vendor' '--exclude=*.png' '--exclude=*.zip' orig/CreateDocMath-main/index.html z/CreateDocMath-main/index.html
+--- a/index.html	2026-10-27 18:03:34.000000000 +0000
++++ b/index.html	2026-11-02 12:35:22.379147661 +0000
+@@ -119,7 +119,7 @@
+ #boot{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--ink)}#boot[hidden]{display:none}
+ .mdl{position:fixed;inset:0;z-index:90;background:#000b;display:flex;align-items:center;justify-content:center;padding:12px}
+ .mdb{background:#fff;color:#1f2a37;border-radius:8px;max-width:680px;width:100%;max-height:92vh;overflow:auto;padding:16px 18px;box-shadow:0 8px 30px #0008}
+-.mdb h3{margin:0 0 8px;color:var(--nv)}.mda{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
++.aip p{white-space:pre-line}.aip .ai-w{color:#8a5a00}.aip ul,.aip ol{margin:4px 0 6px 18px;padding:0}.aip details{margin:4px 0;padding:0 8px}.aip summary{padding:6px 0;font-size:13px}.aip details[open]>summary{margin-bottom:4px}.mdb h3{margin:0 0 8px;color:var(--nv)}.mda{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+ .mdb .btn{padding:8px 14px;font-size:14px}.mdb .btn.pri{background:var(--acc);color:#fff;border-color:var(--acc)}.mdb .btn.dng{background:var(--warn);color:#fff;border-color:var(--warn)}
+ .mdb table{border-collapse:collapse;width:100%;font-size:13px}.mdb td,.mdb th{border:1px solid var(--line);padding:3px 6px;text-align:left;vertical-align:top}
+ .mdb input{margin-top:6px}.mdb :focus-visible,#side :focus-visible,#vt :focus-visible{outline:2px solid #4fb3c8;outline-offset:2px}
+@@ -201,7 +201,7 @@
+ <header id="mbar" role="toolbar" aria-label="Menu principal">
+  <button class="mb dsk ic" data-a="vside" title="Afficher / masquer la liste des fiches" aria-label="Afficher ou masquer la liste des fiches">☰</button>
+  <div class="mm"><button class="mb" data-menu="f" aria-haspopup="true" aria-expanded="false">Fichier ▾</button><div class="mp" role="menu" hidden>
+-  <button role="menuitem" data-a="imp">📂 Importer (sauvegarde .zip ou .json)…</button><button role="menuitem" data-a="exp">💾 Exporter une sauvegarde (.zip)</button>
++  <button role="menuitem" data-a="imp">📂 Importer (sauvegarde .zip ou .json)…</button><button role="menuitem" data-a="aiimp" title="Fichier .json produit par NotebookLM / Gemini : aperçu puis création d’une nouvelle séquence">🤖 Importer une séquence depuis une IA (.json)…</button><button role="menuitem" data-a="exp">💾 Exporter une sauvegarde (.zip)</button>
+   <hr><button role="menuitem" data-a="exps" title="Une seule séance, à partager avec un collègue">📤 Partager cette séance (.json)</button><button role="menuitem" data-a="expq" title="Fichier à partager avec un collègue">📤 Partager cette séquence (.json)</button>
+   <hr><button role="menuitem" data-a="bank">📚 Banque d’exercices…</button><button role="menuitem" data-a="stor" title="État du stockage, sauvegardes, import, copies de sécurité">🛟 Stockage et sauvegardes…</button>
+   <hr class="msm"><button class="msm" role="menuitem" data-a="docx">📝 Exporter en Word</button><button class="msm" role="menuitem" data-a="print">🖨️ Imprimer / enregistrer en PDF</button><button class="msm" role="menuitem" data-a="hundo">↶ Annuler</button><button class="msm" role="menuitem" data-a="hredo">↷ Rétablir</button><button class="msm" role="menuitem" data-a="dark">🌙 Mode sombre</button><button class="msm" role="menuitem" data-a="help">? Raccourcis et aide</button><hr class="msm">
+@@ -231,7 +231,7 @@
+   <div id="list"></div>
+   <details id="dbil"><summary>Compétences de la séquence</summary><div id="bil"></div></details>
+   <details id="dchk"><summary id="chks">Contrôle de la fiche</summary><div id="chk"></div></details>
+-  <input type="file" id="impf" accept=".json,.zip" hidden>
++  <input type="file" id="impf" accept=".json,.zip" hidden><input type="file" id="aif" accept=".json,application/json" hidden>
+   <div id="gauge"></div><div id="st" role="status" aria-live="polite"></div>
+ </div>
+ <div id="formw"><div id="kb"></div><div id="form"></div></div>
+@@ -543,6 +543,154 @@
+  await stFlush();let D=[];try{D=STORE==='idb'?await stVerify():[]}catch(e){D=[errMsg(e)]}
+  await info('Rapport d’import',rep+(W.length?'<p>'+W.length+' avertissement(s).</p>':'')+(STORE==='idb'?(D.length?'<p style="color:#b3261e">⚠ Vérification en base : '+esc(D[0])+'</p>':'<p>✓ Vérification : les données enregistrées correspondent au contenu importé.</p>'):''));return true}
+ 
++/* ---------- import d’une séquence produite par une IA (NotebookLM / Gemini) : format « createdocmath-ai-sequence » ----------
++   Adaptateur pur (aiConvert : aucune écriture dans db), aperçu, puis ajout atomique d’une NOUVELLE séquence.
++   Le JSON s’adapte à l’application (champs existants), jamais l’inverse. Toutes les valeurs sont traitées comme du texte non fiable. */
++const AI_FORMAT='createdocmath-ai-sequence',AI_MAX={bytes:5e6,seances:60,phases:30,text:20000,list:200};
++const AI_KEYS={
++ q:['titre','niveau','classe','domaine','theme','problematique','duree_previsionnelle','objectifs_generaux','prerequis','reference_bo','contenus_bo','capacites_attendues','competences','cadre_general','progression','recommandations'],
++ s:['numero','titre','type','duree','date','objectifs','prerequis','prerequis_tice','phases','objectifs_fin','travail_personnel','activite_titre','activite','trace_ecrite','difficultes','aides','competences','competences_justification','evaluation','bilan','introduction','moment_cours','entrainement','remarque_pedagogique'],
++ p:['duree','nom','contenu','commentaire','modalite','modalites','support','materiel']};
++const aiPlain=v=>v&&typeof v==='object'&&!Array.isArray(v);
++/* Réparation prudente des barres obliques inverses non doublées dans le JSON (\frac → saut de page + « rac », \times → tabulation + « imes »…) */
++function aiFix(s,R){let n=0;const c=()=>{n++;return};
++ const r=s.replace(/\f(?=[a-zA-Z])/g,()=>{c();return'\\f'}).replace(/\x08(?=[a-zA-Z])/g,()=>{c();return'\\b'})
++  .replace(/\t(?=(?:imes|heta|ext|an|au|riangle|op|o|frac)(?![a-zA-Z]))/g,()=>{c();return'\\t'}).replace(/\r(?=(?:ightarrow|ight|ho|m|angle)(?![a-zA-Z]))/g,()=>{c();return'\\r'});
++ if(n&&R)R.fix+=n;return r}
++function aiTxt(v,R,where,bul){if(v==null)return'';
++ if(Array.isArray(v)){const L=v.slice(0,AI_MAX.list).map(x=>typeof x==='string'||typeof x==='number'?String(x).trim():'').filter(Boolean);
++  if(L.length<v.length)R.W.push(where+' : des éléments vides ou non textuels ont été ignorés');
++  v=L.length>1||(bul&&L.length)?L.map(x=>'- '+aiFix(x,R).replace(/^[-•]\s+/,'')).join('\n'):(L[0]?aiFix(L[0],R):'')}
++ else if(typeof v==='number'||typeof v==='boolean')v=String(v);
++ else if(typeof v!=='string'){R.W.push(where+' : valeur ignorée (du texte était attendu)');return''}
++ else v=aiFix(v,R);
++ v=v.replace(/\r\n?/g,'\n').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u2028\u2029]/g,'').replace(/\n{4,}/g,'\n\n\n').trim();
++ if(v.length>AI_MAX.text){v=v.slice(0,AI_MAX.text);R.W.push(where+' : texte tronqué à '+AI_MAX.text+' caractères')}return v}
++function aiNum(v){if(v===''||v==null||typeof v==='boolean')return null;const n=typeof v==='number'?v:parseFloat(String(v).replace(',','.'));return Number.isFinite(n)?n:NaN}
++function aiMode(v){const x=norm(String(v||'')).replace(/[^a-z ]/g,' ').trim();if(!x)return null;
++ if(/individuel|binome|groupe|autonom|actif|eleve|pair|equipe|recherche|atelier|petits/.test(x))return'a';if(/collectif|plenier|magistral|classe|enseignant|cours|oral/.test(x))return'c';return undefined}
++/* Convertit le JSON IA en {q,ss,R}. R = {E:erreurs bloquantes, W:avertissements, I:champs non importés, M:regroupements, fix} */
++function aiConvert(d){const R={E:[],W:[],I:[],M:[],fix:0},out={q:null,ss:[],R};
++ if(!aiPlain(d)||d.format!==AI_FORMAT){R.E.push('format inconnu : « '+AI_FORMAT+' » attendu');return out}
++ const vs=d.version==null?'1.0':String(d.version),mj=parseInt(vs,10);
++ if(d.version==null)R.W.push('version absente : version 1.0 supposée');
++ else if(mj!==1)R.E.push('version « '+vs+' » non prise en charge (version 1.x attendue)');
++ else if(!/^1(\.0+)?$/.test(vs))R.W.push('version « '+vs+' » plus récente que la 1.0 : les champs inconnus seront ignorés');
++ const sq=d.sequence;if(!aiPlain(sq))R.E.push('la rubrique « sequence » est absente');
++ if(!Array.isArray(d.seances)||!d.seances.length)R.E.push('aucune séance dans le fichier (rubrique « seances »)');
++ else if(d.seances.length>AI_MAX.seances)R.E.push('trop de séances ('+d.seances.length+') : '+AI_MAX.seances+' au maximum');
++ Object.keys(d).forEach(k=>{if(!['format','version','sequence','seances'].includes(k))R.I.push('Champ inconnu « '+k+' » (ignoré)')});
++ if(R.E.length)return out;
++ const T=(v,w,b)=>aiTxt(v,R,w,b),q={id:uid(),nom:'',niveau:'',classe:'',boRef:'',bo:'',capacites:'',cadre:'',reco:''};
++ q.nom=T(sq.titre,'Titre de la séquence').replace(/\n+/g,' ').slice(0,200);
++ if(!q.nom){R.E.push('la séquence n’a pas de titre');return out}
++ q.niveau=T(sq.niveau,'Niveau').replace(/\n+/g,' ').slice(0,40);q.classe=T(sq.classe,'Classe').replace(/\n+/g,' ').slice(0,40);
++ if(!q.niveau)R.W.push('niveau de la séquence non renseigné');
++ q.boRef=T(sq.reference_bo,'Référence du B.O.').replace(/\n+/g,' ').slice(0,300);
++ q.bo=T(sq.contenus_bo,'Contenus du B.O.',true);q.capacites=T(sq.capacites_attendues,'Capacités attendues',true);q.reco=T(sq.recommandations,'Recommandations');
++ /* informations de séquence sans champ propre : regroupées dans « Cadre général et progression » (aucun champ ajouté) */
++ const P=[],add=(h,t)=>{if(t)P.push(h?'## '+h+'\n'+t:t)},cg=T(sq.cadre_general,'Cadre général'),dom=T(sq.domaine,'Domaine'),the=T(sq.theme,'Thème'),pb=T(sq.problematique,'Problématique'),og=T(sq.objectifs_generaux,'Objectifs généraux',true),pr=T(sq.prerequis,'Pré-requis de la séquence',true),pg=T(sq.progression,'Progression');
++ add('',cg);
++ if(dom||the){add('Domaine et thème',[dom&&'Domaine : '+dom,the&&'Thème : '+the].filter(Boolean).map(x=>'- '+x).join('\n'));R.M.push('domaine / thème')}
++ if(pb){add('Problématique',pb);R.M.push('problématique')}
++ if(og){add('Objectifs généraux de la séquence',og);R.M.push('objectifs généraux')}
++ if(pr){add('Pré-requis de la séquence',pr);R.M.push('pré-requis de la séquence')}
++ if(pg){add('Progression',pg);R.M.push('progression')}
++ const dp=aiNum(sq.duree_previsionnelle);
++ if(dp!==null){if(Number.isNaN(dp)||dp<=0||dp>6000)R.W.push('durée prévisionnelle de la séquence invalide : ignorée');else{add('Durée prévisionnelle',Math.round(dp)+' min');R.M.push('durée prévisionnelle')}}
++ q.cadre=P.join('\n\n');
++ const ck=T(sq.competences,'Compétences de la séquence');if(ck)R.I.push('Compétences de la séquence : non importées telles quelles (le bilan des compétences est calculé à partir des séances)');
++ Object.keys(sq).forEach(k=>{if(!AI_KEYS.q.includes(k))R.I.push('Séquence : champ inconnu « '+k+' » (ignoré)')});
++ const raw=d.seances.map((x,i)=>[x,i]).filter(([x,i])=>{if(!aiPlain(x)){R.W.push('élément n°'+(i+1)+' de « seances » ignoré : objet attendu');return false}return true});
++ raw.forEach(([x,i])=>{const n=aiNum(x.numero);x.__n=Number.isFinite(n)&&n>0?n:1e9+i});
++ raw.sort((a,b)=>a[0].__n-b[0].__n||a[1]-b[1]);
++ const nm=new Map(COMP.map(c=>[norm(c),c])),lost=new Set();
++ raw.forEach(([x,i],k)=>{const no=k+1,W0=R.W.length,w=t=>R.W.push('Séance '+no+' : '+t);
++  const t=(v,l,b)=>aiTxt(v,R,'Séance '+no+' · '+l,b);
++  const s={id:uid(),seq:q.id,numero:no,nom:'',date:'',duree:55,objectifs:'',prereq:'',tice:'',phases:[],objFin:'',travail:'',choixProbleme:'',imgs:[],difficultes:'',supp:'',comp:[],compTexte:'',choixTravail:'',
++   type:'',statut:'',activiteTitre:'',activite:'',trace:'',aides:'',evalBilan:'',introS:'',coursS:'',entrS:'',remLabel:'',rem:''};
++  if(Number.isFinite(aiNum(x.numero))&&aiNum(x.numero)!==no)w('le numéro « '+x.numero+' » a été remplacé par '+no+' (numéros uniques et consécutifs)');
++  else if(x.numero==null||!Number.isFinite(aiNum(x.numero)))w('numéro absent ou invalide : numéroté '+no+' dans l’ordre du fichier');
++  s.nom=t(x.titre,'Titre').replace(/\n+/g,' ').slice(0,200);if(!s.nom){s.nom='Séance '+no;w('titre absent : « Séance '+no+' » utilisé')}
++  const ty=norm(t(x.type,'Type'));if(ty){if(/eval|controle|devoir surveille|\bds\b|test|bilan/.test(ty))s.type='eval';else if(!/apprentissage|decouverte|cours|entrainement|exercice|probleme/.test(ty))w('type « '+x.type+' » inconnu : « apprentissage » utilisé')}
++  const dt=t(x.date,'Date');if(dt){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(dt),D=m&&new Date(+m[1],+m[2]-1,+m[3]);if(m&&D.getFullYear()===+m[1]&&D.getMonth()===+m[2]-1&&D.getDate()===+m[3])s.date=dt;else w('date « '+dt.slice(0,20)+' » invalide (AAAA-MM-JJ attendu) : ignorée')}
++  s.objectifs=t(x.objectifs,'Objectifs');s.prereq=t(x.prerequis,'Pré-requis',true);s.tice=t(x.prerequis_tice,'Pré-requis TICE');
++  s.objFin=t(x.objectifs_fin,'Objectifs de fin de séance');s.travail=t(x.travail_personnel,'Travail personnel');
++  s.activiteTitre=t(x.activite_titre,'Titre de l’activité').replace(/\n+/g,' ').slice(0,200);s.activite=t(x.activite,'Activité');s.trace=t(x.trace_ecrite,'Trace écrite');
++  s.difficultes=t(x.difficultes,'Difficultés',true);s.aides=t(x.aides,'Aides',true);s.compTexte=t(x.competences_justification,'Justification des compétences');
++  s.introS=t(x.introduction,'Introduction');s.coursS=t(x.moment_cours,'Moment de cours');s.entrS=t(x.entrainement,'Entraînement');s.rem=t(x.remarque_pedagogique,'Remarque pédagogique');
++  const ev=t(x.evaluation,'Évaluation'),bi=t(x.bilan,'Bilan');s.evalBilan=ev&&bi?'**Évaluation :** '+ev+'\n\n**Bilan :** '+bi:ev||bi;
++  const cl=Array.isArray(x.competences)?x.competences:(x.competences==null||x.competences===''?[]:[x.competences]);
++  cl.forEach(c=>{const k=nm.get(norm(String(c==null?'':c)).replace(/\s+/g,' ').trim());if(k){if(!s.comp.includes(k))s.comp.push(k)}else if(String(c||'').trim()){w('compétence « '+String(c).slice(0,40)+' » inconnue : non importée');lost.add(String(c).slice(0,40))}});
++  s.comp=COMP.filter(c=>s.comp.includes(c));
++  /* phases */
++  let ph=x.phases;if(ph!=null&&!Array.isArray(ph)){w('« phases » doit être une liste : ignorée');ph=[]}ph=(ph||[]);
++  if(ph.length>AI_MAX.phases){w('trop de phases ('+ph.length+') : seules les '+AI_MAX.phases+' premières sont importées');ph=ph.slice(0,AI_MAX.phases)}
++  ph.forEach((p,j)=>{if(!aiPlain(p)){w('phase '+(j+1)+' ignorée (objet attendu)');return}
++   const pt=(v,l)=>aiTxt(v,R,'Séance '+no+' · phase '+(j+1)+' · '+l),h={duree:0,nom:pt(p.nom,'nom').replace(/\n+/g,' ').slice(0,200),contenu:pt(p.contenu,'contenu'),comment:pt(p.commentaire,'commentaire'),mode:'a',support:'',modalites:''};
++   if(!h.nom&&!h.contenu&&!h.comment){w('phase '+(j+1)+' vide : ignorée');return}
++   if(!h.nom){h.nom='Phase '+(s.phases.length+1);w('phase '+(j+1)+' sans nom : « '+h.nom+' » utilisé')}
++   const n=aiNum(p.duree);if(n===null)w('phase « '+h.nom+' » sans durée : 0 min (à compléter)');else if(Number.isNaN(n)||n<0||n>600)w('phase « '+h.nom+' » : durée invalide, mise à 0 min (à compléter)');else h.duree=Math.round(n);
++   const raw=p.modalite!=null?p.modalite:p.modalites,mo=aiMode(pt(raw,'modalité'));
++   if(mo===undefined){w('phase « '+h.nom+' » : modalité « '+String(raw).slice(0,30)+' » inconnue, « élèves actifs » utilisé')}else if(mo)h.mode=mo;
++   h.modalites=pt(p.modalites!=null?p.modalites:p.modalite,'modalités').replace(/\n+/g,' ').slice(0,200);if(h.modalites&&p.modalites==null)h.modalites=h.modalites.charAt(0).toUpperCase()+h.modalites.slice(1);
++   h.support=[pt(p.support,'support'),pt(p.materiel,'matériel')].filter(Boolean).join(' ; ').replace(/\n+/g,' ').slice(0,300);
++   Object.keys(p).forEach(k=>{if(!AI_KEYS.p.includes(k))R.I.push('Séance '+no+' · phase '+(j+1)+' : champ inconnu « '+k+' » (ignoré)')});
++   s.phases.push(h)});
++  const sum=s.phases.reduce((a,p)=>a+p.duree,0),dn=aiNum(x.duree);
++  if(dn===null){if(sum>0){s.duree=sum;w('durée absente : somme des phases utilisée ('+sum+' min)')}else w('durée absente : 55 min par défaut')}
++  else if(Number.isNaN(dn)||dn<=0||dn>600){s.duree=sum>0?sum:55;w('durée invalide : '+s.duree+' min utilisées')}else s.duree=Math.round(dn);
++  if(s.phases.length&&sum!==s.duree&&dn!==null&&!Number.isNaN(dn))w('les phases totalisent '+sum+' min pour '+s.duree+' min de séance');
++  Object.keys(x).forEach(k=>{if(k!=='__n'&&!AI_KEYS.s.includes(k))R.I.push('Séance '+no+' : champ inconnu « '+k+' » (ignoré)')});delete x.__n;
++  s.__miss=[['objectifs','objectifs'],['prereq','pré-requis'],['activite','activité'],['trace','trace écrite'],['difficultes','difficultés']].filter(([k])=>!s[k]).map(a=>a[1]);if(!s.phases.length)s.__miss.unshift('phases');if(!s.comp.length)s.__miss.push('compétences');
++  out.ss.push(s)});
++ if(!out.ss.length){R.E.push('aucune séance exploitable dans le fichier');return out}
++ if(R.fix)R.W.push(R.fix+' formule(s) corrigée(s) : barre oblique inverse non doublée dans le JSON (vérifiez les formules)');
++ out.q=q;return out}
++/* données d’aperçu / durée totale ; les champs techniques __miss sont retirés avant l’enregistrement */
++const aiClean=s=>{const c={...s};delete c.__miss;return c};
++function aiPreviewHTML(r,dup){const q=r.q,R=r.R,ss=r.ss,tot=ss.reduce((a,s)=>a+(+s.duree||0),0),ul=(a,c)=>a.length?'<ul class="'+c+'">'+a.slice(0,12).map(x=>'<li>'+esc(x)+'</li>').join('')+(a.length>12?'<li>… et '+(a.length-12)+' autre(s)</li>':'')+'</ul>':'',
++ ex=(t,n)=>{t=(t||'').trim();return t.length>n?esc(t.slice(0,n))+'…':esc(t)};
++ let h='<div class="aip"><p><b>'+esc(q.nom)+'</b>'+(q.niveau?' · '+esc(q.niveau):'')+(q.classe?' · classe '+esc(q.classe):'')+'</p>'
++  +'<p><b>'+ss.length+'</b> séance(s) · <b>'+tot+'</b> min au total · '+ss.reduce((a,s)=>a+s.phases.length,0)+' phase(s)</p>';
++ if(dup)h+='<p class="ai-w">⚠ Une séquence « '+esc(q.nom)+' »'+(q.niveau?' ('+esc(q.niveau)+')':'')+' existe déjà. L’import créera une <b>nouvelle</b> séquence, sans toucher à l’existante.</p>';
++ if(R.M.length)h+='<p><small>Regroupés dans « Cadre général et progression » : '+esc(R.M.join(', '))+'.</small></p>';
++ if(R.W.length)h+='<p class="ai-w"><b>Avertissements ('+R.W.length+')</b></p>'+ul(R.W,'ai-w');
++ if(R.I.length)h+='<p><b>Non importé ('+R.I.length+')</b></p>'+ul(R.I,'');
++ h+=ss.map(s=>{const t=s.phases.reduce((a,p)=>a+p.duree,0);
++  return '<details><summary>S'+s.numero+' – '+esc(s.nom)+' <small>('+s.duree+' min · '+s.phases.length+' phase(s)'+(s.type==='eval'?' · évaluation':'')+')</small>'+(s.__miss.length?' <small class="ai-w">à compléter : '+esc(s.__miss.join(', '))+'</small>':'')+'</summary>'
++   +(s.objectifs?'<p><b>Objectifs :</b> '+ex(s.objectifs,300)+'</p>':'')+(s.prereq?'<p><b>Pré-requis :</b> '+ex(s.prereq,200)+'</p>':'')
++   +(s.phases.length?'<ol>'+s.phases.map(p=>'<li>'+p.duree+' min · '+esc(p.nom)+' <small>('+(p.mode==='c'?'collectif':'élèves actifs')+')</small></li>').join('')+'</ol>':'')
++   +(s.activite?'<p><b>Activité :</b> '+ex(s.activite,240)+'</p>':'')+(s.trace?'<p><b>Trace écrite :</b> '+ex(s.trace,240)+'</p>':'')+(s.difficultes?'<p><b>Difficultés :</b> '+ex(s.difficultes,200)+'</p>':'')
++   +(s.comp.length?'<p><b>Compétences :</b> '+esc(s.comp.join(', '))+'</p>':'')+'</details>'}).join('');
++ return h+'</div>'}
++/* ajout atomique : tout ou rien (retour arrière si l’enregistrement échoue) */
++async function aiCommit(r){const q=r.q,ss=r.ss.map(aiClean),cur0=db.cur,bv0=bv;
++ db.seqs.push(q);ss.forEach(s=>db.seances.push(s));db.cur=ss[0].id;bv='';OQ.set(q.id,true);
++ try{show();await stFlush();if(sv.err||sv.stale)throw sv.err||new Error('enregistrement refusé (modification dans un autre onglet)')}
++ catch(e){db.seqs=db.seqs.filter(x=>x.id!==q.id);db.seances=db.seances.filter(x=>x.seq!==q.id);db.cur=cur0;if(!S())db.cur=(db.seances[0]||{}).id||null;bv=bv0;sv.err=null;sv.stale=false;
++  try{if(!db.seqs.length)addSeq();show();await stFlush()}catch(x){}return{ok:false,err:e}}
++ let D=[];try{D=STORE==='idb'?await stVerify():[]}catch(e){D=[errMsg(e)]}return{ok:true,D}}
++function aiParse(txt,R){let t=String(txt||'').replace(/^\uFEFF/,'').trim();const f=/^```[a-zA-Z]*\s*\n([\s\S]*?)\n?```$/.exec(t);if(f){t=f[1].trim();R&&R.push('le fichier était entouré d’un bloc de code Markdown : retiré')}
++ try{return JSON.parse(t)}catch(e){throw new Error('Ce fichier n’est pas un JSON valide ('+String(e.message).slice(0,90)+'). Il manque peut-être une virgule, une accolade ou un guillemet ; dans les formules, chaque barre oblique inverse doit être doublée (\\\\frac). Demandez à l’IA de corriger et de régénérer le fichier.')}}
++async function aiImportFile(f){
++ try{if(!f)return;
++  if(!/\.json$/i.test(f.name)&&!/json/.test(f.type||''))throw new Error('Choisissez un fichier « .json ». Pour une sauvegarde « .zip », utilisez Fichier ▸ Importer.');
++  if(f.size>AI_MAX.bytes)throw new Error('Fichier trop volumineux ('+fmtB(f.size)+') : '+fmtB(AI_MAX.bytes)+' au maximum.');
++  const note=[],d=aiParse(await f.text(),note);
++  if(aiPlain(d)&&d.format!==AI_FORMAT&&Array.isArray(d.seqs)&&Array.isArray(d.seances)){const v=validateDb(d);if(v.E.length)throw new Error('Fichier invalide : '+v.E.slice(0,3).join(' · '));normalizeDb(d);return await importFlow(d,{name:f.name,R:{errors:[],warnings:v.W}})}
++  if(!aiPlain(d)||d.format!==AI_FORMAT)throw new Error('Format non reconnu : ce fichier n’est ni un export de cette application ni un fichier « '+AI_FORMAT+' ». Vérifiez que l’IA a bien suivi le prompt fourni.');
++  const r=aiConvert(d);note.forEach(x=>r.R.W.push(x));
++  if(r.R.E.length){await info('Import impossible','<p>Le fichier ne peut pas être importé :</p><ul>'+r.R.E.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul><p>Vos fiches actuelles n’ont pas été modifiées.</p>');return false}
++  const dup=db.seqs.some(x=>norm((x.nom||'').trim())===norm(r.q.nom)&&norm((x.niveau||'').trim())===norm(r.q.niveau));
++  const c=await modal('Importer une séquence depuis une IA',aiPreviewHTML(r,dup),[['go','Importer comme nouvelle séquence','pri'],['cancel','Annuler']],{esc:'cancel'});
++  if(c!=='go')return false;
++  const res=await aiCommit(r);
++  if(!res.ok){await info('Import annulé','<p>L’enregistrement a échoué ('+esc(errMsg(res.err))+'). <b>Rien n’a été ajouté</b> : vos fiches sont inchangées.</p>');return false}
++  await info('Séquence importée','<p>La séquence « <b>'+esc(r.q.nom)+'</b> » a été créée avec <b>'+r.ss.length+'</b> séance(s).</p>'+(r.R.W.length?'<p>'+r.R.W.length+' avertissement(s) : relisez les séances concernées.</p>':'')+(res.D.length?'<p style="color:#b3261e">⚠ Vérification en base : '+esc(res.D[0])+'</p>':STORE==='idb'?'<p>✓ Vérification : les données enregistrées correspondent au contenu importé.</p>':'')+'<p>Vous pouvez maintenant relire et modifier chaque séance dans l’éditeur habituel (↶ pour annuler l’import).</p>');
++  return true}
++ catch(x){await info('Import impossible','<p>'+esc(errMsg(x))+'</p><p>Vos fiches actuelles n’ont pas été modifiées.</p>');return false}}
++
+ /* --- panneau « Stockage et sauvegardes », copies internes, suppression de l’ancien stockage --- */
+ async function storPanel(){for(;;){let est=null,pers=null;try{est=navigator.storage&&navigator.storage.estimate&&await navigator.storage.estimate()}catch(e){}try{pers=navigator.storage&&navigator.storage.persisted&&await navigator.storage.persisted()}catch(e){}
+  const bk=STORE==='idb'?await sAll('backups'):[],mg=sv.mig,raw=lsRaw();
+@@ -754,6 +902,7 @@
+   if(d.seances.length===1&&d.seqs.length===1&&confirm('Ajouter la séance « '+d.seances[0].nom+' » à la séquence en cours « '+Q().nom+' » ?\nOK = l’ajouter à cette séquence\nAnnuler = autres options')){const c=JSON.parse(JSON.stringify(d.seances[0]));c.id=uid();c.seq=S().seq;c.numero=Math.max(0,...db.seances.filter(x=>x.seq===c.seq).map(x=>+x.numero||0))+1;db.seances.push(c);db.cur=c.id;bv='';show()}
+   else await importFlow(d,{name:f.name,R:{errors:[],warnings:v.W}})}
+  catch(x){await info('Import impossible','<p>'+esc(errMsg(x))+'</p><p>Vos fiches actuelles n’ont pas été modifiées.</p>')}});
++$('aif').addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';if(f)aiImportFile(f)});
+ const imgOf=dt=>[...(dt.files||[])].find(f=>f.type.startsWith('image/'));
+ $('formw').addEventListener('dragover',e=>{if([...e.dataTransfer.types].includes('Files'))e.preventDefault()});
+ $('formw').addEventListener('drop',e=>{const f=imgOf(e.dataTransfer);if(f){e.preventDefault();addImg(f)}});
+@@ -884,6 +1033,7 @@
+  else if(a==='fixdur'){s.duree=s.phases.reduce((t,p)=>t+(+p.duree||0),0);document.querySelector('[data-s="duree"]').value=s.duree;changed()}
+  else if(a==='exp')exportBackup();
+  else if(a==='imp')$('impf').click();
++ else if(a==='aiimp')$('aif').click();
+  else if(a==='docx')exportDocx();
+  else if(['seq','all','eleve','texte','annee','cov','comp'].includes(a)){bv=a;preview();if(smallScr())mvGo('prev')}
+  else if(a==='vback'){bv='';preview();if(smallScr())mvGo('prev')}
+diff -ruN '--exclude=node_modules' '--exclude=vendor' '--exclude=*.png' '--exclude=*.zip' orig/CreateDocMath-main/sw.js z/CreateDocMath-main/sw.js
+--- a/sw.js	2026-10-27 18:03:34.000000000 +0000
++++ b/sw.js	2026-11-02 12:35:30.198128501 +0000
+@@ -1,6 +1,6 @@
+ /* Service worker : fichiers de l'application = réseau d'abord (toujours à jour), cache en secours ;
+    bibliothèques embarquées (vendor/) précachées à l'installation ; aucune dépendance CDN. */
+-const V='fiches-maths-v15',CORE=["./", "index.html", "bo_cycle3.js", "bo_cycle4.js", "bo_premiere.js", "bank_difficultes.js", "manifest.json", "icon-192.png", "icon-512.png", "vendor/jszip.min.js", "vendor/docx.iife.js", "vendor/katex/katex.min.css", "vendor/katex/katex.min.js", "vendor/katex/auto-render.min.js", "vendor/katex/fonts/KaTeX_AMS-Regular.woff2", "vendor/katex/fonts/KaTeX_Caligraphic-Bold.woff2", "vendor/katex/fonts/KaTeX_Caligraphic-Regular.woff2", "vendor/katex/fonts/KaTeX_Fraktur-Bold.woff2", "vendor/katex/fonts/KaTeX_Fraktur-Regular.woff2", "vendor/katex/fonts/KaTeX_Main-Bold.woff2", "vendor/katex/fonts/KaTeX_Main-BoldItalic.woff2", "vendor/katex/fonts/KaTeX_Main-Italic.woff2", "vendor/katex/fonts/KaTeX_Main-Regular.woff2", "vendor/katex/fonts/KaTeX_Math-BoldItalic.woff2", "vendor/katex/fonts/KaTeX_Math-Italic.woff2", "vendor/katex/fonts/KaTeX_SansSerif-Bold.woff2", "vendor/katex/fonts/KaTeX_SansSerif-Italic.woff2", "vendor/katex/fonts/KaTeX_SansSerif-Regular.woff2", "vendor/katex/fonts/KaTeX_Script-Regular.woff2", "vendor/katex/fonts/KaTeX_Size1-Regular.woff2", "vendor/katex/fonts/KaTeX_Size2-Regular.woff2", "vendor/katex/fonts/KaTeX_Size3-Regular.woff2", "vendor/katex/fonts/KaTeX_Size4-Regular.woff2", "vendor/katex/fonts/KaTeX_Typewriter-Regular.woff2"];
++const V='fiches-maths-v16',CORE=["./", "index.html", "bo_cycle3.js", "bo_cycle4.js", "bo_premiere.js", "bank_difficultes.js", "manifest.json", "icon-192.png", "icon-512.png", "vendor/jszip.min.js", "vendor/docx.iife.js", "vendor/katex/katex.min.css", "vendor/katex/katex.min.js", "vendor/katex/auto-render.min.js", "vendor/katex/fonts/KaTeX_AMS-Regular.woff2", "vendor/katex/fonts/KaTeX_Caligraphic-Bold.woff2", "vendor/katex/fonts/KaTeX_Caligraphic-Regular.woff2", "vendor/katex/fonts/KaTeX_Fraktur-Bold.woff2", "vendor/katex/fonts/KaTeX_Fraktur-Regular.woff2", "vendor/katex/fonts/KaTeX_Main-Bold.woff2", "vendor/katex/fonts/KaTeX_Main-BoldItalic.woff2", "vendor/katex/fonts/KaTeX_Main-Italic.woff2", "vendor/katex/fonts/KaTeX_Main-Regular.woff2", "vendor/katex/fonts/KaTeX_Math-BoldItalic.woff2", "vendor/katex/fonts/KaTeX_Math-Italic.woff2", "vendor/katex/fonts/KaTeX_SansSerif-Bold.woff2", "vendor/katex/fonts/KaTeX_SansSerif-Italic.woff2", "vendor/katex/fonts/KaTeX_SansSerif-Regular.woff2", "vendor/katex/fonts/KaTeX_Script-Regular.woff2", "vendor/katex/fonts/KaTeX_Size1-Regular.woff2", "vendor/katex/fonts/KaTeX_Size2-Regular.woff2", "vendor/katex/fonts/KaTeX_Size3-Regular.woff2", "vendor/katex/fonts/KaTeX_Size4-Regular.woff2", "vendor/katex/fonts/KaTeX_Typewriter-Regular.woff2"];
+ self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting()))});
+ self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==V).map(x=>caches.delete(x)))).then(()=>self.clients.claim()))});
+ const keep=(r,x)=>{const c=x.clone();caches.open(V).then(h=>h.put(r,c));return x};
+diff -ruN '--exclude=node_modules' '--exclude=vendor' '--exclude=*.png' '--exclude=*.zip' orig/CreateDocMath-main/tests/run.js z/CreateDocMath-main/tests/run.js
+--- a/tests/run.js	2026-10-27 18:03:34.000000000 +0000
++++ b/tests/run.js	2026-11-02 12:36:55.793340044 +0000
+@@ -149,7 +149,7 @@
+ T('PWA : fonctionne hors ligne après installation (KaTeX local, données IndexedDB)',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
+  await p.evaluate(()=>navigator.serviceWorker.ready.then(()=>1));await p.reload();await p.waitForFunction(()=>navigator.serviceWorker.controller);
+  const names=await p.evaluate(async()=>{const ks=await caches.keys(),c=await caches.open(ks.find(k=>k.startsWith('fiches-maths'))),r=await c.keys();return{ks,u:r.map(x=>new URL(x.url).pathname)}});
+- assert.deepStrictEqual(names.ks,['fiches-maths-v15']);for(const f of ['/vendor/docx.iife.js','/vendor/katex/katex.min.js','/vendor/jszip.min.js','/vendor/katex/fonts/KaTeX_Main-Regular.woff2','/index.html','/bo_cycle4.js'])assert.ok(names.u.includes(f),f);
++ assert.deepStrictEqual(names.ks,['fiches-maths-v16']);for(const f of ['/vendor/docx.iife.js','/vendor/katex/katex.min.js','/vendor/jszip.min.js','/vendor/katex/fonts/KaTeX_Main-Regular.woff2','/index.html','/bo_cycle4.js'])assert.ok(names.u.includes(f),f);
+  await p.evaluate(()=>{S().nom='Hors ligne ok';S().activite='$a^2$';changed()});await saved(p);await c.setOffline(true);await p.reload();await booted(p);assert.strictEqual(await p.evaluate(()=>S().nom),'Hors ligne ok');await p.waitForSelector('#prev .katex');
+  assert.ok(await p.evaluate(()=>document.fonts.check('16px KaTeX_Main')||true));await c.close()});
+ 
+@@ -457,6 +457,149 @@
+  p.evaluate(()=>modelsOpen()).catch(()=>{});await p.waitForSelector('#ml');await p.type('[data-mq]','modèle test');await p.evaluate(()=>{document.querySelector('[data-mq]').dataset.mark='1'});const ns=await p.evaluate(()=>db.seances.length);
+  await p.click('[data-ml^="use:u"]');await p.waitForFunction(n=>db.seances.length===n+1,ns,{timeout:3000});assert.deepStrictEqual(c.errs,[]);await c.close()});
+ 
++/* ================= import d'une séquence produite par une IA (createdocmath-ai-sequence) ================= */
++const AI_EX=JSON.parse(fs.readFileSync(path.join(ROOT,'docs','exemple-sequence-ia.json'),'utf8'));
++const aiSeance=i=>({numero:i,titre:'Séance '+i+' : fractions é à ç',type:i%5===0?'evaluation':'apprentissage',duree:55,date:'2026-11-'+String(8+i).padStart(2,'0'),
++ objectifs:'Comprendre $\\frac{a}{b}$ n°'+i,prerequis:['Tables','Division'],prerequis_tice:'Calculatrice',
++ phases:[{duree:10,nom:'Rituel '+i,contenu:'- calcul $\\sqrt{x^2+1}$',commentaire:'Observer',modalite:'individuel',support:'Diaporama'},{duree:25,nom:'Recherche',contenu:'Chercher',commentaire:'',modalite:'binôme'},{duree:20,nom:'Mise en commun',contenu:'Débat',commentaire:'',modalite:'collectif'}],
++ objectifs_fin:'Savoir',travail_personnel:'Ex '+i,activite_titre:'Activité '+i,activite:'1. Calculer $\\frac{1}{2}+\\frac{1}{4}$.\n2. Conclure.',trace_ecrite:'## Cours\n$$\\frac{a}{b}=\\frac{ak}{bk}$$',
++ difficultes:'Confusion',aides:'Fiche d’aide',competences:['Chercher','Calculer'],competences_justification:'Justif',evaluation:'Critères',bilan:'Bilan',introduction:'Intro',moment_cours:'Cours',entrainement:'Entraînement',remarque_pedagogique:'Remarque'});
++const aiSeq=n=>({format:'createdocmath-ai-sequence',version:'1.0',sequence:{titre:'Fractions IA',niveau:'5e',classe:'5A',reference_bo:'BO test',contenus_bo:['Contenu A','Contenu B'],capacites_attendues:['Cap 1'],problematique:'Problématique ?',objectifs_generaux:['Obj 1','Obj 2'],domaine:'Nombres',theme:'Fractions',duree_previsionnelle:275,recommandations:'Reco'},seances:Array.from({length:n},(_,i)=>aiSeance(i+1))});
++const aiFile=(p,obj,name)=>p.setInputFiles('#aif',{name:name||'sequence.json',mimeType:/\.json$/.test(name||'x.json')?'application/json':'text/plain',buffer:Buffer.from(typeof obj==='string'?obj:JSON.stringify(obj))});
++const modalDone=p=>p.waitForFunction(()=>!document.querySelector('.mdb'),null,{timeout:5000});
++async function aiPreview(p,obj,name){await aiFile(p,obj,name);return modalText(p)}
++async function aiRun(p,obj,name){const t=await aiPreview(p,obj,name);if(!/Importer comme nouvelle séquence/.test(t))return{t,done:null};
++ await clickBtn(p,'Importer comme nouvelle séquence');await p.waitForFunction(()=>[...document.querySelectorAll('.mdb')].some(e=>/Séquence importée|Import annulé/.test(e.innerText)),null,{timeout:8000});
++ const done=await modalText(p);await clickBtn(p,'Fermer');await modalDone(p);return{t,done}}
++const aiRefuse=async(p,obj,rx,name)=>{const n=await p.evaluate(()=>[db.seqs.length,db.seances.length].join());const t=await aiPreview(p,obj,name);assert.ok(/Import impossible/.test(t)&&rx.test(t),'message attendu '+rx+' : '+t.slice(0,250));
++ await clickBtn(p,'Fermer');await modalDone(p);assert.strictEqual(await p.evaluate(()=>[db.seqs.length,db.seances.length].join()),n,'aucune donnée modifiée')};
++
++for(const N of [1,5,10])T('import IA : séquence de '+N+' séance(s) — aperçu, nouveaux identifiants, association, phases, compétences, activités, formules, enregistrement',async()=>{
++ const c=await ctx(),p=await c.newPage();await booted(p);const before=await fp(p),ids0=await p.evaluate(()=>[db.seqs[0].id,db.seances[0].id]);
++ const obj=aiSeq(N);obj.sequence.id='HACK-Q';obj.seances.forEach((s,i)=>{s.id='HACK-S'+i;s.seq='HACK-Q'});
++ const {t,done}=await aiRun(p,obj);
++ assert.ok(new RegExp('<?'+N+'\\s*séance').test(t)||t.includes(N+' séance(s)'),'nombre de séances dans l’aperçu');assert.ok(/Fractions IA/.test(t)&&/5e/.test(t)&&/55 min|min au total/.test(t),'titre, niveau, durées');
++ assert.ok(/Non importé/.test(t)&&/champ inconnu « id »/.test(t),'champs ignorés signalés');assert.ok(/S1 – Séance 1/.test(t));assert.ok(/Séquence importée/.test(done)&&/Vérification/.test(done));
++ const r=await p.evaluate(()=>{const q=db.seqs[db.seqs.length-1],ss=db.seances.filter(s=>s.seq===q.id);return{q,ss,n:db.seqs.length,cur:db.cur,ids:[...db.seqs.map(x=>x.id),...db.seances.map(x=>x.id)]}});
++ assert.strictEqual(r.n,2);assert.strictEqual(r.ss.length,N);assert.ok(!r.ids.some(i=>/HACK/.test(i)),'identifiants IA non conservés');assert.strictEqual(new Set(r.ids).size,r.ids.length,'identifiants uniques');assert.ok(r.ids.every(i=>/^[\w-]{1,64}$/.test(i)));
++ assert.strictEqual(r.cur,r.ss[0].id,'première séance sélectionnée');assert.deepStrictEqual(r.ss.map(s=>s.numero),Array.from({length:N},(_,i)=>i+1));
++ const q=r.q,s=r.ss[0];assert.strictEqual(q.nom,'Fractions IA');assert.strictEqual(q.niveau,'5e');assert.strictEqual(q.classe,'5A');assert.strictEqual(q.boRef,'BO test');assert.strictEqual(q.bo,'- Contenu A\n- Contenu B');assert.strictEqual(q.capacites,'Cap 1'.replace(/^/,'- '));assert.strictEqual(q.reco,'Reco');
++ assert.ok(/Problématique/.test(q.cadre)&&/Obj 1/.test(q.cadre)&&/275 min/.test(q.cadre)&&/Fractions/.test(q.cadre),'infos de séquence regroupées dans le cadre');
++ assert.strictEqual(s.nom,'Séance 1 : fractions é à ç');assert.strictEqual(s.type,'');assert.strictEqual(s.date,'2026-11-09');assert.strictEqual(s.duree,55);assert.strictEqual(s.objectifs,'Comprendre $\\frac{a}{b}$ n°1');assert.strictEqual(s.prereq,'- Tables\n- Division');assert.strictEqual(s.tice,'Calculatrice');
++ assert.strictEqual(s.phases.length,3);assert.deepStrictEqual(s.phases.map(x=>[x.duree,x.mode]),[[10,'a'],[25,'a'],[20,'c']]);assert.strictEqual(s.phases[0].support,'Diaporama');assert.strictEqual(s.phases[0].modalites,'Individuel');assert.strictEqual(s.phases[0].comment,'Observer');assert.strictEqual(s.phases[0].contenu,'- calcul $\\sqrt{x^2+1}$');
++ assert.deepStrictEqual(s.comp,['Chercher','Calculer']);assert.strictEqual(s.compTexte,'Justif');assert.strictEqual(s.activiteTitre,'Activité 1');assert.ok(/\\frac\{1\}\{2\}/.test(s.activite)&&/^## Cours/.test(s.trace));assert.strictEqual(s.travail,'Ex 1');assert.strictEqual(s.objFin,'Savoir');
++ assert.strictEqual(s.difficultes,'Confusion');assert.strictEqual(s.aides,'Fiche d’aide');assert.strictEqual(s.evalBilan,'**Évaluation :** Critères\n\n**Bilan :** Bilan');assert.strictEqual(s.introS,'Intro');assert.strictEqual(s.coursS,'Cours');assert.strictEqual(s.entrS,'Entraînement');assert.strictEqual(s.rem,'Remarque');
++  assert.ok(!('__miss' in s),'champ technique retiré avant enregistrement');assert.deepStrictEqual(Object.keys(s).sort(),Object.keys(await p.evaluate(()=>{addSeance(db.seqs[0].id);const x=db.seances.pop();db.cur=db.seances[0].id;return Object.fromEntries(Object.keys(x).concat(['type','statut','activiteTitre','activite','trace','aides','evalBilan','introS','coursS','entrS','remLabel','rem']).map(k=>[k,1]))})).sort(),'mêmes propriétés que les séances natives');
++ if(N>=5)assert.strictEqual(r.ss[4].type,'eval');
++ assert.deepStrictEqual(await p.evaluate(a=>[db.seqs[0].id,db.seances[0].id].join()===a.join(),ids0),true);assert.deepStrictEqual((await fp(p)).seances.slice(0,1),before.seances,'séquence existante intacte');
++ // affichage, enregistrement, persistance
++ await p.waitForSelector('#prev .katex');assert.ok(/Séance 1/.test(await p.$eval('#prev',e=>e.innerText)));
++ await saved(p);const d=await idbDump(p);assert.strictEqual(d.seqs.n,2);assert.strictEqual(d.seances.n,1+N);
++ await p.reload();await booted(p);assert.strictEqual(await p.evaluate(()=>db.seances.length),1+N);assert.ok(await p.evaluate(()=>db.seqs.some(q=>q.nom==='Fractions IA')));assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('import IA : champs facultatifs absents, valeurs incorrectes, avertissements (conversion pure, rien n’est inventé)',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
++ const conv=o=>p.evaluate(o=>{const r=aiConvert(o);return{E:r.R.E,W:r.R.W,I:r.R.I,q:r.q,ss:r.ss}},o);
++ let r=await conv({format:'createdocmath-ai-sequence',version:'1.0',sequence:{titre:'Minimal'},seances:[{titre:'Seule'}]});
++ assert.deepStrictEqual(r.E,[]);assert.strictEqual(r.q.niveau,'');assert.strictEqual(r.q.cadre,'');assert.strictEqual(r.q.bo,'');assert.strictEqual(r.ss[0].objectifs,'');assert.deepStrictEqual(r.ss[0].phases,[]);assert.deepStrictEqual(r.ss[0].comp,[]);assert.strictEqual(r.ss[0].duree,55);assert.ok(r.W.some(x=>/niveau/.test(x)));assert.ok(r.ss[0].__miss.includes('objectifs'));
++ r=await conv({format:'createdocmath-ai-sequence',version:'1.0',sequence:{titre:'Données douteuses',niveau:'4e',duree_previsionnelle:-5,competences:['Chercher']},seances:[
++  {numero:3,titre:'',type:'bizarre',duree:-10,date:'31/12/2026',competences:['Chercher','Danser','calculer','Modeliser'],phases:[{nom:'Sans durée',contenu:'x'},{duree:-4,nom:'Négative',modalite:'individuel'},{duree:'abc',nom:'Texte',modalite:'on ne sait pas'},{duree:1e9,nom:'Énorme'},{},{duree:5,nom:'Collectif',modalite:'plénière',extra:1},'pas un objet'],activite:{a:1},objectifs:['A','B'],truc:1},
++  {numero:3,titre:'Doublon de numéro',duree:'40',phases:'oups'},{numero:'x',titre:'Numéro invalide',date:'2026-02-30'},42]});
++ assert.deepStrictEqual(r.E,[]);const W=r.W.join('\n'),I=r.I.join('\n');
++ assert.deepStrictEqual(r.ss.map(s=>s.numero),[1,2,3],'numéros consécutifs');
++ const s=r.ss.find(x=>x.nom==='Séance 1'||/Séance/.test(x.nom)&&x.phases.length);assert.ok(s,'séance sans titre nommée');assert.strictEqual(s.date,'');assert.deepStrictEqual(s.comp,['Chercher','Modéliser','Calculer'],'compétences reconnues (casse / accents indifférents), dans l’ordre habituel');assert.strictEqual(s.objectifs,'- A\n- B');assert.strictEqual(s.activite,'');
++ assert.ok(/compétence « Danser » inconnue/.test(W)&&/type « bizarre » inconnu/.test(W)&&/date « 31\/12\/2026 » invalide/.test(W)&&/durée invalide/.test(W)&&/sans durée/.test(W)&&/durée invalide, mise à 0/.test(W)&&/modalité « on ne sait pas » inconnue/.test(W)&&/phase 5 vide/.test(W)&&/phase 7 ignorée/.test(W)&&/« phases » doit être une liste/.test(W)&&/durée prévisionnelle.*invalide/.test(W)&&/valeur ignorée/.test(W)&&/élément n°4/.test(W)&&/numéro « 3 »|numéro absent/.test(W),W);
++ assert.ok(/champ inconnu « truc »/.test(I)&&/champ inconnu « extra »/.test(I)&&/Compétences de la séquence/.test(I),I);
++ assert.deepStrictEqual(s.phases.map(x=>x.duree),[0,0,0,0,5]);assert.strictEqual(s.phases[4].mode,'c');assert.strictEqual(s.phases[2].mode,'a');assert.ok(s.phases.every(x=>Number.isInteger(x.duree)&&x.duree>=0));
++ assert.strictEqual(r.ss.find(x=>x.nom==='Doublon de numéro').duree,40);assert.strictEqual(r.ss.find(x=>x.nom==='Numéro invalide').date,'');
++ // modalités reconnues
++ const m=await p.evaluate(()=>['Individuel','binôme','Groupe','travail en autonomie','Collectif','plénière','Classe entière','magistral','individuel puis collectif',''].map(aiMode));assert.deepStrictEqual(m,['a','a','a','a','c','c','c','c','a',null]);
++ // réparation des barres obliques non doublées (\f, \t, \b, \r interprétés par JSON.parse)
++ r=await conv(JSON.parse('{"format":"createdocmath-ai-sequence","version":"1.0","sequence":{"titre":"Formules"},"seances":[{"titre":"F","activite":"$\\frac{1}{2}\\times 3$ et $\\beta+\\theta$ et $\\right)$ doublé : $\\\\frac{1}{2}$"}]}'));
++ assert.strictEqual(r.ss[0].activite,'$\\frac{1}{2}\\times 3$ et $\\beta+\\theta$ et $\\right)$ doublé : $\\frac{1}{2}$');assert.ok(r.W.some(x=>/formule\(s\) corrigée/.test(x)));
++ assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('import IA : fichier refusé (JSON mal formé, format ou version inconnus, sans titre, sans séance, trop gros, mauvaise extension) — rien n’est modifié',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
++ await aiRefuse(p,'{"format":"createdocmath-ai-sequence","seances":[',/n’est pas un JSON valide/);
++ await aiRefuse(p,'Voici votre séquence ! {"format":"createdocmath-ai-sequence"}',/n’est pas un JSON valide/);
++ await aiRefuse(p,{format:'autre-chose',sequence:{titre:'A'},seances:[{titre:'B'}]},/Format non reconnu/);await aiRefuse(p,[1,2,3],/Format non reconnu/);await aiRefuse(p,'null',/Format non reconnu/);
++ await aiRefuse(p,{format:'createdocmath-ai-sequence',version:'2.0',sequence:{titre:'A'},seances:[{titre:'B'}]},/version « 2\.0 » non prise en charge/);
++ await aiRefuse(p,{format:'createdocmath-ai-sequence',version:'1.0',sequence:{titre:'  '},seances:[{titre:'B'}]},/n’a pas de titre/);
++ await aiRefuse(p,{format:'createdocmath-ai-sequence',version:'1.0',sequence:{titre:'A'},seances:[]},/aucune séance/);
++ await aiRefuse(p,{format:'createdocmath-ai-sequence',version:'1.0',seances:[{titre:'B'}]},/« sequence » est absente/);
++ await aiRefuse(p,aiSeq(61),/trop de séances \(61\)/);await aiRefuse(p,{format:'createdocmath-ai-sequence',version:'1.0',sequence:{titre:'A'},seances:[1,2]},/aucune séance exploitable/);
++ await aiRefuse(p,' '.repeat(5.2e6),/trop volumineux/);await aiRefuse(p,aiSeq(1),/Choisissez un fichier « \.json »/,'sequence.txt');await aiRefuse(p,'PK\u0003\u0004',/Choisissez un fichier/,'sauvegarde.zip');
++ assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('import IA : accepte JSON entouré de balises Markdown, avertit ; version 1.x ; annulation sans effet',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);const n=await p.evaluate(()=>db.seqs.length);
++ let t=await aiPreview(p,'```json\n'+JSON.stringify(aiSeq(2))+'\n```');assert.ok(/Importer comme nouvelle séquence/.test(t)&&/bloc de code Markdown/.test(t));await clickBtn(p,'Annuler');await modalDone(p);assert.strictEqual(await p.evaluate(()=>db.seqs.length),n,'annulation : rien ajouté');
++ const o=aiSeq(1);o.version='1.3';t=await aiPreview(p,'\uFEFF'+JSON.stringify(o));assert.ok(/plus récente que la 1\.0/.test(t));await clickBtn(p,'Annuler');await modalDone(p);assert.strictEqual(await p.evaluate(()=>db.seqs.length),n);assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('import IA : doublon signalé sans blocage, jamais d’écrasement, anciennes sauvegardes et exports natifs toujours importables',async()=>{const c=await ctx(),p=await c.newPage();await seed(p,null,JSON.stringify(legacyDb()));await booted(p);
++ const f0=await fp(p),snap0=await p.evaluate(()=>JSON.stringify({s:db.seqs,a:db.seances.map(x=>({...x,imgs:x.imgs.map(m=>({...m,u:m.u.length}))}))}));
++ let r=await aiRun(p,aiSeq(2));assert.ok(!/existe déjà/.test(r.t));
++ r=await aiRun(p,aiSeq(2));assert.ok(/existe déjà/.test(r.t),'doublon signalé');assert.ok(/Importer comme nouvelle séquence/.test(r.t),'doublon non bloquant');
++ assert.strictEqual(await p.evaluate(()=>db.seqs.filter(q=>q.nom==='Fractions IA').length),2);assert.strictEqual(await p.evaluate(()=>db.seqs.length),4);
++ const same=await p.evaluate(()=>JSON.stringify({s:db.seqs.slice(0,2),a:db.seances.slice(0,4).map(x=>({...x,imgs:x.imgs.map(m=>({...m,u:m.u.length}))}))}));assert.strictEqual(same,snap0,'séquences existantes inchangées');
++ // JSON natif (export « Partager cette séquence » / ancienne sauvegarde) : accepté par la même entrée, via le flux d’import existant
++ const c2=await ctx(),p2=await c2.newPage();await booted(p2);const nat=legacyDb();await aiFile(p2,nat,'ancienne.json');let t=await modalText(p2);assert.ok(/Importer des fiches/.test(t)&&/Thalès/.test(t));await clickBtn(p2,'Fusionner');
++ await p2.waitForFunction(()=>[...document.querySelectorAll('.mdb')].some(e=>/Rapport d’import/.test(e.innerText)));await clickBtn(p2,'Fermer');await modalDone(p2);assert.strictEqual(await p2.evaluate(()=>db.seqs.length),3);assert.strictEqual(await p2.evaluate(()=>db.seances.length),5);
++ // le flux « Importer » historique est inchangé
++ assert.strictEqual(await p2.evaluate(()=>typeof importFlow+typeof validateDb+typeof normalizeDb+typeof mergeData),'functionfunctionfunctionfunction');assert.deepStrictEqual(c.errs,[]);assert.deepStrictEqual(c2.errs,[]);await c.close();await c2.close()});
++
++T('import IA : sécurité — HTML / JavaScript importé jamais exécuté (aperçu, toutes vues), pas de pollution de prototype',async()=>{const c=await ctx(),p=await c.newPage();const dlg=[];p.on('dialog',d=>{dlg.push(d.message());d.dismiss()});await booted(p);
++ const X='"><img src=x onerror="window.__x=1"><script>window.__x=1<\/script><svg onload=window.__x=1>\'';
++ const o=aiSeq(1);const S0=o.seances[0];for(const k of ['titre','objectifs','prerequis_tice','objectifs_fin','travail_personnel','activite_titre','activite','trace_ecrite','difficultes','aides','competences_justification','evaluation','bilan','introduction','moment_cours','entrainement','remarque_pedagogique'])S0[k]=X;
++ o.sequence.titre=X;o.sequence.niveau=X;o.sequence.classe=X;o.sequence.reference_bo=X;o.sequence.contenus_bo=[X,X];o.sequence.cadre_general=X;o.sequence.problematique=X;o.sequence.recommandations=X;S0.phases[0].nom=X;S0.phases[0].contenu=X;S0.phases[0].commentaire=X;S0.phases[0].support=X;S0.phases[0].modalite=X;
++ const raw=JSON.stringify(o).replace('"format"','"__proto__":{"polluted":1},"constructor":{"prototype":{"polluted2":1}},"format"');
++ const r=await aiRun(p,raw);assert.ok(/Importer comme nouvelle séquence/.test(r.t));
++ const check=async l=>{await p.waitForTimeout(150);const x=await p.evaluate(()=>({x:window.__x,bad:document.querySelectorAll('img[src="x"],svg[onload],[onerror],[onload]').length,sc:[...document.querySelectorAll('script')].filter(s=>/__x/.test(s.textContent)).length}));assert.deepStrictEqual(x,{x:undefined,bad:0,sc:0},l)};
++ await check('aperçu + import');assert.strictEqual(await p.evaluate(()=>({}).polluted===undefined&&({}).polluted2===undefined&&Object.prototype.polluted===undefined),true,'prototype intact');
++ for(const v of ['','seq','all','eleve','texte','annee']){await p.evaluate(v=>{bv=v;preview()},v);await check('vue '+v)}
++ await p.evaluate(()=>{bv='';preview()});assert.ok((await p.evaluate(()=>S().activite)).includes('<script>'),'texte conservé tel quel (non interprété)');
++ await p.evaluate(()=>{EL().a=1;EL().t=1;bv='eleve';preview()});await check('fiche élève');
++ await aiPreview(p,raw);await check('aperçu seul');await clickBtn(p,'Annuler');await modalDone(p);assert.deepStrictEqual(dlg,[]);assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('import IA : si l’enregistrement échoue, rien n’est ajouté (retour arrière), puis import possible après correction',async()=>{const c=await ctx();
++ await c.addInitScript(()=>{const o=IDBObjectStore.prototype.put;IDBObjectStore.prototype.put=function(){if(window.__fail&&this.name==='seances')throw new DOMException('quota','QuotaExceededError');return o.apply(this,arguments)}});
++ const p=await c.newPage();await booted(p);await saved(p);const n=await p.evaluate(()=>[db.seqs.length,db.seances.length,db.cur].join());await p.evaluate(()=>{window.__fail=true});
++ const r=await aiRun(p,aiSeq(3));assert.ok(/Import annulé/.test(r.done)&&/Rien n’a été ajouté/.test(r.done),r.done);
++ assert.strictEqual(await p.evaluate(()=>[db.seqs.length,db.seances.length,db.cur].join()),n,'mémoire inchangée');assert.ok(!(await p.evaluate(()=>db.seqs.some(q=>q.nom==='Fractions IA'))));
++ await p.evaluate(()=>{window.__fail=false});await p.evaluate(()=>{sv.err=null;changed()});await saved(p);assert.strictEqual((await idbDump(p)).seances.n,1,'aucune séance partielle en base');
++ await p.reload();await booted(p);assert.strictEqual(await p.evaluate(()=>db.seqs.length),1);
++ const r2=await aiRun(p,aiSeq(3));assert.ok(/Séquence importée/.test(r2.done));await saved(p);assert.strictEqual((await idbDump(p)).seances.n,4);assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('import IA : annuler (Ctrl+Z) retire la séquence importée ; fiche séquence, cahier complet, Word et PDF après import',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
++ const {done}=await aiRun(p,AI_EX);assert.ok(/Séquence importée/.test(done));
++ const info=await p.evaluate(()=>{const q=db.seqs[db.seqs.length-1];return{q:q.nom,n:db.seances.filter(s=>s.seq===q.id).length,types:db.seances.filter(s=>s.seq===q.id).map(s=>s.type).join()}});
++ assert.deepStrictEqual(info,{q:'Additionner et soustraire des fractions',n:4,types:',,,eval'});
++ // fiche de séance
++ await p.waitForSelector('#prev .katex');let txt=await p.$eval('#prev',e=>e.innerText);assert.ok(/Partager une unité/.test(txt)&&/Phase 1/.test(txt)&&/Phase 4/.test(txt)&&/Analyse didactique/.test(txt)&&/Aides et différenciation/.test(txt));
++ // fiche séquence
++ await p.evaluate(()=>{bv='seq';preview()});txt=await p.$eval('#prev',e=>e.innerText);assert.ok(/3 séances d’apprentissage \+ 1 séance d’évaluation/i.test(txt)&&/Problématique/.test(txt)&&/Objectifs généraux/.test(txt)&&/Durée prévisionnelle/.test(txt)&&/Partager une unité/.test(txt)&&/Évaluation : fractions/.test(txt));
++ // cahier complet + Word
++ await p.evaluate(()=>{bv='all';preview()});await p.waitForSelector('#prev .katex');let {Z,x}=await docxOf(p,'ia-all');const plain=x.replace(/<[^>]+>/g,'');
++ assert.ok(cnt(x,/<m:oMath>/g)>=5,'équations modifiables');assert.ok(/Partager une unité/.test(plain)&&/Additionner avec un dénominateur multiple/.test(plain)&&/Évaluation : fractions/.test(plain)&&/Organisation pédagogique/.test(plain));assert.ok(cnt(x,/<w:pageBreakBefore\/>/g)>=3);assert.ok(!/\$/.test(plain),'pas de $ brut');
++ for(const v of ['','eleve','texte','annee']){await p.evaluate(v=>{bv=v;preview()},v);({x}=await docxOf(p,'ia-'+(v||'f')));assert.ok(x.length>1500,v)}
++ // PDF
++ await p.evaluate(()=>{bv='all';preview()});await p.waitForSelector('#prev .katex');await p.emulateMedia({media:'print'});const f=path.join(os.tmpdir(),'cdm-ia-'+Date.now()+'.pdf');await p.pdf({path:f,format:'A4',preferCSSPageSize:true,printBackground:true});
++ let pt;try{pt=require('child_process').execFileSync('pdftotext',['-layout',f,'-'],{encoding:'utf8'})}catch(e){console.log('      (pdftotext absent : contrôle du texte PDF ignoré)')}
++ if(pt){assert.ok(/Additionner et soustraire des fractions/.test(pt)&&/Partager une unité/.test(pt)&&/Évaluation : fractions/.test(pt)&&/Page 2 \/ \d+/.test(pt));assert.ok((pt.match(/Phase \/ Durée/g)||[]).length>=3)}
++ await p.emulateMedia({media:'screen'});
++ // persistance + annulation
++ await saved(p);await p.reload();await booted(p);assert.ok(await p.evaluate(()=>db.seqs.some(q=>q.nom==='Additionner et soustraire des fractions')));
++ await p.evaluate(()=>{bv='';show()});await aiRun(p,aiSeq(2));assert.strictEqual(await p.evaluate(()=>db.seqs.length),3);await p.evaluate(()=>hgo(-1));assert.strictEqual(await p.evaluate(()=>db.seqs.length),2,'Ctrl+Z retire l’import');
++ assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('import IA : documentation — l’exemple et le prompt de docs/IMPORT-IA.md sont identiques aux fichiers sources et valides',async()=>{
++ const md=fs.readFileSync(path.join(ROOT,'docs','IMPORT-IA.md'),'utf8'),ex=fs.readFileSync(path.join(ROOT,'docs','exemple-sequence-ia.json'),'utf8').trim(),pr=fs.readFileSync(path.join(ROOT,'docs','prompt-notebooklm.txt'),'utf8').trim();
++ assert.ok(md.includes(ex),'exemple JSON complet inclus dans IMPORT-IA.md');assert.ok(md.includes(pr),'prompt NotebookLM inclus dans IMPORT-IA.md');
++ const c=await ctx(),p=await c.newPage();await booted(p);const r=await p.evaluate(o=>{const x=aiConvert(o);return{E:x.R.E,W:x.R.W,I:x.R.I,n:x.ss.length}},AI_EX);assert.deepStrictEqual(r.E,[]);assert.deepStrictEqual(r.I.filter(x=>!/Compétences de la séquence/.test(x)),[],'aucun champ inconnu dans l’exemple');assert.strictEqual(r.n,4);
++ const a=pr.indexOf('=== FORMAT JSON ==='),b=pr.indexOf('=== FIN DU FORMAT ===');assert.ok(a>0&&b>a);const sk=JSON.parse(pr.slice(a+19,b).replace(/«[^»]*»/g,'x'));assert.strictEqual(sk.format,'createdocmath-ai-sequence');assert.strictEqual(sk.version,'1.0');
++ for(const k of ['titre','niveau','classe','domaine','theme','problematique','duree_previsionnelle','objectifs_generaux','prerequis','reference_bo','contenus_bo','capacites_attendues','competences','cadre_general','progression','recommandations'])assert.ok(k in sk.sequence,'sequence.'+k);
++ for(const k of ['numero','titre','type','duree','date','objectifs','prerequis','prerequis_tice','phases','objectifs_fin','travail_personnel','activite_titre','activite','trace_ecrite','difficultes','aides','competences','competences_justification','evaluation','bilan','introduction','moment_cours','entrainement','remarque_pedagogique'])assert.ok(k in sk.seances[0],'seances.'+k);
++ for(const k of ['duree','nom','contenu','commentaire','modalite','support','materiel'])assert.ok(k in sk.seances[0].phases[0],'phases.'+k);
++ assert.deepStrictEqual(c.errs,[]);await c.close()});
++
+ (async()=>{await new Promise(r=>srv.listen(0,'127.0.0.1',r));BASE='http://localhost:'+srv.address().port;browser=await chromium.launch();
+  let fail=0;const only=process.argv[2];for(const t of results){if(only&&!t.name.includes(only))continue;const t0=Date.now();try{await Promise.race([t.fn(),new Promise((_,j)=>setTimeout(()=>j(new Error('délai dépassé (90 s)')),90000))]);console.log('  ✓',t.name,'('+(Date.now()-t0)+' ms)')}catch(e){fail++;console.log('  ✗',t.name,'\n     ',String(e.message).split('\n').slice(0,6).join('\n      '))}}
+  await browser.close();srv.close();console.log(fail?fail+' test(s) en échec':'Tous les tests passent');process.exit(fail?1:0)})();

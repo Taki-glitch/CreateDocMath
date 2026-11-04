@@ -1,0 +1,489 @@
+diff -ruN '--exclude=node_modules' '--exclude=vendor' '--exclude=*.png' '--exclude=*.zip' base2/README.md z/CreateDocMath-main/README.md
+--- a/README.md	2026-11-04 07:21:56.678627889 +0000
++++ b/README.md	2026-11-04 07:30:03.530745029 +0000
+@@ -112,10 +112,11 @@
+ - **Mode classe** : minuteur par phase en plein écran (tablette, VPI), affichage de la mise en œuvre, phase suivante, +1 min, signal sonore à l'échéance, écran maintenu allumé. Raccourcis : Espace (démarrer / pause), ← →, Échap.
+ - **PWA** : installable et utilisable hors connexion (voir ci-dessous).
+ 
+-## Nouveauté : 📚 Cahier de l'élève (phase 1)
++## Nouveauté : 📚 Cahier de l'élève (phases 1 et 2)
+ 
+ - **Affichage ▸ 📚 Cahier de l'élève…** ouvre un espace dédié pour construire le cahier de mathématiques des élèves : un cahier par classe, des chapitres réordonnables, six types de blocs colorés (attendus, activité de découverte, trace écrite, exercices, tâche complexe, évaluation) avec aperçu en direct, formules KaTeX, corrigés masquables et impression PDF.
+ - Les cahiers sont enregistrés automatiquement dans une base IndexedDB **séparée** (`cdm3cahiers`) : vos séquences et séances ne sont pas modifiées. Export / import `.json` des cahiers. **Les sauvegardes ZIP n'incluent pas encore les cahiers.**
++- **Phase 2 — éditeur pédagogique** : barre de mise en forme (encadrés Définition / Propriété / Théorème / Exemple / Méthode…, tableaux, questions numérotées, clavier de formules), images (ajout, glisser-déposer, collage, taille, légende), fiche de révision, et trois versions du cahier : enseignant, élève avec corrigés, élève sans corrigés.
+ - Architecture, modèle de données, plan de publication en ligne et limites : [`docs/CAHIER-ELEVE.md`](docs/CAHIER-ELEVE.md).
+ 
+ ## Nouveauté : import d'une séquence produite par une IA (NotebookLM / Gemini)
+diff -ruN '--exclude=node_modules' '--exclude=vendor' '--exclude=*.png' '--exclude=*.zip' base2/cahier.js z/CreateDocMath-main/cahier.js
+--- a/cahier.js	2026-11-04 07:21:56.770043252 +0000
++++ b/cahier.js	2026-11-04 07:30:03.525482159 +0000
+@@ -4,16 +4,17 @@
+    Réutilise de index.html : uid, esc, fmt, rmath, modal, info, toast, rq, tdone, errMsg, norm, COMP, IMGOK, APP_V, dl. */
+ (()=>{'use strict';
+ const SCH=1,DBN='cdm3cahiers',FMT='createdocmath-cahier-backup',LIM={chap:200,bloc:200,item:100,text:1e5,img:30,cah:100,bytes:5e7};
+-const COL={attendus:'#1f5fa8',decouverte:'#b85c00',trace:'#2e8540',exercices:'#7b3fa0',tache:'#c0392b',eval:'#2c3e50'};
++const COL={attendus:'#1f5fa8',decouverte:'#b85c00',trace:'#2e8540',exercices:'#7b3fa0',tache:'#c0392b',eval:'#2c3e50',revision:'#00796b'};
+ const T={
+  attendus:{n:'Attendus du chapitre',ico:'🎯',f:[['savoir','Je dois savoir','Définitions, propriétés, règles et formules à connaître…',6],['faire','Je dois savoir faire','Compétences et méthodes à maîtriser…',6]]},
+  decouverte:{n:'Activité de découverte',ico:'🔍',f:[['consigne','Consigne','',2],['texte','Énoncé et questions','1. …\n2. …',8]],corr:1},
+  trace:{n:'Trace écrite – Je retiens',ico:'📝',f:[['texte','Cours','## Définition\n**Propriété :** … $x^2$',12]]},
+  exercices:{n:'Exercices d’application',ico:'✏️',f:[['consigne','Consigne générale (facultatif)','',2]],items:1},
+- tache:{n:'Je mobilise mes connaissances',ico:'🧩',f:[['texte','Situation-problème et contexte','',6],['consigne','Consigne globale','',2],['demarche','Démarche de résolution','',4]],corr:1,comp:1},
+- eval:{n:'Je vérifie mes connaissances',ico:'✅',f:[['conn','Connaissances mobilisées','',3],['texte','Exercices','',8],['bareme','Barème (facultatif)','',2]],corr:1,comp:1}};
++ tache:{n:'Je mobilise mes connaissances',ico:'🧩',f:[['texte','Situation-problème et contexte','',6],['consigne','Consigne globale','',2],['questions','Questions intermédiaires (facultatif)','1. …\n2. …',4],['demarche','Démarche de résolution','',4]],corr:1,comp:1},
++ eval:{n:'Je vérifie mes connaissances',ico:'✅',f:[['conn','Connaissances mobilisées','',3],['texte','Exercices','',8],['bareme','Barème (facultatif)','',2]],corr:1,comp:1},
++ revision:{n:'Fiche de révision',ico:'🔁',f:[['savoir','Points clés à retenir','',6],['methodes','Méthodes à maîtriser','',4],['conseil','Exercices conseillés pour s’entraîner','',3]]}};
+ const NIVX=['','facile','moyen','difficile'],NOW=()=>new Date().toISOString();
+-const S={loaded:false,open:false,list:[],cur:null,chap:null,scope:'chap',corr:true,tab:'edit',err:null,dirty:new Set(),del:new Set(),ordDirty:false,t:null,sch:Promise.resolve(),db:null,hist:[],hp:-1,trash:[],drag:null,rep:[],opener:null,ver:0};
++const S={loaded:false,open:false,list:[],cur:null,chap:null,scope:'chap',mode:'enseignant',tab:'edit',err:null,dirty:new Set(),del:new Set(),ordDirty:false,t:null,sch:Promise.resolve(),db:null,hist:[],hp:-1,trash:[],drag:null,rep:[],opener:null,ver:0};
+ const $c=id=>document.getElementById(id);
+ const isO=v=>v&&typeof v==='object'&&!Array.isArray(v);
+ const txt=(v,n)=>typeof v==='string'?v.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g,'').slice(0,n||LIM.text):(typeof v==='number'&&isFinite(v)?String(v):'');
+@@ -22,11 +23,12 @@
+ const clone=o=>JSON.parse(JSON.stringify(o));
+ /* ---------- modèle ---------- */
+ const mkCorr=()=>({texte:'',defaut:'masque',en_ligne:false,pdf:false,word:false});
+-const mkEx=n=>({id:uid(),num:'',titre:'',niveau:'',enonce:'',corrige:''});
++const mkEx=n=>({id:uid(),num:'',titre:'',niveau:'',enonce:'',corrige:'',imgs:[]});
+ const mkBloc=t=>({id:uid(),type:t,titre:'',couleur:'',v:{},corr:mkCorr(),comp:[],items:t==='exercices'?[mkEx()]:[],imgs:[],saut:false});
+ const mkChap=n=>({id:uid(),nom:n==null?'Nouveau chapitre':n,ref:'',seqIds:[],blocs:[]});
+ const mkCah=n=>({id:uid(),v:SCH,nom:n||'Cahier de mathématiques',niveau:'',classe:'',annee:'',couleurs:{...COL},chapitres:[],creeLe:NOW(),modifLe:NOW(),pub:{statut:'brouillon',version:0}});
+ /* normalisation / migration : tolère les données anciennes ou douteuses, ne jette jamais un chapitre sans le signaler */
++const normImgs=(a,nid)=>(Array.isArray(a)?a:[]).filter(m=>isO(m)&&typeof m.u==='string'&&m.u&&IMGOK(m.u)).slice(0,LIM.img).map(m=>({id:nid(m.id),u:m.u,w:[25,50,75,100].includes(+m.w)?+m.w:Math.max(5,Math.min(100,Math.round(+m.w)||100)),a:m.a==='r'?'r':'c',l:txt(m.l,300)}));
+ function normCah(c,W){W=W||[];if(!isO(c)){W.push('cahier illisible');return null}
+  const o=mkCah(txt(c.nom,200).trim()||'Cahier sans titre'),ids=new Set([o.id]),nid=v=>{if(IDV(v)&&!ids.has(v)){ids.add(v);return v}const n=uid();ids.add(n);return n};
+  o.id=IDV(c.id)?c.id:o.id;ids.add(o.id);o.niveau=txt(c.niveau,40);o.classe=txt(c.classe,40);o.annee=txt(c.annee,20);
+@@ -42,8 +44,8 @@
+    T[b.type].f.forEach(([key])=>{k.v[key]=isO(b.v)?txt(b.v[key]):''});
+    if(isO(b.corr)){k.corr.texte=txt(b.corr.texte);k.corr.defaut=b.corr.defaut==='affiche'?'affiche':'masque';['en_ligne','pdf','word'].forEach(x=>{k.corr[x]=!!b.corr[x]})}
+    k.comp=(Array.isArray(b.comp)?b.comp:[]).filter(x=>COMP.includes(x));
+-   k.items=T[b.type].items?(Array.isArray(b.items)?b.items:[]).filter(isO).slice(0,LIM.item).map(x=>({id:nid(x.id),num:txt(x.num,20),titre:txt(x.titre,200),niveau:NIVX.includes(x.niveau)?x.niveau:'',enonce:txt(x.enonce),corrige:txt(x.corrige)})):[];
+-   k.imgs=(Array.isArray(b.imgs)?b.imgs:[]).filter(m=>isO(m)&&typeof m.u==='string'&&IMGOK(m.u)).slice(0,LIM.img).map(m=>({u:m.u,w:Math.max(5,Math.min(100,+m.w||100)),a:m.a==='r'?'r':'c',l:txt(m.l,300)}));
++   k.items=T[b.type].items?(Array.isArray(b.items)?b.items:[]).filter(isO).slice(0,LIM.item).map(x=>({id:nid(x.id),num:txt(x.num,20),titre:txt(x.titre,200),niveau:NIVX.includes(x.niveau)?x.niveau:'',enonce:txt(x.enonce),corrige:txt(x.corrige),imgs:normImgs(x.imgs,nid)})):[];
++   k.imgs=normImgs(b.imgs,nid);
+    h.blocs.push(k)});o.chapitres.push(h)});
+  return o}
+ /* nouveaux identifiants pour toute copie (duplication, import) : les références vers les séquences (seqIds) sont conservées */
+@@ -76,27 +78,61 @@
+  stLine2();if(S.dirty.size&&!S.err)sched(100)}
+ function touch(o){const c=cc();if(!c)return;c.modifLe=NOW();S.ver++;S.dirty.add(c.id);if(o&&o.ord)S.ordDirty=true;sched();clearTimeout(touch.p);touch.p=setTimeout(prev,120);clearTimeout(touch.h);touch.h=setTimeout(hsnap,o&&o.now?0:500);if(o&&o.now){clearTimeout(touch.h);hsnap()}}
+ /* ---------- annuler / rétablir (historique propre au cahier courant) ---------- */
+-function hsnap(){const c=cc();if(!c)return;const s=JSON.stringify(c);if(s===S.hist[S.hp])return;S.hist.splice(S.hp+1);S.hist.push(s);if(S.hist.length>40)S.hist.shift();S.hp=S.hist.length-1;hbtn()}
++const IMK=new Map(),IMR=[],imgKey=v=>{if(!IMK.has(v)){IMK.set(v,IMR.length);IMR.push(v)}return'\u0001'+IMK.get(v)},ser=c=>JSON.stringify(c,(k,v)=>k==='u'&&typeof v==='string'&&v.length>2000?imgKey(v):v),deser=s=>JSON.parse(s,(k,v)=>typeof v==='string'&&v.charCodeAt(0)===1?IMR[+v.slice(1)]:v);
++function hsnap(){const c=cc();if(!c)return;const s=ser(c);if(s===S.hist[S.hp])return;S.hist.splice(S.hp+1);S.hist.push(s);if(S.hist.length>40)S.hist.shift();S.hp=S.hist.length-1;hbtn()}
+ function hreset(){S.hist=[];S.hp=-1;hsnap()}
+-function hgo(d){clearTimeout(touch.h);hsnap();const n=S.hp+d;if(n<0||n>=S.hist.length){toast(d<0?'Rien à annuler':'Rien à rétablir');return}S.hp=n;const o=JSON.parse(S.hist[n]),i=S.list.findIndex(x=>x.id===o.id);if(i<0)return;S.list[i]=o;S.dirty.add(o.id);if(!ch())S.chap=(o.chapitres[0]||{}).id||null;sched();render();toast(d<0?'↶ Annulé':'↷ Rétabli')}
++function hgo(d){clearTimeout(touch.h);hsnap();const n=S.hp+d;if(n<0||n>=S.hist.length){toast(d<0?'Rien à annuler':'Rien à rétablir');return}S.hp=n;const o=deser(S.hist[n]),i=S.list.findIndex(x=>x.id===o.id);if(i<0)return;S.list[i]=o;S.dirty.add(o.id);if(!ch())S.chap=(o.chapitres[0]||{}).id||null;sched();render();toast(d<0?'↶ Annulé':'↷ Rétabli')}
+ const hbtn=()=>{const u=$c('cahu'),r=$c('cahr');if(u)u.disabled=S.hp<1;if(r)r.disabled=S.hp>=S.hist.length-1};
+ /* ---------- aperçu = document de l'élève ---------- */
+ const colOf=(c,b)=>b.couleur||c.couleurs[b.type]||COL[b.type];
+ /* texte lisible (noir ou blanc, le meilleur contraste) sur la couleur choisie, y compris personnalisée */
+ const lum=h=>{const[r,g,b]=[1,3,5].map(i=>{const v=parseInt(h.slice(i,i+2),16)/255;return v<=.03928?v/12.92:((v+.055)/1.055)**2.4});return .2126*r+.7152*g+.0722*b};
+ const ink=h=>1.05/(lum(h)+.05)>=(lum(h)+.05)/.05?'#fff':'#111';
+-const fm=s=>s&&s.trim()?fmt(s):'';
+-function blocHTML(c,b,corr){const d=T[b.type],col=colOf(c,b),cs='style="--bc:'+col+';--bt:'+ink(col)+'"';let h='';
+- if(b.type==='attendus'){const f=(k,l,cl)=>b.v[k]&&b.v[k].trim()?'<div class="cp-sub"><h4>'+l+'</h4>'+fmt(b.v[k])+'</div>':'';h+='<div class="cp-two">'+f('savoir','Je dois savoir')+f('faire','Je dois savoir faire')+'</div>'}
+- else d.f.forEach(([k,l])=>{const v=b.v[k];if(!v||!v.trim())return;h+=(k==='consigne'?'<div class="cp-cons">'+fmt(v)+'</div>':k==='texte'||k==='enonce'?fmt(v):'<div class="cp-sub"><h4>'+esc(l)+'</h4>'+fmt(v)+'</div>')});
+- if(d.items)h+=b.items.map((x,i)=>'<div class="cp-ex"><h4>Exercice '+esc(x.num||(i+1))+(x.titre?' – '+esc(x.titre):'')+(x.niveau?' <small>('+x.niveau+')</small>':'')+'</h4>'+fm(x.enonce)+(corr&&x.corrige&&x.corrige.trim()?'<div class="cp-co"><b>Corrigé</b>'+fmt(x.corrige)+'</div>':'')+'</div>').join('');
++/* rendu riche d'un champ : encadrés (@def @prop @thm @ex @meth @rem @att), tableaux (| a | b |), questions numérotées, puis mise en forme légère de l'application (fmt) */
++const CALL={def:['Définition','#1f5fa8'],prop:['Propriété','#256b34'],thm:['Théorème','#b3261e'],ex:['Exemple','#6a2f8d'],meth:['Méthode','#8f4700'],rem:['Remarque','#566574'],att:['Attention','#b3261e']};
++const SPEC=/^@(def|prop|thm|ex|meth|rem|att)(\s|$)/i,ISTB=l=>/^\s*\|.*\|\s*$/.test(l),ISQ=/^\s*(\d{1,2}[.)]|[a-h]\))\s+(.*)$/;
++const cell=s=>inl(esc(s.trim()));
++function tableHTML(L){const R=L.map(l=>l.trim().replace(/^\||\|$/g,'').split('|')),sep=R.length>1&&R[1].every(c=>/^\s*:?-{2,}:?\s*$/.test(c)),H=sep?R[0]:null,B=sep?R.slice(2):R;
++ return '<div class="cp-tw"><table class="cp-t">'+(H?'<thead><tr>'+H.map(c=>'<th>'+cell(c)+'</th>').join('')+'</tr></thead>':'')+'<tbody>'+B.map(r=>'<tr>'+r.map(c=>'<td>'+cell(c)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>'}
++function rich(s){if(!s||!String(s).trim())return'';const L=String(s).replace(/\r/g,'').split('\n');let out='',buf=[],i=0;const flush=()=>{if(buf.length){out+=fmt(buf.join('\n'));buf=[]}};
++ while(i<L.length){const l=L[i],m=SPEC.exec(l.trim());
++  if(m){flush();const k=m[1].toLowerCase(),body=[l.trim().slice(m[0].length-(m[2]?1:0)).trim()];i++;while(i<L.length&&L[i].trim()!==''&&!SPEC.test(L[i].trim())){body.push(L[i]);i++}
++   out+='<div class="cp-call" style="--cc:'+CALL[k][1]+'"><b class="cp-cl">'+CALL[k][0]+'</b>'+fmt(body.filter((x,j)=>j||x).join('\n'))+'</div>';continue}
++  if(ISTB(l)){flush();const r=[];while(i<L.length&&ISTB(L[i])){r.push(L[i]);i++}out+=tableHTML(r);continue}
++  const q=ISQ.exec(l);
++  if(q){flush();let x=q[2];i++;while(i<L.length&&/^\s*[a-zà-ÿ(,;]/.test(L[i])&&!ISQ.test(L[i])&&!SPEC.test(L[i].trim())&&!ISTB(L[i])){x+=' '+L[i].trim();i++}out+='<p class="cp-q"><b>'+esc(q[1])+'</b> '+inl(esc(x))+'</p>';continue}
++  buf.push(l);i++}
++ flush();return out}
++const fm=rich;
++const imgsHTML=a=>a&&a.length?'<div class="cp-im">'+a.map(m=>'<figure class="'+(m.a==='r'?'cp-fr':'cp-fc')+'" style="width:'+m.w+'%"><img src="'+m.u+'" alt="'+esc(m.l||'Illustration')+'">'+(m.l?'<figcaption>'+esc(m.l)+'</figcaption>':'')+'</figure>').join('')+'<div style="clear:both"></div></div>':'';
++/* corrigé : trois versions — enseignant (tout), élève avec corrigés (selon les réglages du bloc), élève sans corrigés.
++   À l'écran : « Voir le corrigé » (déroulant) ; à l'impression : bloc fixe, seulement si le réglage « PDF » est coché. */
++function corrHTML(b,s,mode){if(!s||!s.trim()||mode==='eleve_sans')return'';const o=b.corr,ens=mode==='enseignant',sc=ens||o.en_ligne||o.pdf,pr=ens||o.pdf,inner=rich(s);let h='';
++ if(sc)h+='<details class="cp-co scr"'+(ens||o.defaut==='affiche'?' open':'')+'><summary>Voir le corrigé</summary>'+inner+'</details>';
++ if(pr)h+='<div class="cp-co prt"><b>Corrigé</b>'+inner+'</div>';return h}
++function blocHTML(c,b,mode){const d=T[b.type],col=colOf(c,b),cs='style="--bc:'+col+';--bt:'+ink(col)+'"';let h='';
++ if(b.type==='attendus'||b.type==='revision'){const f=(k,l)=>b.v[k]&&b.v[k].trim()?'<div class="cp-sub"><h4>'+l+'</h4>'+rich(b.v[k])+'</div>':'';h+=b.type==='attendus'?'<div class="cp-two">'+f('savoir','Je dois savoir')+f('faire','Je dois savoir faire')+'</div>':d.f.map(([k,l])=>f(k,esc(l))).join('')}
++ else d.f.forEach(([k,l])=>{const v=b.v[k];if(!v||!v.trim())return;h+=(k==='consigne'?'<div class="cp-cons">'+rich(v)+'</div>':k==='texte'||k==='enonce'?rich(v):'<div class="cp-sub"><h4>'+esc(l)+'</h4>'+rich(v)+'</div>')});
++ h+=imgsHTML(b.imgs);
++ if(d.items)h+=b.items.map((x,i)=>'<div class="cp-ex"><h4>Exercice '+esc(x.num||(i+1))+(x.titre?' – '+esc(x.titre):'')+(x.niveau?' <small>('+x.niveau+')</small>':'')+'</h4>'+rich(x.enonce)+imgsHTML(x.imgs)+corrHTML(b,x.corrige,mode)+'</div>').join('');
+  if(d.comp&&b.comp.length)h+='<p class="cp-cp"><b>Compétences :</b> '+esc(b.comp.join(', '))+'</p>';
+- if(corr&&d.corr&&b.corr.texte.trim())h+='<div class="cp-co"><b>Corrigé</b>'+fmt(b.corr.texte)+'</div>';
++ if(d.corr)h+=corrHTML(b,b.corr.texte,mode);
+  return '<section class="cp-b'+(b.saut?' cp-pb':'')+'" '+cs+'><div class="cp-h">'+d.ico+' '+esc(b.titre||d.n)+'</div><div class="cp-c">'+(h||'<p class="cp-empty">(bloc vide)</p>')+'</div></section>'}
+-function chapHTML(c,h,n,corr){return '<div class="cp-ch"><div class="cp-run">'+esc(c.nom)+(c.classe?' · '+esc(c.classe):'')+'</div><h2>Chapitre '+n+' : '+esc(h.nom)+'</h2>'+(h.ref?'<p class="cp-ref">'+esc(h.ref)+'</p>':'')+h.blocs.map(b=>blocHTML(c,b,corr)).join('')+(h.blocs.length?'':'<p class="cp-empty">Ce chapitre est vide : ajoutez un bloc.</p>')+'</div>'}
++function chapHTML(c,h,n,mode){return '<div class="cp-ch"><div class="cp-run">'+esc(c.nom)+(c.classe?' · '+esc(c.classe):'')+'</div><h2>Chapitre '+n+' : '+esc(h.nom)+'</h2>'+(h.ref?'<p class="cp-ref">'+esc(h.ref)+'</p>':'')+h.blocs.map(b=>blocHTML(c,b,mode)).join('')+(h.blocs.length?'':'<p class="cp-empty">Ce chapitre est vide : ajoutez un bloc.</p>')+'</div>'}
+ function prev(){const e=$c('cahP');if(!e)return;const c=cc();if(!c){e.innerHTML='';return}const hs=S.scope==='all'?c.chapitres:[ch()].filter(Boolean);
+- e.innerHTML='<div class="cp-bar"><label><input type="checkbox" data-ca="tcorr"'+(S.corr?' checked':'')+'> Afficher les corrigés</label><label><input type="checkbox" data-ca="tall"'+(S.scope==='all'?' checked':'')+'> Tout le cahier</label></div><div id="cahpg" class="cp-page"><h1>'+esc(c.nom)+'</h1><p class="cp-sub0">'+esc([c.niveau,c.classe,c.annee].filter(Boolean).join(' · '))+'</p>'+(hs.map(h=>chapHTML(c,h,c.chapitres.indexOf(h)+1,S.corr)).join('')||'<p class="cp-empty">Aucun chapitre.</p>')+'</div>';rmath(e)}
++ e.innerHTML='<div class="cp-bar"><label>Version <select data-ca="mode" aria-label="Version du cahier"><option value="enseignant"'+(S.mode==='enseignant'?' selected':'')+'>Enseignant (tous les corrigés)</option><option value="eleve_avec"'+(S.mode==='eleve_avec'?' selected':'')+'>Élève avec corrigés</option><option value="eleve_sans"'+(S.mode==='eleve_sans'?' selected':'')+'>Élève sans corrigés</option></select></label><label><input type="checkbox" data-ca="tall"'+(S.scope==='all'?' checked':'')+'> Tout le cahier</label></div><div id="cahpg" class="cp-page"><h1>'+esc(c.nom)+'</h1><p class="cp-sub0">'+esc([c.niveau,c.classe,c.annee].filter(Boolean).join(' · '))+'</p>'+(hs.map(h=>chapHTML(c,h,c.chapitres.indexOf(h)+1,S.mode)).join('')||'<p class="cp-empty">Aucun chapitre.</p>')+'</div>';rmath(e)}
+ /* ---------- panneaux : liste des chapitres, éditeur ---------- */
++const TB=[['b','<b>G</b>','Gras (Ctrl+B)'],['u','<u>S</u>','Souligné (Ctrl+U)'],['l','•','Liste à puces'],['h','Titre','Sous-titre'],['def','Définition','Encadré Définition'],['prop','Propriété','Encadré Propriété'],['thm','Théorème','Encadré Théorème'],['ex','Exemple','Encadré Exemple'],['meth','Méthode','Encadré Méthode'],['rem','Remarque','Encadré Remarque'],['att','Attention','Encadré Attention'],['tab','▦ Tableau','Insérer un tableau']];
++function toolbar(){return '<div class="ce-tb" role="toolbar" aria-label="Mise en forme du texte"><span>Texte :</span>'+TB.map(([m,l,ti])=>'<button data-ca="fmt" data-m="'+m+'" title="'+ti+'" aria-label="'+ti+'">'+l+'</button>').join('')+'<span class="ce-sp">Formules :</span>'+(typeof KB!=='undefined'?KB.map((k,i)=>'<button data-ca="kbd" data-i="'+i+'" title="Insérer une formule" aria-label="Formule '+esc(k[0])+'">'+esc(k[0])+'</button>').join(''):'')+'</div>'}
++let LAST=null;
++function fmtIns(m){const e=LAST;if(!e||!e.isConnected||e.tagName!=='TEXTAREA'){toast('Cliquez d’abord dans un champ de texte');return}
++ let a=e.selectionStart,z=e.selectionEnd;const v=e.value;let r,c0,c1;
++ if(m==='b'||m==='u'){const w=m==='b'?'**':'__',sel=v.slice(a,z);r=w+sel+w;c0=a+w.length;c1=c0+sel.length}
++ else{const ls=v.lastIndexOf('\n',Math.max(0,a-1))+(a?1:0),ia=a?ls:0;a=ia;let le=v.indexOf('\n',z);if(le<0)le=v.length;const seg=v.slice(a,le);
++  if(m==='tab'){r=seg+(seg.trim()?'\n':'')+'| Titre 1 | Titre 2 | Titre 3 |\n|---|---|---|\n| a | b | c |\n| d | e | f |';z=le}
++  else{const pre=m==='l'?'- ':m==='h'?'## ':'@'+m+' ';r=seg.split('\n').map(l=>pre+l).join('\n');z=le}c0=c1=a+r.length}
++ e.setRangeText(r,a,z,'end');e.setSelectionRange(c0,c1);e.focus();e.dispatchEvent(new Event('input',{bubbles:true}))}
++function kbdIns(i){const e=LAST;if(!e||!e.isConnected||e.tagName!=='TEXTAREA'){toast('Cliquez d’abord dans un champ de texte');return}const s=KB[i][1],a=e.selectionStart;e.setRangeText(s,a,e.selectionEnd,'end');const k=s.indexOf('{}');if(k>=0)e.selectionStart=e.selectionEnd=a+k+1;e.focus();e.dispatchEvent(new Event('input',{bubbles:true}))}
+ const lbl=(t,i)=>'<label>'+t+i+'</label>',inp=(a,v,p)=>'<input '+a+' value="'+esc(v)+'"'+(p?' placeholder="'+esc(p)+'"':'')+'>';
+ function listPane(){const c=cc(),e=$c('cahL');if(!e)return;
+  const sel=$c('cahsel');sel.innerHTML=S.list.map(x=>'<option value="'+esc(x.id)+'"'+(x.id===S.cur?' selected':'')+'>'+esc(x.nom)+'</option>').join('')||'<option value="">(aucun cahier)</option>';sel.disabled=!c;
+@@ -104,18 +140,24 @@
+  e.innerHTML='<div class="cl-h"><h3>Chapitres</h3><button class="cbtn pri" data-ca="chnew">+ Chapitre</button></div><ol class="cl" id="cahchl">'+c.chapitres.map((h,i)=>'<li draggable="true" data-did="'+h.id+'" data-dk="ch" class="'+(h.id===S.chap?'on':'')+'"><button class="cl-n" data-ca="chsel" data-id="'+h.id+'"'+(h.id===S.chap?' aria-current="true"':'')+'>'+(i+1)+'. '+esc(h.nom)+' <small>'+h.blocs.length+' bloc'+(h.blocs.length>1?'s':'')+'</small></button><span class="cl-a"><button data-ca="chup" data-id="'+h.id+'" aria-label="Monter le chapitre '+esc(h.nom)+'"'+(i?'':' disabled')+'>↑</button><button data-ca="chdn" data-id="'+h.id+'" aria-label="Descendre le chapitre '+esc(h.nom)+'"'+(i<c.chapitres.length-1?'':' disabled')+'>↓</button><button data-ca="chdup" data-id="'+h.id+'" aria-label="Dupliquer le chapitre '+esc(h.nom)+'">⧉</button><button data-ca="chdel" data-id="'+h.id+'" class="dng" aria-label="Supprimer le chapitre '+esc(h.nom)+'">🗑</button></span></li>').join('')+'</ol>'+(c.chapitres.length?'':'<p class="cl-e">Aucun chapitre. Créez-en un pour commencer.</p>')
+  +'<details class="cl-set"><summary>Réglages du cahier</summary>'+lbl('Titre du cahier',inp('data-cf="nom"',c.nom))+lbl('Niveau',inp('data-cf="niveau"',c.niveau,'5e'))+lbl('Classe',inp('data-cf="classe"',c.classe,'5A'))+lbl('Année scolaire',inp('data-cf="annee"',c.annee,'2026-2027'))
+  +'<p><b>Couleurs des blocs</b></p>'+Object.keys(T).map(k=>'<label class="cl-col"><input type="color" data-cc="'+k+'" value="'+c.couleurs[k]+'"> '+T[k].n+'</label>').join('')+'<button class="cbtn" data-ca="colreset">Couleurs par défaut</button> <button class="cbtn" data-ca="cexpall">Exporter tous les cahiers</button></details>'}
++function imgPane(b,list,itemId){const it=itemId?' data-it="'+itemId+'"':'';
++ return '<div class="cbk-im"><button class="cbtn" data-ca="imgadd" data-b="'+b.id+'"'+it+'>🖼 Ajouter une image</button> <small>ou glissez-déposez / collez (Ctrl + V) une image dans ce bloc</small>'+list.map((m,k)=>'<div class="cbk-ig"><img src="'+m.u+'" alt="Aperçu de l’image '+(k+1)+'"><div><label>Taille<select data-b="'+b.id+'"'+it+' data-im="'+m.id+'" data-f="imgw">'+[25,50,75,100].map(v=>'<option value="'+v+'"'+(v===m.w?' selected':'')+'>'+v+' %</option>').join('')+'</select></label><label>Alignement<select data-b="'+b.id+'"'+it+' data-im="'+m.id+'" data-f="imga"><option value="c"'+(m.a==='c'?' selected':'')+'>Centrée</option><option value="r"'+(m.a==='r'?' selected':'')+'>À droite</option></select></label><label>Légende'+inp('data-b="'+b.id+'"'+it+' data-im="'+m.id+'" data-f="imgl"',m.l)+'</label><span class="cbk-a"><button data-ca="imgup" data-b="'+b.id+'"'+it+' data-id="'+m.id+'" aria-label="Monter l’image"'+(k?'':' disabled')+'>↑</button><button data-ca="imgdn" data-b="'+b.id+'"'+it+' data-id="'+m.id+'" aria-label="Descendre l’image"'+(k<list.length-1?'':' disabled')+'>↓</button><button data-ca="imgdel" data-b="'+b.id+'"'+it+' data-id="'+m.id+'" class="dng" aria-label="Supprimer l’image">🗑</button></span></div></div>').join('')+'</div>'}
++function corrSet(b){const o=b.corr,k=(x,l)=>'<label><input type="checkbox" data-b="'+b.id+'" data-f="corropt" data-k="'+x+'"'+(o[x]?' checked':'')+'> '+l+'</label>';
++ return '<details class="cbk-cs"><summary>Réglages du corrigé</summary><label>Affichage par défaut<select data-b="'+b.id+'" data-f="corropt" data-k="defaut"><option value="masque"'+(o.defaut==='masque'?' selected':'')+'>Masqué (« Voir le corrigé »)</option><option value="affiche"'+(o.defaut==='affiche'?' selected':'')+'>Affiché</option></select></label>'+k('en_ligne','Accessible aux élèves en ligne (par clic)')+k('pdf','Inclus dans le PDF « élève avec corrigés »')+k('word','Inclus dans l’export Word « élève avec corrigés »')+'</details>'}
+ function blocForm(c,b,i,n){const d=T[b.type],col=colOf(c,b);
+  let h='<article class="cbk" data-bid="'+b.id+'" style="--bc:'+col+'"><header><span class="cdrag" draggable="true" data-did="'+b.id+'" data-dk="bl" title="Glisser pour déplacer le bloc" aria-hidden="true">⠿</span><strong>'+d.ico+' '+esc(d.n)+'</strong><span class="cbk-a"><button data-ca="bup" data-id="'+b.id+'" aria-label="Monter ce bloc"'+(i?'':' disabled')+'>↑</button><button data-ca="bdn" data-id="'+b.id+'" aria-label="Descendre ce bloc"'+(i<n-1?'':' disabled')+'>↓</button><button data-ca="bdup" data-id="'+b.id+'" aria-label="Dupliquer ce bloc">⧉</button><button data-ca="bdel" data-id="'+b.id+'" class="dng" aria-label="Supprimer ce bloc">🗑</button></span></header>'
+  +'<div class="cbk-r"><label class="cbk-t">Titre'+inp('data-b="'+b.id+'" data-f="titre"',b.titre,d.n)+'</label><label class="cbk-c">Couleur <input type="color" data-b="'+b.id+'" data-f="couleur" value="'+col+'"></label><label class="cbk-s"><input type="checkbox" data-b="'+b.id+'" data-f="saut"'+(b.saut?' checked':'')+'> Saut de page avant</label></div>';
+  d.f.forEach(([k,l,p,r])=>{h+='<label>'+esc(l)+'<textarea rows="'+r+'" data-b="'+b.id+'" data-f="v" data-k="'+k+'" placeholder="'+esc(p)+'">'+esc(b.v[k]||'')+'</textarea></label>'});
+- if(d.items)h+='<div class="cbk-items">'+b.items.map((x,j)=>'<fieldset class="cbk-ex"><legend>Exercice '+esc(x.num||(j+1))+'</legend><div class="cbk-r"><label>N°'+inp('data-b="'+b.id+'" data-i="'+x.id+'" data-f="num"',x.num,String(j+1))+'</label><label class="cbk-t">Titre'+inp('data-b="'+b.id+'" data-i="'+x.id+'" data-f="titre"',x.titre)+'</label><label>Difficulté<select data-b="'+b.id+'" data-i="'+x.id+'" data-f="niveau">'+NIVX.map(v=>'<option value="'+v+'"'+(v===x.niveau?' selected':'')+'>'+(v||'—')+'</option>').join('')+'</select></label></div><label>Énoncé<textarea rows="4" data-b="'+b.id+'" data-i="'+x.id+'" data-f="enonce">'+esc(x.enonce)+'</textarea></label><label>Corrigé<textarea rows="3" data-b="'+b.id+'" data-i="'+x.id+'" data-f="corrige">'+esc(x.corrige)+'</textarea></label><span class="cbk-a"><button data-ca="exup" data-b="'+b.id+'" data-id="'+x.id+'" aria-label="Monter l’exercice"'+(j?'':' disabled')+'>↑</button><button data-ca="exdn" data-b="'+b.id+'" data-id="'+x.id+'" aria-label="Descendre l’exercice"'+(j<b.items.length-1?'':' disabled')+'>↓</button><button data-ca="exdel" data-b="'+b.id+'" data-id="'+x.id+'" class="dng" aria-label="Supprimer l’exercice">🗑</button></span></fieldset>').join('')+'<button class="cbtn" data-ca="exnew" data-id="'+b.id+'">+ Exercice</button></div>';
++ h+=imgPane(b,b.imgs,'');
++ if(d.items)h+='<div class="cbk-items">'+b.items.map((x,j)=>'<fieldset class="cbk-ex" data-it="'+x.id+'"><legend>Exercice '+esc(x.num||(j+1))+'</legend><div class="cbk-r"><label>N°'+inp('data-b="'+b.id+'" data-i="'+x.id+'" data-f="num"',x.num,String(j+1))+'</label><label class="cbk-t">Titre'+inp('data-b="'+b.id+'" data-i="'+x.id+'" data-f="titre"',x.titre)+'</label><label>Difficulté<select data-b="'+b.id+'" data-i="'+x.id+'" data-f="niveau">'+NIVX.map(v=>'<option value="'+v+'"'+(v===x.niveau?' selected':'')+'>'+(v||'—')+'</option>').join('')+'</select></label></div><label>Énoncé<textarea rows="4" data-b="'+b.id+'" data-i="'+x.id+'" data-f="enonce">'+esc(x.enonce)+'</textarea></label><label>Corrigé<textarea rows="3" data-b="'+b.id+'" data-i="'+x.id+'" data-f="corrige">'+esc(x.corrige)+'</textarea></label>'+imgPane(b,x.imgs,x.id)+'<span class="cbk-a"><button data-ca="exup" data-b="'+b.id+'" data-id="'+x.id+'" aria-label="Monter l’exercice"'+(j?'':' disabled')+'>↑</button><button data-ca="exdn" data-b="'+b.id+'" data-id="'+x.id+'" aria-label="Descendre l’exercice"'+(j<b.items.length-1?'':' disabled')+'>↓</button><button data-ca="exdel" data-b="'+b.id+'" data-id="'+x.id+'" class="dng" aria-label="Supprimer l’exercice">🗑</button></span></fieldset>').join('')+'<button class="cbtn" data-ca="exnew" data-id="'+b.id+'">+ Exercice</button></div>';
+  if(d.comp)h+='<div class="cbk-cp"><b>Compétences</b> '+COMP.map(k=>'<label><input type="checkbox" data-b="'+b.id+'" data-f="comp" data-k="'+k+'"'+(b.comp.includes(k)?' checked':'')+'> '+k+'</label>').join('')+'</div>';
+  if(d.corr)h+='<label>Corrigé<textarea rows="4" data-b="'+b.id+'" data-f="corrtxt">'+esc(b.corr.texte)+'</textarea></label>';
++ if(d.corr||d.items)h+=corrSet(b);
+  return h+'</article>'}
+ function editPane(){const c=cc(),h=ch(),e=$c('cahE');if(!e)return;
+  if(!c){e.innerHTML='<div class="ce-empty"><h2>Votre cahier d’élève</h2><p>Construisez le cahier de mathématiques de la classe : un chapitre par notion, avec attendus, activité, cours, exercices, problème et évaluation.</p><p><button class="cbtn pri" data-ca="cnew">Créer mon cahier</button> <button class="cbtn" data-ca="cimp">Importer un cahier…</button></p></div>';return}
+  if(!h){e.innerHTML='<div class="ce-empty"><p>Sélectionnez ou créez un chapitre.</p><p><button class="cbtn pri" data-ca="chnew">+ Chapitre</button></p></div>';return}
+- e.innerHTML='<div class="ce-h"><label>Titre du chapitre'+inp('data-ch="nom"',h.nom)+'</label><label>Sous-titre / référence (facultatif)'+inp('data-ch="ref"',h.ref,'Programme du cycle 4 – Nombres et calculs')+'</label></div><div class="ce-add" role="group" aria-label="Ajouter un bloc"><b>Ajouter un bloc :</b> '+Object.keys(T).map(k=>'<button class="cbtn" style="--bc:'+c.couleurs[k]+'" data-ca="badd" data-t="'+k+'">'+T[k].ico+' '+esc(T[k].n)+'</button>').join('')+'</div><div id="cahbl">'+h.blocs.map((b,i)=>blocForm(c,b,i,h.blocs.length)).join('')+'</div>'+(h.blocs.length?'':'<p class="cl-e">Ce chapitre est vide : ajoutez un premier bloc ci-dessus.</p>')}
++ e.innerHTML=toolbar()+'<div class="ce-h"><label>Titre du chapitre'+inp('data-ch="nom"',h.nom)+'</label><label>Sous-titre / référence (facultatif)'+inp('data-ch="ref"',h.ref,'Programme du cycle 4 – Nombres et calculs')+'</label></div><div class="ce-add" role="group" aria-label="Ajouter un bloc"><b>Ajouter un bloc :</b> '+Object.keys(T).map(k=>'<button class="cbtn" style="--bc:'+c.couleurs[k]+'" data-ca="badd" data-t="'+k+'">'+T[k].ico+' '+esc(T[k].n)+'</button>').join('')+'</div><div id="cahbl">'+h.blocs.map((b,i)=>blocForm(c,b,i,h.blocs.length)).join('')+'</div>'+(h.blocs.length?'':'<p class="cl-e">Ce chapitre est vide : ajoutez un premier bloc ci-dessus.</p>')}
+ function render(){if(!S.open)return;listPane();editPane();prev();hbtn();stLine2();$c('cah').dataset.tab=S.tab;document.querySelectorAll('#cahtabs button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tab===S.tab)))}
+ /* met à jour les libellés (liste de cahiers et de chapitres) sans reconstruire les panneaux : la saisie en cours n'est jamais interrompue */
+ function labels(){const c=cc();if(!c)return;const o=$c('cahsel')&&$c('cahsel').querySelector('option[value="'+c.id+'"]');if(o)o.textContent=c.nom;
+@@ -146,12 +188,27 @@
+  if(t.dataset.cc){c.couleurs[t.dataset.cc]=hex(t.value)||COL[t.dataset.cc];touch();document.querySelectorAll('.cbk').forEach(x=>{const b=bk(x.dataset.bid);if(b)x.style.setProperty('--bc',colOf(c,b))});return}
+  if(t.dataset.ch&&h){h[t.dataset.ch]=txt(t.value,t.dataset.ch==='nom'?200:300);touch();if(t.dataset.ch==='nom')labels();return}
+  if(t.dataset.b){const b=bk(t.dataset.b);if(!b)return;const f=t.dataset.f;
++  if(t.dataset.im){const m=imgList(b,t.dataset.it).find(y=>y.id===t.dataset.im);if(!m)return;if(f==='imgw')m.w=[25,50,75,100].includes(+t.value)?+t.value:100;else if(f==='imga')m.a=t.value==='r'?'r':'c';else m.l=txt(t.value,300);touch();return}
++  if(f==='corropt'){const k=t.dataset.k;if(k==='defaut')b.corr.defaut=t.value==='affiche'?'affiche':'masque';else b.corr[k]=t.checked;touch();return}
+   if(t.dataset.i){const x=b.items.find(y=>y.id===t.dataset.i);if(!x)return;x[f]=f==='niveau'?(NIVX.includes(t.value)?t.value:''):txt(t.value,f==='num'||f==='titre'?200:undefined);if(f==='num'){const l=t.closest('fieldset').querySelector('legend');if(l)l.textContent='Exercice '+(x.num||(b.items.indexOf(x)+1))}}
+   else if(f==='titre')b.titre=txt(t.value,200);
+   else if(f==='couleur'){b.couleur=hex(t.value)===c.couleurs[b.type]?'':hex(t.value);t.closest('.cbk').style.setProperty('--bc',colOf(c,b))}
+   else if(f==='saut')b.saut=t.checked;else if(f==='v')b.v[t.dataset.k]=txt(t.value);else if(f==='corrtxt')b.corr.texte=txt(t.value);
+   else if(f==='comp')b.comp=COMP.filter(k=>k===t.dataset.k?t.checked:b.comp.includes(k));
+   touch()}}
++/* ---------- images : ajout (sélecteur, glisser-déposer, collage), réduction à 900 px, jamais déformées (largeur en %, hauteur automatique) ---------- */
++const imgList=(b,itemId)=>itemId?((b.items.find(x=>x.id===itemId)||{}).imgs||[]):b.imgs;
++const readImg=f=>new Promise((ok,ko)=>{const r=new FileReader();r.onerror=()=>ko(new Error('lecture impossible'));r.onload=()=>{const im=new Image();im.onerror=()=>ko(new Error('image illisible'));im.onload=()=>{const k=Math.min(1,900/Math.max(im.width,1)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*k));c.height=Math.max(1,Math.round(im.height*k));const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(im,0,0,c.width,c.height);ok(c.toDataURL('image/jpeg',.82))};im.src=r.result};r.readAsDataURL(f)});
++async function addImgFile(f,bid,itemId){const b=bk(bid);if(!b||!f)return false;
++ if(!/^image\/(png|jpe?g|gif|webp)$/.test(f.type)){toast('Format non pris en charge (PNG, JPEG, GIF ou WebP)');return false}
++ if(f.size>2e7){toast('Image trop volumineuse (20 Mo maximum)');return false}
++ const L=imgList(b,itemId);if(L.length>=LIM.img){toast('Nombre maximal d’images atteint pour ce bloc');return false}
++ try{const u=await readImg(f);if(!IMGOK(u)||!u)throw new Error('image refusée');if(!bk(bid))return false;imgList(b,itemId).push({id:uid(),u,w:100,a:'c',l:''});touch({now:1});const y=$c('cahE').scrollTop;render();$c('cahE').scrollTop=y;return true}
++ catch(e){toast('Image non ajoutée : '+errMsg(e));return false}}
++function imgAct(a,bid,itemId,id){const b=bk(bid);if(!b)return;const L=imgList(b,itemId),i=L.findIndex(m=>m.id===id);if(i<0)return;if(a==='imgdel')L.splice(i,1);else mv(L,i,i+(a==='imgup'?-1:1));touch({now:1});const y=$c('cahE').scrollTop;render();$c('cahE').scrollTop=y}
++const imgTarget=n=>{const x=n&&n.closest&&n.closest('.cbk[data-bid]');if(!x)return null;const f=n.closest('fieldset[data-it]');return{b:x.dataset.bid,i:f?f.dataset.it:''}};
++document.addEventListener('dragover',e=>{if(S.open&&!S.drag&&e.dataTransfer&&[...(e.dataTransfer.types||[])].includes('Files')&&imgTarget(e.target)){e.preventDefault();e.dataTransfer.dropEffect='copy'}});
++document.addEventListener('drop',e=>{if(!S.open||S.drag||!e.dataTransfer||![...(e.dataTransfer.types||[])].includes('Files'))return;const g=imgTarget(e.target);if(!g)return;e.preventDefault();e.stopPropagation();[...e.dataTransfer.files].forEach(f=>addImgFile(f,g.b,g.i))},true);
+ /* ---------- glisser-déposer (chapitres et blocs) ---------- */
+ function dropAt(e,kind){const t=e.target.closest(kind==='ch'?'li[data-did]':'.cbk[data-bid]');if(!t)return null;const r=t.getBoundingClientRect(),id=kind==='ch'?t.dataset.did:t.dataset.bid;return{id,after:e.clientY>r.top+r.height/2,el:t}}
+ document.addEventListener('dragstart',e=>{const g=e.target.closest&&e.target.closest('#cah [data-did]');if(!g||!S.open)return;S.drag={k:g.dataset.dk,id:g.dataset.did};e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',g.dataset.did)}catch(x){}});
+@@ -188,27 +245,36 @@
+ .cp-page{background:#fff;color:#222;width:100%;max-width:794px;margin:0 auto;padding:36px 44px;box-shadow:0 2px 10px #0003;font:10pt/1.4 Calibri,Carlito,"Segoe UI",Arial,sans-serif;min-height:600px}.cp-page h1{font-size:22pt;color:var(--nv);margin:0}.cp-sub0{font-style:italic;color:#4a5a73;margin:2pt 0 12pt}
+ .cp-ch+.cp-ch{margin-top:26pt}.cp-run{text-align:right;font-size:8pt;color:#8a94a6;border-bottom:1px solid #dde3ec;margin-bottom:8pt}.cp-page h2{color:var(--nv);font-size:15pt;margin:6pt 0 4pt}.cp-ref{font-style:italic;color:#4a5a73;margin:0 0 6pt}
+ .cp-b{border:1.5px solid var(--bc);border-radius:6px;margin:10pt 0;overflow:hidden;break-inside:auto}.cp-h{background:var(--bc);color:var(--bt,#fff);font-weight:700;padding:5px 10px;break-after:avoid}.cp-c{padding:6px 12px}.cp-c p{margin:0 0 4pt}.cp-c ul{margin:0 0 4pt;padding-left:18px}.cp-c h4{margin:6pt 0 2pt;color:var(--bc)}
+-.cp-two{display:grid;grid-template-columns:1fr 1fr;gap:10px}.cp-sub{background:color-mix(in srgb,var(--bc) 9%,#fff);border-radius:4px;padding:4px 8px;margin:4px 0}.cp-cons{font-style:italic;margin-bottom:4pt}.cp-ex{border-top:1px dashed #ccd;padding-top:4pt;margin-top:6pt;break-inside:avoid}.cp-ex:first-child{border-top:0;margin-top:0}
+-.cp-co{background:#f3f6f9;border-left:3px solid #6b7a89;padding:3px 8px;margin:4pt 0}.cp-co b{display:block;color:#4a5a73;font-size:9pt}.cp-cp{font-size:9pt}.cp-empty{color:#8a94a6;font-style:italic}@media screen{.cp-pb{border-top:2px dashed #9db0c2}}
+-@media(max-width:1000px){#cahtabs{display:flex;background:var(--ink)}#cahtabs button{flex:1;border:0;border-radius:0;background:none;color:#cfd9e2;padding:12px 4px;min-height:44px}#cahtabs button[aria-pressed=true]{background:var(--acc);color:#fff}#cahbody{display:block;overflow:auto}#cahL,#cahE,#cahP{display:none;height:100%;border:0}#cah[data-tab=list] #cahL,#cah[data-tab=edit] #cahE,#cah[data-tab=prev] #cahP{display:block}.cp-page{padding:18px 16px}.cp-two{grid-template-columns:1fr}#cahbar button,#cah .cbtn{min-height:40px}.cbk-a button,.cl-a button{min-width:38px;min-height:38px}}
+-@media print{body.cah-open>*:not(#cah){display:none!important}body.cah-open #cah{position:static;display:block;background:#fff}#cahbar,#cahtabs,#cahL,#cahE,.cp-bar{display:none!important}#cahbody{display:block}#cahP{overflow:visible;padding:0;display:block!important}.cp-page{box-shadow:none;max-width:none;padding:0;min-height:0}.cp-page,.cp-page *{-webkit-print-color-adjust:exact;print-color-adjust:exact}.cp-pb{break-before:page;page-break-before:always;border-top:0}.cp-ch+.cp-ch{break-before:page}}`;
++.cp-two{display:grid;grid-template-columns:1fr 1fr;gap:10px}.cp-sub{background:color-mix(in srgb,var(--bc) 9%,#fff);border-radius:4px;padding:4px 8px;margin:4px 0}.cp-cons{font-style:italic;margin-bottom:4pt}.cp-b{clear:both}.cp-ex{border-top:1px dashed #ccd;padding-top:4pt;margin-top:6pt;break-inside:avoid}.cp-ex:first-child{border-top:0;margin-top:0}
++.cp-co{background:#f3f6f9;border-left:3px solid #6b7a89;padding:3px 8px;margin:4pt 0}.cp-co>b{display:block;color:#4a5a73;font-size:9pt}.cp-cp{font-size:9pt}.cp-empty{color:#8a94a6;font-style:italic}@media screen{.cp-pb{border-top:2px dashed #9db0c2}}
++/* phase 2 */
++.ce-tb{position:sticky;top:-10px;z-index:3;display:flex;flex-wrap:wrap;gap:4px;align-items:center;background:var(--bg);padding:6px 0;margin-bottom:4px;border-bottom:1px solid var(--cl)}.ce-tb span{font-size:12px;color:#566574;margin-right:2px}.ce-tb .ce-sp{margin-left:8px}.ce-tb button{padding:3px 8px;font-size:13px}
++.cbk-im{margin:6px 0}.cbk-im>small{color:#566574}.cbk-ig{display:flex;gap:10px;align-items:flex-start;border:1px dashed var(--cl);border-radius:6px;padding:6px;margin:6px 0}.cbk-ig img{width:110px;max-height:110px;object-fit:contain;background:#fff;border:1px solid var(--cl)}.cbk-ig>div{flex:1;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:end}.cbk-ig label{margin:0!important}.cbk-ig select{width:auto!important}.cbk-cs{margin:6px 0}.cbk-cs summary{cursor:pointer;font-size:13px;color:var(--acc);font-weight:600}.cbk-cs label{font-weight:400!important}
++.cp-call{border-left:4px solid var(--cc);background:color-mix(in srgb,var(--cc) 8%,#fff);padding:3px 10px;margin:5pt 0;border-radius:0 4px 4px 0;break-inside:avoid}.cp-cl{display:block;color:var(--cc);font-size:9pt;text-transform:uppercase;letter-spacing:.4px}
++.cp-t{border-collapse:collapse;margin:4pt 0;width:auto;max-width:100%}.cp-t th,.cp-t td{border:1px solid #8a94a6;padding:3px 8px;text-align:center}.cp-t th{background:color-mix(in srgb,var(--bc,#1b365d) 14%,#fff);color:#222}.cp-tw{overflow-x:auto}
++.cp-q{margin:4pt 0 2pt}.cp-q b{color:var(--bc)}.cp-im{margin:4pt 0}.cp-im figure{margin:4pt auto}.cp-im .cp-fr{float:right;margin:0 0 4pt 10pt}.cp-im img{display:block;width:100%;height:auto}.cp-im figcaption{font-size:8.5pt;font-style:italic;text-align:center}
++.cp-co summary{cursor:pointer;font-weight:700;color:#4a5a73;font-size:9pt}.prt{display:none}
++@media(max-width:1000px){.ce-tb button,.cbk-ig button,.cbk-im .cbtn{min-height:40px;min-width:40px}#cahtabs{display:flex;background:var(--ink)}#cahtabs button{flex:1;border:0;border-radius:0;background:none;color:#cfd9e2;padding:12px 4px;min-height:44px}#cahtabs button[aria-pressed=true]{background:var(--acc);color:#fff}#cahbody{display:block;overflow:auto}#cahL,#cahE,#cahP{display:none;height:100%;border:0}#cah[data-tab=list] #cahL,#cah[data-tab=edit] #cahE,#cah[data-tab=prev] #cahP{display:block}.cp-page{padding:18px 16px}.cp-two{grid-template-columns:1fr}#cahbar button,#cah .cbtn{min-height:40px}.cbk-a button,.cl-a button{min-width:40px;min-height:40px}}
++@media print{.scr{display:none!important}.prt{display:block!important}.cp-im{break-inside:avoid}body.cah-open>*:not(#cah){display:none!important}body.cah-open #cah{position:static;display:block;background:#fff}#cahbar,#cahtabs,#cahL,#cahE,.cp-bar{display:none!important}#cahbody{display:block}#cahP{overflow:visible;padding:0;display:block!important}.cp-page{box-shadow:none;max-width:none;padding:0;min-height:0}.cp-page,.cp-page *{-webkit-print-color-adjust:exact;print-color-adjust:exact}.cp-pb{break-before:page;page-break-before:always;border-top:0}.cp-ch+.cp-ch{break-before:page}}`;
+ function build(){if($c('cah'))return;const st=document.createElement('style');st.id='cahcss';st.textContent=CSS;document.head.append(st);
+  const el=document.createElement('div');el.id='cah';el.hidden=true;el.setAttribute('role','dialog');el.setAttribute('aria-label','Cahier de l’élève');
+- el.innerHTML='<header id="cahbar"><button data-ca="close" aria-label="Retour aux préparations">← Préparations</button><strong>📚 Cahier de l’élève</strong><select id="cahsel" aria-label="Choisir un cahier"></select><button data-ca="cnew">+ Cahier</button><button data-ca="cdup">Dupliquer</button><button data-ca="cdel">Supprimer</button><button data-ca="cexp">Exporter</button><button data-ca="cimp">Importer</button><button data-ca="print">🖨 Imprimer / PDF</button><button id="cahu" data-ca="hundo" aria-label="Annuler">↶</button><button id="cahr" data-ca="hredo" aria-label="Rétablir">↷</button><button id="cahun" data-ca="cundo" hidden></button><span id="cahst" role="status" aria-live="polite"></span></header><nav id="cahtabs" aria-label="Volets"><button data-ca="tab" data-tab="list">Chapitres</button><button data-ca="tab" data-tab="edit">Édition</button><button data-ca="tab" data-tab="prev">Aperçu</button></nav><div id="cahbody"><aside id="cahL" aria-label="Chapitres"></aside><section id="cahE" aria-label="Éditeur"></section><section id="cahP" aria-label="Aperçu du cahier"></section></div><input type="file" id="cahf" accept=".json,application/json" hidden>';
++ el.innerHTML='<header id="cahbar"><button data-ca="close" aria-label="Retour aux préparations">← Préparations</button><strong>📚 Cahier de l’élève</strong><select id="cahsel" aria-label="Choisir un cahier"></select><button data-ca="cnew">+ Cahier</button><button data-ca="cdup">Dupliquer</button><button data-ca="cdel">Supprimer</button><button data-ca="cexp">Exporter</button><button data-ca="cimp">Importer</button><button data-ca="print">🖨 Imprimer / PDF</button><button id="cahu" data-ca="hundo" aria-label="Annuler">↶</button><button id="cahr" data-ca="hredo" aria-label="Rétablir">↷</button><button id="cahun" data-ca="cundo" hidden></button><span id="cahst" role="status" aria-live="polite"></span></header><nav id="cahtabs" aria-label="Volets"><button data-ca="tab" data-tab="list">Chapitres</button><button data-ca="tab" data-tab="edit">Édition</button><button data-ca="tab" data-tab="prev">Aperçu</button></nav><div id="cahbody"><aside id="cahL" aria-label="Chapitres"></aside><section id="cahE" aria-label="Éditeur"></section><section id="cahP" aria-label="Aperçu du cahier"></section></div><input type="file" id="cahf" accept=".json,application/json" hidden><input type="file" id="cahimg" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>';
+  document.body.append(el);
+- el.addEventListener('click',onClick);el.addEventListener('input',onInput);el.addEventListener('change',e=>{if(e.target.id==='cahsel')selCah(e.target.value);else if(e.target.id==='cahf'){const f=e.target.files[0];e.target.value='';impFile(f)}else if(e.target.matches('select,[type=checkbox],[type=color]')&&!e.target.dataset.ca)onInput(e)});
+- el.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('u[role=button]')){e.preventDefault();e.target.click()}
++ el.addEventListener('click',onClick);el.addEventListener('input',onInput);el.addEventListener('change',e=>{if(e.target.id==='cahsel')selCah(e.target.value);else if(e.target.id==='cahimg'){const g=S.imgT,fs=[...e.target.files];e.target.value='';if(g)fs.reduce((p,f)=>p.then(()=>addImgFile(f,g.b,g.i)),Promise.resolve())}else if(e.target.id==='cahf'){const f=e.target.files[0];e.target.value='';impFile(f)}else if(e.target.dataset.ca==='mode'){S.mode=e.target.value;prev()}else if(e.target.matches('select,[type=checkbox],[type=color]')&&!e.target.dataset.ca)onInput(e)});
++ el.addEventListener('focusin',e=>{if(e.target.tagName==='TEXTAREA')LAST=e.target});el.addEventListener('mousedown',e=>{if(e.target.closest('.ce-tb button'))e.preventDefault()});
++ el.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.target.tagName==='TEXTAREA'&&/^[bu]$/i.test(e.key)){e.preventDefault();LAST=e.target;fmtIns(e.key.toLowerCase())}
++  if((e.key==='Enter'||e.key===' ')&&e.target.matches('u[role=button]')){e.preventDefault();e.target.click()}
+   if(e.key==='Tab'&&!document.querySelector('.mdl')){const F=[...el.querySelectorAll('button:not(:disabled),input:not([type=hidden]),select,textarea,summary,[tabindex="0"]')].filter(x=>x.offsetParent&&!x.closest('details:not([open])>:not(summary)')),a=F[0],z=F[F.length-1];
+    if(e.shiftKey&&(e.target===a||!el.contains(e.target))){e.preventDefault();z&&z.focus()}else if(!e.shiftKey&&(e.target===z||!el.contains(e.target))){e.preventDefault();a&&a.focus()}}})}
+ function onClick(e){const b=e.target.closest('[data-ca]');if(!b||b.disabled)return;const a=b.dataset.ca,id=b.dataset.id;
+- if(b.matches('input')){if(a==='tcorr'){S.corr=b.checked;prev()}else if(a==='tall'){S.scope=b.checked?'all':'chap';prev()}return}
++ if(b.matches('input')){if(a==='tall'){S.scope=b.checked?'all':'chap';prev()}return}
+  switch(a){case'close':close();break;case'cnew':newCah();break;case'cdup':dupCah();break;case'cdel':delCah();break;case'cundo':undoDel();break;case'cexp':expCah(false);break;case'cexpall':expCah(true);break;case'cimp':$c('cahf').click();break;
+   case'print':window.print();break;case'hundo':hgo(-1);break;case'hredo':hgo(1);break;case'retry':S.dirty.size||(cc()&&S.dirty.add(cc().id));S.ordDirty=true;flush();break;
+   case'tab':S.tab=b.dataset.tab;render();break;
+   case'chnew':{const c=cc();if(!c)return;if(c.chapitres.length>=LIM.chap)return;const h=mkChap();c.chapitres.push(h);S.chap=h.id;touch({now:1});if(S.tab==='list')S.tab='edit';render();const i=document.querySelector('#cahE [data-ch=nom]');if(i){i.focus();i.select()}break}
+   case'chsel':S.chap=id;if(S.tab==='list')S.tab='edit';render();break;case'chup':case'chdn':case'chdup':case'chdel':chAct(a,id);break;
+   case'badd':{const h=ch();if(!h||h.blocs.length>=LIM.bloc)return;const k=mkBloc(b.dataset.t);h.blocs.push(k);touch({now:1});render();const n=document.querySelector('.cbk[data-bid="'+k.id+'"]');if(n){n.scrollIntoView({block:'center'});const f=n.querySelector('textarea,input');if(f)f.focus()}break}
+-  case'bup':case'bdn':case'bdup':case'bdel':blAct(a,id);break;case'exnew':blAct(a,id);break;case'exup':case'exdn':case'exdel':blAct(a,b.dataset.b,id);break;
++  case'bup':case'bdn':case'bdup':case'bdel':blAct(a,id);break;case'fmt':fmtIns(b.dataset.m);break;case'kbd':kbdIns(+b.dataset.i);break;case'imgadd':S.imgT={b:b.dataset.b,i:b.dataset.it||''};$c('cahimg').click();break;case'imgup':case'imgdn':case'imgdel':imgAct(a,b.dataset.b,b.dataset.it||'',id);break;case'exnew':blAct(a,id);break;case'exup':case'exdn':case'exdel':blAct(a,b.dataset.b,id);break;
+   case'colreset':{const c=cc();if(c){c.couleurs={...COL};touch({now:1});render()}break}}}
+ async function open(){build();S.opener=document.activeElement;
+  try{if(!S.loaded)await load()}catch(e){S.err=e;await info('Cahier indisponible','<p>Impossible d’ouvrir la base des cahiers : '+esc(errMsg(e))+'.</p><p>Vos préparations ne sont pas concernées.</p>');return}
+@@ -221,10 +287,10 @@
+  if(k==='z'||k==='y'){e.stopImmediatePropagation();if(!(e.target.matches&&e.target.matches('textarea,input:not([type=color]):not([type=checkbox])'))){e.preventDefault();hgo(k==='y'||e.shiftKey?1:-1)}}
+  else if(k==='s'){e.stopImmediatePropagation();e.preventDefault();flush().then(()=>toast(S.err?'⚠ Échec de l’enregistrement du cahier':'✓ Cahier enregistré'))}
+  else if(k==='k'||k==='p'&&false)e.stopImmediatePropagation()},true);
+-addEventListener('paste',e=>{if(!S.open)return;const f=e.clipboardData&&[...(e.clipboardData.files||[])].some(x=>/^image\//.test(x.type));if(f){e.stopImmediatePropagation();e.preventDefault();toast('L’ajout d’images au cahier arrive dans la prochaine phase.')}},true);
++addEventListener('paste',e=>{if(!S.open)return;const f=e.clipboardData&&[...(e.clipboardData.files||[])].some(x=>/^image\//.test(x.type));if(f){e.stopImmediatePropagation();e.preventDefault();const g=imgTarget(document.activeElement);if(g)[...e.clipboardData.files].filter(x=>/^image\//.test(x.type)).forEach(x=>addImgFile(x,g.b,g.i));else toast('Cliquez d’abord dans un bloc pour y coller l’image.')}},true);
+ addEventListener('beforeprint',()=>{if(!S.open)return;const c=cc();if(c)document.title=(c.nom+(S.scope==='all'?'':' - '+((ch()||{}).nom||''))).replace(/[\\/:*?"<>|]/g,'').slice(0,90)});
+ addEventListener('beforeunload',()=>{if(S.db&&(S.dirty.size||S.del.size))flush()});
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flush()});
+ document.addEventListener('click',e=>{const b=e.target.closest('[data-a="cahier"]');if(b){e.preventDefault();open()}});
+-window.CAH={S,open,close,flush,cc,ch,normCah,parseImp,reid,T,SCH,FMT,load:()=>load(),render};
++window.CAH={S,rich,addImgFile,imgList,open,close,flush,cc,ch,normCah,parseImp,reid,T,SCH,FMT,load:()=>load(),render};
+ })();
+diff -ruN '--exclude=node_modules' '--exclude=vendor' '--exclude=*.png' '--exclude=*.zip' base2/docs/CAHIER-ELEVE.md z/CreateDocMath-main/docs/CAHIER-ELEVE.md
+--- a/docs/CAHIER-ELEVE.md	2026-11-04 07:21:56.769098094 +0000
++++ b/docs/CAHIER-ELEVE.md	2026-11-04 07:30:03.529356810 +0000
+@@ -53,11 +53,36 @@
+ 5. Les six types de blocs, avec champs, couleur propre, saut de page, exercices multiples, compétences, corrigé ; aperçu A4 avec formules KaTeX, corrigés affichables ou non.
+ 6. Enregistrement automatique dans `cdm3cahiers` avec relecture de contrôle, erreurs signalées avec « réessayer », ↶ ↷ propres au cahier, export / import `.json`, impression / PDF de l'aperçu.
+ 
+-## 6. Limites de la phase 1 (à traiter dans les phases suivantes)
++## 6. Phase 2 — éditeur pédagogique
+ 
+-- **Les sauvegardes ZIP ne contiennent pas encore les cahiers** : utiliser **Exporter** (`.json`) dans le cahier. Intégration au ZIP prévue en phase 4.
+-- Pas encore d'images dans les blocs (modèle prêt), ni de liaison avec les séquences (phase 3), ni d'export Word, de table des matières ou de pagination automatique (phase 4), ni de publication (phase 5).
+-- Pas d'import de contenu de la banque d'exercices (phase 3).
+-- Édition simultanée dans deux onglets : le dernier enregistrement l'emporte (pas de détection de conflit).
+-- Chaque enregistrement réécrit le cahier modifié en entier (suffisant sans images ; à revoir avec les images).
+-- Un glisser-déposer sur de très longues distances dépend de l'auto-défilement du navigateur : utiliser ↑ ↓.
++**Mise en forme** (barre d'outils au-dessus de l'éditeur, agit sur le champ texte actif ; Ctrl + B / Ctrl + U) :
++
++| Syntaxe dans un champ | Rendu |
++|---|---|
++| `**gras**`, `__souligné__`, `- puce`, `## sous-titre` | mise en forme légère de l'application |
++| `@def …` `@prop …` `@thm …` `@ex …` `@meth …` `@rem …` `@att …` | encadré coloré (Définition, Propriété, Théorème, Exemple, Méthode, Remarque, Attention), jusqu'à la ligne vide |
++| `\| a \| b \|` puis `\|---\|---\|` | tableau (première ligne = en-tête si la ligne de séparation suit) |
++| `1. …`, `a) …` | question numérotée, numéro en couleur ; une ligne de suite commençant par une minuscule est recollée |
++| `$…$`, `$$…$$` | formules KaTeX ; le clavier de formules de l'application est repris |
++
++Tout est échappé avant mise en forme : aucun HTML saisi n'est interprété.
++
++**Images** : ajout par bouton, **glisser-déposer** ou **collage** (Ctrl + V) dans un bloc ou dans un exercice. Réduction à 900 px (JPEG), taille 25 / 50 / 75 / 100 %, alignement centré ou à droite, légende, déplacement, suppression. Largeur en % et hauteur automatique : **jamais déformées**, y compris à l'impression. Formats PNG, JPEG, GIF, WebP (SVG refusé). Le collage hors d'un bloc n'ajoute rien, et jamais rien aux séances.
++
++**Corrigés** : réglages par bloc (affichage par défaut, accessible en ligne, inclus dans le PDF, inclus dans le Word), et trois versions de l'aperçu / impression :
++1. *Enseignant* : tous les corrigés ;
++2. *Élève avec corrigés* : selon les réglages de chaque bloc (« Voir le corrigé » déroulant à l'écran ; à l'impression, seulement les blocs cochés « PDF ») ;
++3. *Élève sans corrigés* : les corrigés **ne sont pas présents dans le HTML** (pas un simple masquage).
++
++**Nouveaux contenus** : type de bloc *Fiche de révision* (points clés, méthodes, exercices conseillés), champ *Questions intermédiaires* dans la tâche complexe, compétences et barème dans l'évaluation, images dans les exercices.
++
++**Modèle de données** : le schéma reste **v1** (changements uniquement additifs, normalisés à la lecture : `couleurs.revision`, `imgs[].id`, `items[].imgs`, `v.questions`). Les cahiers de la phase 1 se chargent sans migration ni copie de sécurité (testé). L'historique ↶ ↷ référence les images par clé pour ne pas dupliquer leur poids en mémoire.
++
++## 7. Limites (à traiter dans les phases suivantes)
++
++- **Les sauvegardes ZIP ne contiennent pas encore les cahiers** : utiliser **Exporter** (`.json`, images comprises) dans le cahier. Intégration au ZIP prévue en phase 4.
++- Pas de recadrage d'image dans le cahier, ni de table des matières, de pagination automatique, d'en-tête / pied de page configurables ni d'export Word (phase 4) ; pas de liaison avec les séquences ni de banque d'exercices (phase 3) ; pas de publication (phase 5).
++- Les réglages « Word » des corrigés sont enregistrés mais ne seront utilisés qu'avec l'export Word (phase 4).
++- Édition simultanée dans deux onglets : le dernier enregistrement l'emporte.
++- Chaque enregistrement réécrit le cahier modifié en entier, images comprises : à optimiser (stockage binaire séparé) si des cahiers très illustrés posent problème.
++- Le glisser-déposer sur de longues distances dépend de l'auto-défilement du navigateur : utiliser ↑ ↓.
+diff -ruN '--exclude=node_modules' '--exclude=vendor' '--exclude=*.png' '--exclude=*.zip' base2/sw.js z/CreateDocMath-main/sw.js
+--- a/sw.js	2026-11-04 07:21:56.679761692 +0000
++++ b/sw.js	2026-11-04 07:30:03.526130792 +0000
+@@ -1,6 +1,6 @@
+ /* Service worker : fichiers de l'application = réseau d'abord (toujours à jour), cache en secours ;
+    bibliothèques embarquées (vendor/) précachées à l'installation ; aucune dépendance CDN. */
+-const V='fiches-maths-v17',CORE=["./", "index.html", "bo_cycle3.js", "bo_cycle4.js", "bo_premiere.js", "bank_difficultes.js", "cahier.js", "manifest.json", "icon-192.png", "icon-512.png", "vendor/jszip.min.js", "vendor/docx.iife.js", "vendor/katex/katex.min.css", "vendor/katex/katex.min.js", "vendor/katex/auto-render.min.js", "vendor/katex/fonts/KaTeX_AMS-Regular.woff2", "vendor/katex/fonts/KaTeX_Caligraphic-Bold.woff2", "vendor/katex/fonts/KaTeX_Caligraphic-Regular.woff2", "vendor/katex/fonts/KaTeX_Fraktur-Bold.woff2", "vendor/katex/fonts/KaTeX_Fraktur-Regular.woff2", "vendor/katex/fonts/KaTeX_Main-Bold.woff2", "vendor/katex/fonts/KaTeX_Main-BoldItalic.woff2", "vendor/katex/fonts/KaTeX_Main-Italic.woff2", "vendor/katex/fonts/KaTeX_Main-Regular.woff2", "vendor/katex/fonts/KaTeX_Math-BoldItalic.woff2", "vendor/katex/fonts/KaTeX_Math-Italic.woff2", "vendor/katex/fonts/KaTeX_SansSerif-Bold.woff2", "vendor/katex/fonts/KaTeX_SansSerif-Italic.woff2", "vendor/katex/fonts/KaTeX_SansSerif-Regular.woff2", "vendor/katex/fonts/KaTeX_Script-Regular.woff2", "vendor/katex/fonts/KaTeX_Size1-Regular.woff2", "vendor/katex/fonts/KaTeX_Size2-Regular.woff2", "vendor/katex/fonts/KaTeX_Size3-Regular.woff2", "vendor/katex/fonts/KaTeX_Size4-Regular.woff2", "vendor/katex/fonts/KaTeX_Typewriter-Regular.woff2"];
++const V='fiches-maths-v18',CORE=["./", "index.html", "bo_cycle3.js", "bo_cycle4.js", "bo_premiere.js", "bank_difficultes.js", "cahier.js", "manifest.json", "icon-192.png", "icon-512.png", "vendor/jszip.min.js", "vendor/docx.iife.js", "vendor/katex/katex.min.css", "vendor/katex/katex.min.js", "vendor/katex/auto-render.min.js", "vendor/katex/fonts/KaTeX_AMS-Regular.woff2", "vendor/katex/fonts/KaTeX_Caligraphic-Bold.woff2", "vendor/katex/fonts/KaTeX_Caligraphic-Regular.woff2", "vendor/katex/fonts/KaTeX_Fraktur-Bold.woff2", "vendor/katex/fonts/KaTeX_Fraktur-Regular.woff2", "vendor/katex/fonts/KaTeX_Main-Bold.woff2", "vendor/katex/fonts/KaTeX_Main-BoldItalic.woff2", "vendor/katex/fonts/KaTeX_Main-Italic.woff2", "vendor/katex/fonts/KaTeX_Main-Regular.woff2", "vendor/katex/fonts/KaTeX_Math-BoldItalic.woff2", "vendor/katex/fonts/KaTeX_Math-Italic.woff2", "vendor/katex/fonts/KaTeX_SansSerif-Bold.woff2", "vendor/katex/fonts/KaTeX_SansSerif-Italic.woff2", "vendor/katex/fonts/KaTeX_SansSerif-Regular.woff2", "vendor/katex/fonts/KaTeX_Script-Regular.woff2", "vendor/katex/fonts/KaTeX_Size1-Regular.woff2", "vendor/katex/fonts/KaTeX_Size2-Regular.woff2", "vendor/katex/fonts/KaTeX_Size3-Regular.woff2", "vendor/katex/fonts/KaTeX_Size4-Regular.woff2", "vendor/katex/fonts/KaTeX_Typewriter-Regular.woff2"];
+ self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting()))});
+ self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==V).map(x=>caches.delete(x)))).then(()=>self.clients.claim()))});
+ const keep=(r,x)=>{const c=x.clone();caches.open(V).then(h=>h.put(r,c));return x};
+diff -ruN '--exclude=node_modules' '--exclude=vendor' '--exclude=*.png' '--exclude=*.zip' base2/tests/run.js z/CreateDocMath-main/tests/run.js
+--- a/tests/run.js	2026-11-04 07:21:56.716454472 +0000
++++ b/tests/run.js	2026-11-04 07:30:03.528180447 +0000
+@@ -149,7 +149,7 @@
+ T('PWA : fonctionne hors ligne après installation (KaTeX local, données IndexedDB)',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
+  await p.evaluate(()=>navigator.serviceWorker.ready.then(()=>1));await p.reload();await p.waitForFunction(()=>navigator.serviceWorker.controller);
+  const names=await p.evaluate(async()=>{const ks=await caches.keys(),c=await caches.open(ks.find(k=>k.startsWith('fiches-maths'))),r=await c.keys();return{ks,u:r.map(x=>new URL(x.url).pathname)}});
+- assert.deepStrictEqual(names.ks,['fiches-maths-v17']);for(const f of ['/vendor/docx.iife.js','/vendor/katex/katex.min.js','/vendor/jszip.min.js','/vendor/katex/fonts/KaTeX_Main-Regular.woff2','/index.html','/bo_cycle4.js'])assert.ok(names.u.includes(f),f);
++ assert.deepStrictEqual(names.ks,['fiches-maths-v18']);for(const f of ['/vendor/docx.iife.js','/vendor/katex/katex.min.js','/vendor/jszip.min.js','/vendor/katex/fonts/KaTeX_Main-Regular.woff2','/index.html','/bo_cycle4.js'])assert.ok(names.u.includes(f),f);
+  await p.evaluate(()=>{S().nom='Hors ligne ok';S().activite='$a^2$';changed()});await saved(p);await c.setOffline(true);await p.reload();await booted(p);assert.strictEqual(await p.evaluate(()=>S().nom),'Hors ligne ok');await p.waitForSelector('#prev .katex');
+  assert.ok(await p.evaluate(()=>document.fonts.check('16px KaTeX_Main')||true));await c.close()});
+ 
+@@ -609,6 +609,7 @@
+ const cahCur=p=>p.evaluate(()=>JSON.parse(JSON.stringify(CAH.cc())));
+ const prepState=p=>p.evaluate(()=>JSON.stringify({q:db.seqs.map(x=>[x.id,x.nom]),s:db.seances.map(x=>[x.id,x.nom,x.seq,x.numero]),cur:db.cur}));
+ const TYPES=['attendus','decouverte','trace','exercices','tache','eval'];
++const dnd=(p,s,d,f)=>p.evaluate(([s,d,f])=>{const A=document.querySelector(s),D=document.querySelector(d),dt=new DataTransfer(),q=D.getBoundingClientRect(),y=q.top+q.height*f,fire=(el,n)=>el.dispatchEvent(new DragEvent(n,{bubbles:true,cancelable:true,dataTransfer:dt,clientX:q.left+20,clientY:y}));fire(A,'dragstart');fire(D,'dragover');fire(D,'drop');fire(A,'dragend')},[s,d,f]);
+ const cahMenuOpen=async p=>{await p.click('#mbar [data-menu=v]');await p.click('#mbar [data-a=cahier]');await p.waitForSelector('#cah:not([hidden]) #cahE')};
+ 
+ T('cahier : accès par le menu Affichage, état vide, aucun effet sur les préparations ni sur la base existante, fermeture',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await saved(p);
+@@ -657,7 +658,7 @@
+ 
+ T('cahier : glisser-déposer d’un bloc (poignée) et enregistrement de l’ordre',async()=>{const c=await ctx({viewport:{width:1400,height:900}}),p=await c.newPage();await booted(p);await cahOpen(p);await cahNew(p);
+  for(const t of ['trace','exercices','eval'])await p.click('[data-ca=badd][data-t='+t+']');const bi=await p.evaluate(()=>CAH.ch().blocs.map(b=>b.id)),bt=()=>p.evaluate(()=>CAH.ch().blocs.map(b=>b.type));
+- await p.locator('.cbk[data-bid="'+bi[1]+'"] .cdrag').dragTo(p.locator('.cbk[data-bid="'+bi[0]+'"]'),{targetPosition:{x:60,y:5}});await p.waitForTimeout(50);assert.deepStrictEqual(await bt(),['exercices','trace','eval'],'glisser-déposer de bloc');
++ await dnd(p,'.cbk[data-bid="'+bi[1]+'"] .cdrag','.cbk[data-bid="'+bi[0]+'"]',.1);await p.waitForTimeout(50);assert.deepStrictEqual(await bt(),['exercices','trace','eval'],'glisser-déposer de bloc');
+  assert.deepStrictEqual(await p.$$eval('.cbk',e=>e.map(x=>x.dataset.bid)),[bi[1],bi[0],bi[2]],'éditeur redessiné dans le nouvel ordre');await cahSaved(p);await p.reload();await booted(p);await cahOpen(p);assert.deepStrictEqual(await bt(),['exercices','trace','eval'],'ordre conservé');assert.deepStrictEqual(c.errs,[]);await c.close()});
+ 
+ T('cahier : les six types de blocs — saisie, couleurs, saut de page, déplacer / dupliquer / supprimer, exercices, compétences, corrigés, aperçu',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await cahOpen(p);await cahNew(p);
+@@ -669,11 +670,11 @@
+  await B(2).locator('textarea').fill('## Définition\nL’**opposé** de $a$ est $-a$.\n- Propriété\n\nExemple : $\\frac{1}{2}$');
+  await B(3).locator('[data-ca=exnew]').click();await B(3).locator('fieldset').nth(0).locator('[data-f=enonce]').fill('Calculer $3+(-5)$.');await B(3).locator('fieldset').nth(0).locator('[data-f=corrige]').fill('CORRIGE-EX1');await B(3).locator('fieldset').nth(0).locator('[data-f=niveau]').selectOption('facile');
+  await B(3).locator('fieldset').nth(1).locator('[data-f=titre]').fill('Problème');await B(3).locator('fieldset').nth(1).locator('[data-f=enonce]').fill('Énoncé 2');await B(3).locator('fieldset').nth(1).locator('[data-f=num]').fill('2bis');
+- await B(4).locator('textarea').nth(0).fill('Situation : le trajet.');await B(4).locator('textarea').nth(3).fill('CORRIGE-TACHE');await B(4).locator('[data-f=comp][data-k=Chercher]').check();await B(4).locator('[data-f=comp][data-k=Raisonner]').check();
++ await B(4).locator('textarea').nth(0).fill('Situation : le trajet.');await B(4).locator('textarea').nth(4).fill('CORRIGE-TACHE');await B(4).locator('[data-f=comp][data-k=Chercher]').check();await B(4).locator('[data-f=comp][data-k=Raisonner]').check();
+  await B(5).locator('textarea').nth(1).fill('Exercice d’évaluation');await B(5).locator('textarea').nth(2).fill('/20');await B(5).locator('textarea').nth(3).fill('CORRIGE-EVAL');
+  await p.waitForTimeout(250);let t=await pv();for(const s of ['Attendus du chapitre','Activité : le thermomètre','Trace écrite – Je retiens','Exercice 1','Exercice 2bis – Problème','(facile)','Je mobilise mes connaissances','Compétences : Chercher, Raisonner','Je vérifie mes connaissances','Je dois savoir faire','CORRIGE-EX1','CORRIGE-TACHE','CORRIGE-EVAL','CORRIGÉ-DECOUVERTE','additionner deux relatifs'])assert.ok(t.includes(s),'aperçu : '+s);
+  assert.ok(await p.locator('#cahpg .katex').count()>=5,'formules KaTeX');assert.strictEqual(await p.locator('#cahpg .cp-two .cp-sub').count(),2);assert.ok(await p.locator('#cahpg b,#cahpg strong').count()>0);
+- await p.uncheck('[data-ca=tcorr]');t=await pv();assert.ok(!/CORRIGE-|Corrigé/.test(t),'corrigés masqués');await p.check('[data-ca=tcorr]');
++ await p.selectOption('[data-ca=mode]','eleve_sans');t=await pv();assert.ok(!/CORRIGE-|Corrigé/.test(t),'corrigés masqués');await p.selectOption('[data-ca=mode]','enseignant');
+  // couleurs : par défaut puis personnalisée
+  assert.deepStrictEqual(await p.evaluate(()=>CAH.ch().blocs.map(b=>CAH.cc().couleurs[b.type])),['#1f5fa8','#b85c00','#2e8540','#7b3fa0','#c0392b','#2c3e50']);
+  await B(1).locator('input[type=color]').fill('#00aa55');await p.waitForTimeout(200);assert.strictEqual(await p.evaluate(()=>CAH.ch().blocs[1].couleur),'#00aa55');assert.ok(/--bc:\s*#00aa55/.test(await p.locator('#cahpg .cp-b').nth(1).getAttribute('style')));
+@@ -764,7 +765,7 @@
+  if(pt){const pages=pt.split('\f').filter(x=>x.trim());assert.ok(pages.length>=30,'au moins une page par chapitre : '+pages.length);assert.ok(/Cahier de test/.test(pages[0])&&/Chapitre 1 : Chapitre-1/.test(pages[0]));assert.ok(/Chapitre 30 : Chapitre-30/.test(pt));
+   assert.ok(!/Ajouter un bloc|Réglages du cahier|← Préparations|Afficher les corrigés/.test(pt),'interface exclue de l’impression');assert.ok(/CORR-trace|CORRX-1/.test(pt)===false||true);assert.ok(/CORRX-1\b/.test(pt),'corrigés inclus quand affichés');
+   const heads=pages.filter(x=>/Chapitre \d+ : Chapitre-\d+/.test(x));assert.strictEqual(heads.length,30,'un titre de chapitre par chapitre');for(const pg of heads)assert.ok(pg.split('\n').filter(l=>l.trim()).findIndex(l=>/Chapitre \d+ : /.test(l))<=2,'le chapitre commence en haut de page')}
+- await p.uncheck('[data-ca=tcorr]');const f2=await pdf('cah-nocorr');if(pt){const p2=require('child_process').execFileSync('pdftotext',['-layout',f2,'-'],{encoding:'utf8',maxBuffer:5e7});assert.ok(!/CORR-|CORRX-|Corrigé/.test(p2),'aucun corrigé dans la version sans corrigés');assert.ok(/Énoncé/.test(p2))}
++ await p.selectOption('[data-ca=mode]','eleve_sans');const f2=await pdf('cah-nocorr');if(pt){const p2=require('child_process').execFileSync('pdftotext',['-layout',f2,'-'],{encoding:'utf8',maxBuffer:5e7});assert.ok(!/CORR-|CORRX-|Corrigé/.test(p2),'aucun corrigé dans la version sans corrigés');assert.ok(/Énoncé/.test(p2))}
+  assert.ok(Date.now()-t0<40000,'document long : délai raisonnable');assert.deepStrictEqual(c.errs,[]);await c.close()});
+ 
+ T('cahier : téléphone — onglets, boutons de taille tactile, pas de débordement horizontal, création complète',async()=>{const c=await ctx({viewport:{width:390,height:800},hasTouch:true,isMobile:true}),p=await c.newPage();await booted(p);
+@@ -789,6 +790,126 @@
+  const j=await p.evaluate(()=>JSON.parse(JSON.stringify({seqs:db.seqs,seances:db.seances})));assert.ok(!('cahiers' in j),'les préparations ne contiennent aucun cahier');assert.ok(!(await p.evaluate(()=>JSON.stringify(db)).then(s=>/chapitres/.test(s))),'db ne mélange pas chapitres et séances');
+  assert.deepStrictEqual(c.errs,[]);await c.close()});
+ 
++/* ================= 📚 Cahier de l'élève — phase 2 : éditeur pédagogique ================= */
++const zlibN=require('zlib');
++function pngBuf(w,h,rgb){const T=new Uint32Array(256).map((_,n)=>{let c=n;for(let k=0;k<8;k++)c=c&1?0xedb88320^(c>>>1):c>>>1;return c>>>0}),crc=b=>{let c=0xffffffff;for(const x of b)c=T[(c^x)&255]^(c>>>8);return(c^0xffffffff)>>>0},
++ ch=(t,d)=>{const l=Buffer.alloc(4);l.writeUInt32BE(d.length);const td=Buffer.concat([Buffer.from(t),d]),c=Buffer.alloc(4);c.writeUInt32BE(crc(td));return Buffer.concat([l,td,c])},ih=Buffer.alloc(13);ih.writeUInt32BE(w,0);ih.writeUInt32BE(h,4);ih[8]=8;ih[9]=2;
++ const px=[];for(let x=0;x<w;x++)px.push((rgb[0]+x)&255,rgb[1],rgb[2]);const row=Buffer.concat([Buffer.from([0]),Buffer.from(px)]),raw=Buffer.concat(Array.from({length:h},()=>row));
++ return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),ch('IHDR',ih),ch('IDAT',zlibN.deflateSync(raw)),ch('IEND',Buffer.alloc(0))])}
++const CPNG1=pngBuf(1800,900,[200,40,40]),CPNG2=pngBuf(300,300,[20,90,200]);
++const cahAddBlocks=async(p,L)=>{for(const t of L)await p.click('[data-ca=badd][data-t='+t+']')};
++const cahPickImg=async(p,btnSel,files)=>{const[fc]=await Promise.all([p.waitForEvent('filechooser'),p.click(btnSel)]);await fc.setFiles(files)};
++const nImgs=(p,i)=>p.evaluate(i=>CAH.ch().blocs[i].imgs.length,i);
++const pngFile=(name,buf)=>({name,mimeType:'image/png',buffer:buf});
++const imgsLoaded=p=>p.waitForFunction(()=>[...document.querySelectorAll('#cahpg img')].every(i=>i.complete&&i.naturalWidth>0),null,{timeout:8000});
++const mkFileIn=(p,b64,name,type)=>`new File([Uint8Array.from(atob(${JSON.stringify(b64)}),c=>c.charCodeAt(0))],${JSON.stringify(name)},{type:${JSON.stringify(type)}})`;
++
++T('cahier phase 2 : mise en forme — barre d’outils, raccourcis, encadrés, tableaux, questions, formules',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await cahOpen(p);await cahNew(p);await cahAddBlocks(p,['trace']);
++ const ta=p.locator('.cbk textarea').first(),val=()=>ta.inputValue();
++ await ta.fill('mot important');await ta.evaluate(e=>{e.focus();e.setSelectionRange(0,3)});await p.click('[data-ca=fmt][data-m=b]');assert.strictEqual(await val(),'**mot** important');
++ await ta.evaluate(e=>{e.focus();e.setSelectionRange(e.value.length-9,e.value.length)});await p.keyboard.press('Control+u');assert.strictEqual(await val(),'**mot** __important__','Ctrl+U');await ta.evaluate(e=>{e.focus();e.setSelectionRange(2,5)});await p.keyboard.press('Control+b');assert.ok(/\*\*\*\*mot\*\*\*\*/.test(await val())||(await val()).startsWith('****'),'Ctrl+B');
++ await ta.fill('');await p.click('.cbk textarea');await p.click('[data-ca=fmt][data-m=h]');await p.keyboard.type('Les opposés');assert.strictEqual(await val(),'## Les opposés');
++ await ta.fill('');await ta.click();await p.click('[data-ca=fmt][data-m=def]');await p.keyboard.type('L’opposé de $a$ est $-a$.');await p.keyboard.press('Enter');await p.keyboard.press('Enter');
++ await p.click('[data-ca=fmt][data-m=prop]');await p.keyboard.type('Pour tout $a$, $a+(-a)=0$.');await p.keyboard.press('Enter');await p.keyboard.press('Enter');
++ await p.click('[data-ca=fmt][data-m=thm]');await p.keyboard.type('Théorème de test');await p.keyboard.press('Enter');await p.keyboard.press('Enter');
++ await p.click('[data-ca=fmt][data-m=ex]');await p.keyboard.type('Exemple : $\\frac{1}{2}$');await p.keyboard.press('Enter');await p.keyboard.press('Enter');
++ await p.click('[data-ca=fmt][data-m=meth]');await p.keyboard.type('Méthode en deux étapes');await p.keyboard.press('Enter');await p.keyboard.press('Enter');
++ await p.click('[data-ca=fmt][data-m=rem]');await p.keyboard.type('Une remarque');await p.keyboard.press('Enter');await p.keyboard.press('Enter');await p.click('[data-ca=fmt][data-m=att]');await p.keyboard.type('Attention aux signes');await p.keyboard.press('Enter');await p.keyboard.press('Enter');
++ await p.click('[data-ca=fmt][data-m=tab]');await p.keyboard.press('Enter');await p.keyboard.press('Enter');await p.keyboard.type('1. Première question');await p.keyboard.press('Enter');await p.keyboard.type('suite de la question');await p.keyboard.press('Enter');await p.keyboard.type('a) Sous-question');await p.keyboard.press('Enter');await p.keyboard.type('- puce un');
++ await p.click('[data-ca=kbd][data-i="0"]');await p.keyboard.type('1');await p.keyboard.press('Tab');
++ const v=await val();assert.ok(v.includes('@def L’opposé')&&v.includes('@prop Pour tout')&&v.includes('@thm Théorème')&&v.includes('@ex Exemple')&&v.includes('@meth ')&&v.includes('@rem ')&&v.includes('@att ')&&v.includes('| Titre 1 | Titre 2 | Titre 3 |\n|---|---|---|'),v);assert.ok(/\$\\frac\{1\}\{\}\$/.test(v),'formule insérée, curseur dans la première accolade : '+v.slice(-40));
++ await p.waitForTimeout(250);const g=async s=>p.locator('#cahpg '+s).count();
++ assert.strictEqual(await g('.cp-call'),7,'sept encadrés');assert.strictEqual(await g('.cp-def,.cp-call .cp-cl'),7);const lab=await p.$$eval('#cahpg .cp-cl',e=>e.map(x=>x.textContent));assert.deepStrictEqual(lab,['Définition','Propriété','Théorème','Exemple','Méthode','Remarque','Attention']);
++ assert.strictEqual(await g('table.cp-t thead th'),3);assert.strictEqual(await g('table.cp-t tbody tr'),2);assert.strictEqual(await g('p.cp-q'),2,'questions numérotées');assert.ok(/Première question suite de la question/.test(await p.$eval('#cahpg',e=>e.innerText)),'ligne de continuation recollée');assert.strictEqual(await g('li'),1);assert.ok(await g('.katex')>=4);
++ const cs=await p.$$eval('#cahpg .cp-call',e=>e.map(x=>getComputedStyle(x).borderLeftColor));assert.strictEqual(new Set(cs).size,6,'couleurs d’encadrés distinctes (théorème et attention partagent le rouge)');
++ // rendu sûr : aucun HTML issu du texte
++ const o=await p.evaluate(()=>{const X='<img src=x onerror="window.__x=1"><script>window.__x=1<\/script>',h=CAH.rich('@def '+X+'\n'+X+'\n\n| '+X+' | **b** |\n|---|---|\n| '+X+' | $x$ |\n\n1. '+X+'\n- '+X),d=document.createElement('div');d.innerHTML=h;return{img:d.querySelectorAll('img,script').length,x:window.__x,b:d.querySelectorAll('table b').length,txt:d.textContent.includes('<img src=x')}});
++ assert.deepStrictEqual(o,{img:0,x:undefined,b:1,txt:true});
++ assert.strictEqual(await p.evaluate(()=>CAH.rich('')+CAH.rich(null)+CAH.rich('   ')),'');assert.strictEqual(await p.evaluate(()=>CAH.rich('@def')),'<div class="cp-call" style="--cc:#1f5fa8"><b class="cp-cl">Définition</b></div>');
++ assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('cahier phase 2 : images — ajout, taille, alignement, légende, déplacement, suppression, collage, dépôt, jamais déformées, persistance, annulation',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await cahOpen(p);await cahNew(p);await cahAddBlocks(p,['decouverte','exercices']);
++ const pr0=await prepState(p);
++ await cahPickImg(p,'.cbk >> nth=0 >> [data-ca=imgadd]',pngFile('fig.png',CPNG1));await p.waitForFunction(()=>CAH.ch().blocs[0].imgs.length===1);
++ let m=await p.evaluate(()=>CAH.ch().blocs[0].imgs[0]);assert.ok(/^data:image\/jpeg;base64,/.test(m.u));assert.ok(m.id&&m.w===100&&m.a==='c'&&m.l==='');
++ const dim=await p.evaluate(u=>new Promise(r=>{const i=new Image();i.onload=()=>r([i.width,i.height]);i.src=u}),m.u);assert.deepStrictEqual(dim,[900,450],'réduite à 900 px, proportions conservées');
++ await p.selectOption('.cbk >> nth=0 >> [data-f=imgw]','50');await p.selectOption('.cbk >> nth=0 >> [data-f=imga]','r');await p.fill('.cbk >> nth=0 >> [data-f=imgl]','Figure 1 : le thermomètre');await p.waitForTimeout(250);await imgsLoaded(p);
++ const f=await p.$eval('#cahpg .cp-im figure',e=>{const s=getComputedStyle(e),i=e.querySelector('img').getBoundingClientRect();return{w:e.style.width,fl:s.float,cap:e.querySelector('figcaption').textContent,ratio:i.width/i.height,nat:e.querySelector('img').naturalWidth/e.querySelector('img').naturalHeight}});
++ assert.strictEqual(f.w,'50%');assert.strictEqual(f.fl,'right');assert.strictEqual(f.cap,'Figure 1 : le thermomètre');assert.ok(Math.abs(f.ratio-f.nat)<.01,'aucune déformation '+f.ratio+' / '+f.nat);
++ // 2e image, déplacement, suppression
++ await cahPickImg(p,'.cbk >> nth=0 >> [data-ca=imgadd]',pngFile('b.png',CPNG2));await p.waitForFunction(()=>CAH.ch().blocs[0].imgs.length===2);const ids=await p.evaluate(()=>CAH.ch().blocs[0].imgs.map(x=>x.id));assert.notStrictEqual(ids[0],ids[1]);
++ await p.locator('.cbk >> nth=0 >> .cbk-ig').nth(1).locator('[data-ca=imgup]').click();assert.deepStrictEqual(await p.evaluate(()=>CAH.ch().blocs[0].imgs.map(x=>x.id)),[ids[1],ids[0]]);
++ await p.locator('.cbk >> nth=0 >> .cbk-ig').nth(0).locator('[data-ca=imgdel]').click();assert.strictEqual(await nImgs(p,0),1);
++ // image dans un exercice
++ await cahPickImg(p,'.cbk >> nth=1 >> fieldset >> [data-ca=imgadd]',pngFile('e.png',CPNG2));await p.waitForFunction(()=>CAH.ch().blocs[1].items[0].imgs.length===1);assert.strictEqual(await nImgs(p,1),0,'l’image est rattachée à l’exercice');
++ // collage (focus dans le bloc) / hors bloc / format refusé / dépôt
++ const b64=CPNG2.toString('base64');
++ await p.locator('.cbk >> nth=0 >> textarea').first().focus();await p.evaluate(`(async()=>{const dt=new DataTransfer();dt.items.add(${mkFileIn(p,b64,'p.png','image/png')});document.activeElement.dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}))})()`);await p.waitForFunction(()=>CAH.ch().blocs[0].imgs.length===2);
++ const pc=await p.evaluate(()=>S().imgs.length);await p.focus('[data-ch=nom]');await p.evaluate(`document.activeElement.dispatchEvent(new ClipboardEvent('paste',{clipboardData:(()=>{const d=new DataTransfer();d.items.add(${mkFileIn(p,b64,'p.png','image/png')});return d})(),bubbles:true,cancelable:true}))`);await p.waitForTimeout(300);assert.strictEqual(await nImgs(p,0),2,'collage hors bloc : rien');assert.strictEqual(await p.evaluate(()=>S().imgs.length),pc);
++ await p.evaluate(`(()=>{const dt=new DataTransfer();dt.items.add(${mkFileIn(p,b64,'x.svg','image/svg+xml')});document.querySelector('.cbk textarea').focus();document.activeElement.dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}))})()`);await p.waitForTimeout(300);assert.strictEqual(await nImgs(p,0),2,'SVG refusé');
++ await p.evaluate(`(()=>{const dt=new DataTransfer();dt.items.add(${mkFileIn(p,b64,'d.png','image/png')});const t=document.querySelector('.cbk[data-bid] textarea');for(const n of ['dragover','drop'])t.dispatchEvent(new DragEvent(n,{dataTransfer:dt,bubbles:true,cancelable:true}))})()`);await p.waitForFunction(()=>CAH.ch().blocs[0].imgs.length===3);
++ assert.strictEqual(await p.evaluate(()=>S().imgs.length),pc,'aucune image ajoutée aux séances');assert.strictEqual(await prepState(p),pr0);
++ // persistance + intégrité + annulation
++ await cahSaved(p);const mem=await cahCur(p),d=await cahDump(p);assert.deepStrictEqual(d.cahiers[0],mem,'base = mémoire (images comprises)');
++ const hl=await p.evaluate(()=>Math.max(...CAH.S.hist.map(x=>x.length)));assert.ok(hl<60000,'historique léger : les images ne sont pas dupliquées ('+hl+')');
++ await p.click('#cahbar [data-ca=hundo]');assert.strictEqual(await nImgs(p,0),2,'↶ retire la dernière image');await p.click('#cahbar [data-ca=hredo]');assert.strictEqual(await nImgs(p,0),3,'↷ la rétablit');
++ await cahSaved(p);await p.reload();await booted(p);await cahOpen(p);assert.strictEqual(await nImgs(p,0),3);await imgsLoaded(p);assert.strictEqual(await p.locator('#cahpg img').count(),4);
++ // impression : proportions conservées
++ await p.emulateMedia({media:'print'});const rr=await p.$$eval('#cahpg img',e=>e.map(i=>Math.abs(i.getBoundingClientRect().width/i.getBoundingClientRect().height-i.naturalWidth/i.naturalHeight)));await p.emulateMedia({media:'screen'});assert.ok(rr.every(x=>x<.02),'proportions à l’impression');
++ // export / import avec images ; données malveillantes écartées
++ const exp=await p.evaluate(()=>JSON.parse(JSON.stringify({format:CAH.FMT,version:1,cahiers:[CAH.cc()]})));exp.cahiers[0].chapitres[0].blocs[0].imgs.push({id:'z',u:'data:image/svg+xml;base64,PHN2Zy8+',w:50,a:'c'},{id:'y',u:'javascript:alert(1)'},{id:'w',u:'data:image/png;base64,AAAA" onerror="x',w:9999});
++ const r=await p.evaluate(o=>{const x=CAH.parseImp(JSON.stringify(o));return{n:x.L[0].chapitres[0].blocs[0].imgs.length,l:x.L[0].chapitres[0].blocs[0].imgs.every(i=>/^data:image\/(png|jpeg)/.test(i.u))}},exp);assert.deepStrictEqual(r,{n:3,l:true},'images invalides écartées, valides conservées');
++ await p.setInputFiles('#cahf',{name:'i.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(exp))});await modalText(p);await clickBtn(p,'Ajouter');await modalDone(p);assert.strictEqual(await p.evaluate(()=>CAH.S.list.length),2);assert.strictEqual(await nImgs(p,0),3);
++ const idsA=await p.evaluate(()=>CAH.S.list.map(x=>x.chapitres[0].blocs[0].imgs.map(i=>i.id)).flat());assert.strictEqual(new Set(idsA).size,idsA.length,'identifiants d’images uniques après import');assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('cahier phase 2 : corrigés — trois versions, réglages par bloc, « Voir le corrigé », impression et PDF',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await cahOpen(p);await cahNew(p);await cahAddBlocks(p,['decouverte','exercices','tache','eval']);
++ const B=i=>p.locator('.cbk').nth(i);
++ await B(0).locator('textarea').nth(2).fill('CORR-DECOUVERTE');await B(1).locator('[data-f=enonce]').fill('Énoncé ex');await B(1).locator('[data-f=corrige]').fill('CORR-EXO');await B(2).locator('textarea').nth(4).fill('CORR-TACHE');await B(3).locator('textarea').nth(3).fill('CORR-EVAL');
++ // réglages : découverte = rien ; exercices = PDF + affiché ; tâche = en ligne seulement ; évaluation = en ligne + PDF, masqué
++ await B(1).locator('summary:has-text("Réglages du corrigé")').click();await B(1).locator('[data-f=corropt][data-k=pdf]').check();await B(1).locator('select[data-k=defaut]').selectOption('affiche');
++ await B(2).locator('summary:has-text("Réglages du corrigé")').click();await B(2).locator('[data-f=corropt][data-k=en_ligne]').check();
++ await B(3).locator('summary:has-text("Réglages du corrigé")').click();await B(3).locator('[data-k=en_ligne]').check();await B(3).locator('[data-k=pdf]').check();await B(3).locator('[data-k=word]').check();
++ assert.deepStrictEqual(await p.evaluate(()=>CAH.ch().blocs.map(b=>[b.corr.defaut,b.corr.en_ligne,b.corr.pdf,b.corr.word])),[['masque',false,false,false],['affiche',false,true,false],['masque',true,false,false],['masque',true,true,true]]);
++ const scr=()=>p.$$eval('#cahpg details.scr',e=>e.map(x=>[x.textContent.match(/CORR-\w+/)[0],x.open])),prt=()=>p.$$eval('#cahpg .prt',e=>e.map(x=>x.textContent.match(/CORR-\w+/)[0]));
++ await p.waitForTimeout(250);assert.deepStrictEqual(await scr(),[['CORR-DECOUVERTE',true],['CORR-EXO',true],['CORR-TACHE',true],['CORR-EVAL',true]],'enseignant : tout, déplié');assert.deepStrictEqual(await prt(),['CORR-DECOUVERTE','CORR-EXO','CORR-TACHE','CORR-EVAL']);
++ await p.selectOption('[data-ca=mode]','eleve_avec');assert.deepStrictEqual(await scr(),[['CORR-EXO',true],['CORR-TACHE',false],['CORR-EVAL',false]],'élève avec corrigés : réglages du bloc, « Voir le corrigé » replié si masqué');assert.deepStrictEqual(await prt(),['CORR-EXO','CORR-EVAL'],'PDF : seulement les blocs cochés « PDF »');
++ assert.ok(/Voir le corrigé/.test(await p.$eval('#cahpg',e=>e.innerText)));await p.locator('#cahpg details.scr').nth(1).locator('summary').click();assert.strictEqual(await p.locator('#cahpg details.scr').nth(1).evaluate(e=>e.open),true,'clic = corrigé affiché');
++ await p.selectOption('[data-ca=mode]','eleve_sans');assert.strictEqual(await p.locator('#cahpg .cp-co').count(),0);assert.ok(!/CORR-|Corrigé/.test(await p.$eval('#cahpg',e=>e.innerHTML)),'aucun corrigé dans le HTML (pas un simple masquage)');
++ // impression
++ const pdfText=async m=>{await p.selectOption('[data-ca=mode]',m);await p.emulateMedia({media:'print'});const vis=await p.evaluate(()=>({scr:[...document.querySelectorAll('.scr')].some(e=>getComputedStyle(e).display!=='none'),prt:[...document.querySelectorAll('.prt')].filter(e=>getComputedStyle(e).display!=='none').length}));const f=path.join(os.tmpdir(),'cah-corr-'+m+Date.now()+'.pdf');await p.pdf({path:f,format:'A4',preferCSSPageSize:true,printBackground:true});await p.emulateMedia({media:'screen'});let t=null;try{t=require('child_process').execFileSync('pdftotext',['-layout',f,'-'],{encoding:'utf8'})}catch(e){}return{vis,t}};
++ let r=await pdfText('enseignant');assert.deepStrictEqual(r.vis,{scr:false,prt:4});if(r.t)assert.ok(['DECOUVERTE','EXO','TACHE','EVAL'].every(k=>r.t.includes('CORR-'+k)));
++ r=await pdfText('eleve_avec');assert.deepStrictEqual(r.vis,{scr:false,prt:2});if(r.t){assert.ok(r.t.includes('CORR-EXO')&&r.t.includes('CORR-EVAL'));assert.ok(!r.t.includes('CORR-TACHE')&&!r.t.includes('CORR-DECOUVERTE')&&!/Voir le corrigé/.test(r.t))}
++ r=await pdfText('eleve_sans');assert.deepStrictEqual(r.vis,{scr:false,prt:0});if(r.t)assert.ok(!/CORR-|Corrigé/.test(r.t));
++ await cahSaved(p);await p.reload();await booted(p);await cahOpen(p);assert.deepStrictEqual(await p.evaluate(()=>CAH.ch().blocs.map(b=>[b.corr.defaut,b.corr.en_ligne,b.corr.pdf,b.corr.word])),[['masque',false,false,false],['affiche',false,true,false],['masque',true,false,false],['masque',true,true,true]],'réglages enregistrés');assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('cahier phase 2 : nouveaux champs et blocs (fiche de révision, questions intermédiaires), sept couleurs lisibles, compatibilité avec les cahiers de la phase 1',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
++ await p.evaluate(()=>new Promise(res=>{const r=indexedDB.open('cdm3cahiers',1);r.onupgradeneeded=()=>{['cahiers','meta','backups'].forEach(n=>r.result.createObjectStore(n))};r.onsuccess=()=>{const t=r.result.transaction(['cahiers','meta'],'readwrite');
++  t.objectStore('cahiers').put({id:'p1',v:1,nom:'Cahier phase 1',niveau:'5e',classe:'',annee:'',couleurs:{attendus:'#1f5fa8',decouverte:'#d9730d',trace:'#2e8540',exercices:'#7b3fa0',tache:'#c0392b',eval:'#2c3e50'},creeLe:'2026-01-01T00:00:00.000Z',modifLe:'2026-01-02T00:00:00.000Z',pub:{statut:'brouillon',version:0},
++   chapitres:[{id:'c1',nom:'Ch',ref:'',seqIds:[],blocs:[{id:'b1',type:'exercices',titre:'',couleur:'',v:{consigne:''},corr:{texte:'',defaut:'masque',en_ligne:false,pdf:false,word:false},comp:[],items:[{id:'i1',num:'',titre:'',niveau:'',enonce:'E1',corrige:'C1'}],imgs:[{u:'data:image/png;base64,iVBORw0KGgo=',w:100,a:'c',l:''}],saut:false},{id:'b2',type:'tache',titre:'',couleur:'',v:{texte:'T',consigne:'',demarche:''},corr:{texte:'',defaut:'masque',en_ligne:false,pdf:false,word:false},comp:[],items:[],imgs:[],saut:false}]}]},'p1');
++  t.objectStore('meta').put(['p1'],'order');t.oncomplete=()=>{r.result.close();res()}}}));
++ await cahOpen(p);assert.strictEqual(await p.locator('.mdl').count(),0,'aucun avertissement : données de la phase 1 valides');const o=await cahCur(p);assert.strictEqual(o.v,1);assert.strictEqual(o.couleurs.revision,'#00796b','couleur du nouveau type ajoutée');assert.ok(o.chapitres[0].blocs[0].imgs[0].id&&o.chapitres[0].blocs[0].items[0].imgs.length===0&&o.chapitres[0].blocs[1].v.questions==='');
++ await cahSaved(p);const d=await cahDump(p);assert.deepStrictEqual(d.backups,[],'pas de migration ni de copie de sécurité nécessaires');
++ await cahAddBlocks(p,['revision','tache','eval']);const B=i=>p.locator('.cbk').nth(i);
++ await B(2).locator('textarea').nth(0).fill('- Point clé $x^2$');await B(2).locator('textarea').nth(1).fill('Méthode 1');await B(2).locator('textarea').nth(2).fill('Exercices 3 et 4');
++ await B(3).locator('textarea').nth(1).fill('Consigne');await B(3).locator('textarea').nth(2).fill('1. Intermédiaire A\n2. Intermédiaire B');await B(3).locator('[data-f=comp][data-k=Modéliser]').check();await B(4).locator('textarea').nth(2).fill('/20');await B(4).locator('[data-f=comp][data-k=Calculer]').check();await p.waitForTimeout(250);
++ const t=await p.$eval('#cahpg',e=>e.innerText);for(const s of ['Fiche de révision','Points clés à retenir','Méthodes à maîtriser','Exercices conseillés pour s’entraîner','Questions intermédiaires','Intermédiaire A','Compétences : Modéliser','Je vérifie mes connaissances','/20'])assert.ok(t.includes(s),s);
++ assert.strictEqual(await p.locator('#cahpg p.cp-q').count(),2);assert.strictEqual(await p.locator('.ce-add .cbtn').count(),7,'sept types de blocs proposés');
++ const col=await p.evaluate(()=>CAH.ch().blocs.map(b=>CAH.cc().couleurs[b.type]));assert.strictEqual(col[2],'#00796b');
++ // contraste (>= 4,5) des en-têtes de bloc et des étiquettes d'encadrés
++ await p.locator('.cbk textarea').nth(0).fill('x');await p.evaluate(()=>{CAH.ch().blocs[3].v.texte='@def a\n\n@prop b\n\n@thm c\n\n@ex d\n\n@meth e\n\n@rem f\n\n@att g';CAH.render()});
++ const low=await p.evaluate(()=>{const rgb=s=>{const m=s.match(/[\d.]+/g).map(Number);return s.startsWith('color(')?m.slice(0,3).map(x=>x*255):m.slice(0,3)},lum=a=>{const[r,g,b]=a.map(x=>{x/=255;return x<=.03928?x/12.92:((x+.055)/1.055)**2.4});return .2126*r+.7152*g+.0722*b},bad=[];
++  const test=(fg,bg,n)=>{const a=lum(rgb(fg)),b=lum(rgb(bg)),r=(Math.max(a,b)+.05)/(Math.min(a,b)+.05);if(r<4.5)bad.push(n+' '+r.toFixed(2))};
++  document.querySelectorAll('#cahpg .cp-h').forEach(e=>{const s=getComputedStyle(e);test(s.color,s.backgroundColor,'en-tête '+e.textContent.trim().slice(0,12))});document.querySelectorAll('#cahpg .cp-cl').forEach(e=>{const s=getComputedStyle(e),bg=getComputedStyle(e.parentElement).backgroundColor;test(s.color,bg,'étiquette '+e.textContent)});return bad});assert.deepStrictEqual(low,[],'contrastes insuffisants');
++ assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('cahier phase 2 : téléphone et accessibilité de l’éditeur (barre d’outils, images, réglages)',async()=>{const c=await ctx({viewport:{width:390,height:800},hasTouch:true,isMobile:true}),p=await c.newPage();await booted(p);await p.evaluate(()=>CAH.open());await p.waitForSelector('#cah:not([hidden]) #cahtabs');await p.tap('#cahE [data-ca=cnew]');await p.waitForSelector('#cahE [data-ch=nom]');
++ await cahAddBlocks(p,['trace','exercices','eval']);await cahPickImg(p,'.cbk >> nth=0 >> [data-ca=imgadd]',pngFile('m.png',CPNG2));await p.waitForFunction(()=>CAH.ch().blocs[0].imgs.length===1);
++ await p.locator('.cbk >> nth=0 >> textarea').first().fill('@def mobile\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n1. question $x^2$');
++ const sz=await p.$$eval('.ce-tb button,.cbk-ig button,.cbk-im .cbtn',b=>b.filter(x=>x.offsetParent).map(x=>{const r=x.getBoundingClientRect();return Math.min(r.width,r.height)}));assert.ok(sz.length>20&&sz.every(h=>h>=39),'zones tactiles ≥ 40 px : '+Math.min(...sz));
++ for(const tab of ['edit','prev']){await p.tap('#cahtabs [data-tab='+tab+']');await imgsLoaded(p).catch(()=>{});const w=await p.evaluate(()=>{const b=document.getElementById('cahbody');return[b.scrollWidth,b.clientWidth,document.documentElement.scrollWidth,innerWidth]});assert.ok(w[0]<=w[1]+1&&w[2]<=w[3]+1,'débordement '+tab+' '+w)}
++ await p.tap('#cahtabs [data-tab=edit]');const bad=await p.evaluate(()=>{const out=[];document.querySelectorAll('#cah button,#cah input,#cah textarea,#cah select').forEach(e=>{if(!e.offsetParent)return;const n=(e.tagName==='BUTTON'?(e.textContent||'').trim():'')||e.getAttribute('aria-label')||(e.labels&&e.labels.length)||(e.closest('label')&&e.closest('label').textContent.trim());if(!n)out.push(e.tagName+'.'+(e.dataset.ca||e.dataset.f||e.id))});return out});assert.deepStrictEqual(bad,[],'éléments sans nom accessible');
++ assert.strictEqual(await p.getAttribute('.ce-tb','role'),'toolbar');assert.ok(await p.getAttribute('.ce-tb','aria-label'));assert.ok(await p.$$eval('.cbk-ig img',e=>e.every(i=>i.alt)),'alternatives textuelles des images');assert.deepStrictEqual(c.errs,[]);await c.close()});
++
+ (async()=>{await new Promise(r=>srv.listen(0,'127.0.0.1',r));BASE='http://localhost:'+srv.address().port;browser=await chromium.launch();
+  let fail=0;const only=process.argv[2];for(const t of results){if(only&&!t.name.includes(only))continue;const t0=Date.now();try{await Promise.race([t.fn(),new Promise((_,j)=>setTimeout(()=>j(new Error('délai dépassé (90 s)')),90000))]);console.log('  ✓',t.name,'('+(Date.now()-t0)+' ms)')}catch(e){fail++;console.log('  ✗',t.name,'\n     ',String(e.message).split('\n').slice(0,6).join('\n      '))}}
+  await browser.close();srv.close();console.log(fail?fail+' test(s) en échec':'Tous les tests passent');process.exit(fail?1:0)})();
