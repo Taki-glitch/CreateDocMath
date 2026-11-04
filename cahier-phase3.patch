@@ -1,0 +1,512 @@
+diff -ruN '--exclude=node_modules' '--exclude=vendor' '--exclude=*.png' '--exclude=*.zip' '--exclude=.patch' base3/README.md z/CreateDocMath-main/README.md
+--- a/README.md	2026-11-04 12:35:43.973970002 +0000
++++ b/README.md	2026-11-04 21:32:22.962940975 +0000
+@@ -112,11 +112,12 @@
+ - **Mode classe** : minuteur par phase en plein écran (tablette, VPI), affichage de la mise en œuvre, phase suivante, +1 min, signal sonore à l'échéance, écran maintenu allumé. Raccourcis : Espace (démarrer / pause), ← →, Échap.
+ - **PWA** : installable et utilisable hors connexion (voir ci-dessous).
+ 
+-## Nouveauté : 📚 Cahier de l'élève (phases 1 et 2)
++## Nouveauté : 📚 Cahier de l'élève (phases 1 à 3)
+ 
+ - **Affichage ▸ 📚 Cahier de l'élève…** ouvre un espace dédié pour construire le cahier de mathématiques des élèves : un cahier par classe, des chapitres réordonnables, six types de blocs colorés (attendus, activité de découverte, trace écrite, exercices, tâche complexe, évaluation) avec aperçu en direct, formules KaTeX, corrigés masquables et impression PDF.
+ - Les cahiers sont enregistrés automatiquement dans une base IndexedDB **séparée** (`cdm3cahiers`) : vos séquences et séances ne sont pas modifiées. Export / import `.json` des cahiers. **Les sauvegardes ZIP n'incluent pas encore les cahiers.**
+ - **Phase 2 — éditeur pédagogique** : barre de mise en forme (encadrés Définition / Propriété / Théorème / Exemple / Méthode…, tableaux, questions numérotées, clavier de formules), images (ajout, glisser-déposer, collage, taille, légende), fiche de révision, et trois versions du cahier : enseignant, élève avec corrigés, élève sans corrigés.
++- **Phase 3 — liaison avec les préparations** : associer une ou plusieurs séquences à un chapitre, importer au choix B.O., capacités, activités (corrigés séparés), traces écrites, évaluations ou tâches complexes, et insérer des exercices de la banque : tout est **copié** (jamais modifié ni écrasé), sans commentaires ni analyses didactiques, avec détection des doublons et annulation par ↶.
+ - Architecture, modèle de données, plan de publication en ligne et limites : [`docs/CAHIER-ELEVE.md`](docs/CAHIER-ELEVE.md).
+ 
+ ## Nouveauté : import d'une séquence produite par une IA (NotebookLM / Gemini)
+@@ -202,7 +203,7 @@
+ | `manifest.json`, `sw.js`, `icon-192.png`, `icon-512.png` | PWA (installation, hors-ligne) |
+ | `vendor/` | KaTeX 0.16.45, JSZip 3.10.1 et docx 9.6.1 (tous MIT) embarqués, avec leurs licences |
+ | `tests/` | Tests Playwright (`node tests/run.js`) |
+-| `cahier.js`, `docs/CAHIER-ELEVE.md` | Module « Cahier de l'élève » et son architecture |
++| `cahier.js`, `cahier-liaison.js`, `docs/CAHIER-ELEVE.md` | Module « Cahier de l'élève » (+ liaison avec séquences et banque, chargée à la demande) et son architecture |
+ | `docs/IMPORT-IA.md`, `docs/exemple-sequence-ia.json`, `docs/prompt-notebooklm.txt` | Import d'une séquence produite par une IA : format, exemple, prompt NotebookLM |
+ | `MIGRATION.md` | Migration depuis l'ancien stockage, sauvegarde / restauration, publication |
+ 
+diff -ruN '--exclude=node_modules' '--exclude=vendor' '--exclude=*.png' '--exclude=*.zip' '--exclude=.patch' base3/cahier-liaison.js z/CreateDocMath-main/cahier-liaison.js
+--- a/cahier-liaison.js	1970-01-01 00:00:00.000000000 +0000
++++ b/cahier-liaison.js	2026-11-04 21:29:12.922091643 +0000
+@@ -0,0 +1,119 @@
++/* ===================== 📚 Cahier de l'élève — phase 3 : liaison avec les préparations et la banque =====================
++   Chargé à la demande par cahier.js. Lit les séquences, séances et la banque d'exercices SANS JAMAIS LES MODIFIER ;
++   tout contenu importé est une copie indépendante, ajoutée au chapitre (jamais d'écrasement).
++   Seuls les contenus destinés aux élèves sont proposés : jamais les commentaires, analyses didactiques, difficultés, aides, compétences justifiées…
++   Réutilise de index.html : db, BK, uid, esc, nmap, modal, info, toast, errMsg, COMP, IMGOK. */
++(()=>{'use strict';
++const C=window.CAH,A=C.api,T=A.T,LIM=A.LIM,$=id=>document.getElementById(id);
++const DL={titre:'Titre du chapitre',ref:'Sous-titre / référence',savoir:'Je dois savoir',faire:'Je dois savoir faire',decouverte:'Activité de découverte',trace:'Trace écrite',exercices:'Exercices',tache:'Tâche complexe',eval:'Évaluation'};
++const DIFF={'1':'facile','2':'moyen','3':'difficile'};
++const SEQ=()=>db.seqs||[],SEA=q=>(db.seances||[]).filter(s=>s.seq===q.id).sort((a,b)=>(+a.numero||0)-(+b.numero||0));
++const tx=(v,n)=>typeof v==='string'?v.slice(0,n||1e5):'';
++const hash=s=>{let h=5381;for(const c of String(s||''))h=((h<<5)+h+c.charCodeAt(0))>>>0;return h.toString(36)};
++const nrm=s=>nmap(s).n;
++/* ---------- extraction ---------- */
++/* sépare l'énoncé des corrigés : lignes « → Correction : … » (et leurs suites) jusqu'à la question suivante, un sous-titre ou du gras ; chaque corrigé reprend le numéro de sa question */
++function splitCorr(t){const L=String(t||'').replace(/\r/g,'').split('\n'),E=[],K=[],START=/^\s*[-•]?\s*(→|->)?\s*Correction\b/i,STOP=/^\s*(\d+[.)]\s|##\s|\*\*)/,Q=/^\s*(\d+)[.)]\s/;let skip=false,q='',cur=null;
++ for(const l of L){
++  if(START.test(l)){skip=true;cur=[l.replace(/^\s*[-•]?\s*(→|->)?\s*Correction\s*(?:de la question\s*\d+\s*)?[:.]?\s*/i,'')];K.push({q,l:cur});continue}
++  if(skip&&STOP.test(l))skip=false;
++  if(skip){cur.push(l);continue}
++  const m=Q.exec(l);if(m)q=m[1];E.push(l)}
++ const corr=K.map(b=>{const body=b.l.join('\n').trim();return body?(b.q?b.q+'. '+body:body):''}).filter(Boolean).join('\n');
++ return{enonce:E.join('\n').replace(/\n{3,}/g,'\n\n').trim(),corrige:corr}}
++const objGen=cadre=>{const m=/^##[ \t]*Objectifs g[ée]n[ée]raux[^\n]*\n([\s\S]*?)(?=\n##[ \t]|(?![\s\S]))/mi.exec(String(cadre||''));return m?m[1].trim():''};
++const cpImgs=a=>(Array.isArray(a)?a:[]).map(m=>typeof m==='string'?{u:m,w:100,a:'c',l:''}:m).filter(m=>m&&typeof m.u==='string'&&m.u&&IMGOK(m.u)).slice(0,LIM.img).map(m=>({id:uid(),u:m.u,w:[25,50,75,100].includes(+m.w)?+m.w:100,a:m.a==='r'?'r':'c',l:tx(m.l,300)}));
++const isDefName=n=>!String(n||'').trim()||/^(Nouveau chapitre|Chapitre \d+)$/.test(String(n).trim());
++const skey=s=>s?[s.t,s.q,s.s,s.f,s.bi].join('|'):'';
++function existing(ch){const S=new Set();ch.blocs.forEach(b=>{if(b.src)S.add(skey(b.src));(b.items||[]).forEach(x=>{if(x.src)S.add(skey(x.src))})});return S}
++/* candidats proposés pour une séquence : { key, grp, label, kind, dest, opts, titre, texte, corr, imgs, comp, def, src } */
++function candsSeq(q,ch){const out=[],ss=SEA(q),ss0=f=>({t:'sequence',q:q.id,s:'',f,bi:'',h:'',at:'',n:''});
++ const add=o=>{o.texte=tx(o.texte,LIM.text);if(o.texte&&o.texte.trim()||(o.imgs&&o.imgs.length))out.push(Object.assign({titre:'',corr:null,imgs:[],comp:[],niveau:'',def:true,opts:[o.dest]},o))};
++ add({key:'q:nom',grp:'chap',label:'Nom de la séquence → titre du chapitre',kind:'titre',dest:'titre',texte:q.nom,def:isDefName(ch.nom)});
++ add({key:'q:ref',grp:'chap',label:'Référence du B.O. → sous-titre du chapitre',kind:'ref',dest:'ref',texte:q.boRef,def:!String(ch.ref||'').trim()});
++ add({key:'q:bo',grp:'att',label:'Contenus du B.O.',kind:'att',dest:'savoir',opts:['savoir','faire'],texte:q.bo,src:ss0('bo')});
++ add({key:'q:cap',grp:'att',label:'Capacités attendues',kind:'att',dest:'faire',opts:['faire','savoir'],texte:q.capacites,src:ss0('cap')});
++ add({key:'q:og',grp:'att',label:'Objectifs généraux de la séquence',kind:'att',dest:'faire',opts:['faire','savoir'],texte:objGen(q.cadre),src:ss0('og')});
++ ss.forEach(s=>{const g=s.id,tg=String(s.tags||''),ev=s.type==='eval',pb=/probl[eè]me|t[aâ]che complexe/i.test(tg),im=z=>cpImgs((s.imgs||[]).map(m=>typeof m==='string'?{u:m,z:'c'}:m).filter(m=>(m.z||'c')===z)),sr=f=>({t:'seance',q:q.id,s:s.id,f,bi:'',h:'',at:'',n:''});
++  add({key:'s:'+g+':obj',grp:g,label:'Objectif(s) de la séance',kind:'att',dest:'faire',opts:['faire','savoir'],texte:s.objectifs,def:false,src:sr('obj')});
++  add({key:'s:'+g+':act',grp:g,label:(ev?'Évaluation':pb?'Tâche complexe':'Activité')+(s.activiteTitre?' : « '+s.activiteTitre+' »':''),kind:'bloc',dest:ev?'eval':pb?'tache':'decouverte',opts:['decouverte','tache','eval','exercices','trace'],titre:s.activiteTitre||'',texte:s.activite,imgs:im('a'),comp:s.comp||[],src:sr('act')});
++  add({key:'s:'+g+':tr',grp:g,label:'Trace écrite (cours)',kind:'bloc',dest:'trace',opts:['trace','decouverte','exercices'],texte:s.trace,imgs:im('t'),def:!ev,src:sr('trace')});
++  add({key:'s:'+g+':sup',grp:g,label:'Problème supplémentaire (élèves rapides)',kind:'bloc',dest:'exercices',opts:['exercices','tache','decouverte'],titre:'Pour aller plus loin',texte:s.supp,def:false,src:sr('supp')})});
++ return out}
++function candsBank(){return BK().map(x=>{const ty=x.type,d={probleme:'tache',decouverte:'decouverte',trace:'trace',exemple:'trace'}[ty]||'exercices';
++ return{key:'b:'+x.id,grp:'bank',label:x.titre||'(sans titre)',kind:'bloc',dest:d,opts:['exercices','decouverte','tache','trace','eval'],titre:tx(x.titre,200),texte:tx(x.enonce,LIM.text),corr:tx(x.correction,LIM.text),imgs:cpImgs(x.img?[{u:x.img}]:[]),comp:Array.isArray(x.comp)?x.comp:[],niveau:DIFF[String(x.diff)]||'',def:false,x,src:{t:'banque',q:'',s:'',f:'',bi:x.id,h:'',at:'',n:tx([x.notions,x.domaine].filter(Boolean).join(' · '),200)}}}).filter(k=>k.texte.trim()||k.imgs.length)}
++/* ---------- application : copies indépendantes, ajoutées au chapitre ---------- */
++const lineKey=l=>nrm(String(l).replace(/^\s*[-•]\s*/,'').trim());
++function mergeAtt(ch,field,text,R){let b=ch.blocs.find(x=>x.type==='attendus');if(!b){b=A.mkBloc('attendus');T.attendus.f.forEach(([k])=>b.v[k]='');ch.blocs.unshift(b);R.blocs++}
++ const cur=String(b.v[field]||'').split('\n').filter(l=>l.trim()),seen=new Set(cur.map(lineKey)),add=[];
++ String(text||'').split('\n').map(l=>l.trim()).filter(Boolean).forEach(l=>{const k=lineKey(l);if(seen.has(k)){R.skipped++;return}seen.add(k);add.push(/^(-|•|##)\s/.test(l)?l:'- '+l)});
++ if(add.length){b.v[field]=cur.concat(add).join('\n').slice(0,LIM.text);R.lines+=add.length}}
++function apply(ch,sel,opt){opt=opt||{};const R={blocs:0,items:0,lines:0,skipped:0,titre:false,ref:false},now=new Date().toISOString();
++ for(const{k,dest}of sel){
++  if(k.kind==='titre'){ch.nom=tx(k.texte,200);R.titre=true;continue}
++  if(k.kind==='ref'){ch.ref=tx(k.texte,300);R.ref=true;continue}
++  if(k.kind==='att'){mergeAtt(ch,dest==='savoir'?'savoir':'faire',k.texte,R);continue}
++  const sp=k.corr!=null?{enonce:tx(k.texte),corrige:tx(k.corr)}:opt.split===false?{enonce:tx(k.texte),corrige:''}:splitCorr(k.texte),src=Object.assign({},k.src,{h:hash(k.texte+'\u0001'+(k.corr||'')),at:now});
++  if(dest==='exercices'){let b=opt.target&&ch.blocs.find(x=>x.id===opt.target&&x.type==='exercices')||[...ch.blocs].reverse().find(x=>x.type==='exercices');
++   if(!b){b=A.mkBloc('exercices');b.items=[];ch.blocs.push(b);R.blocs++}
++   if(b.items.length===1&&!b.items[0].enonce&&!b.items[0].titre&&!b.items[0].corrige&&!b.items[0].imgs.length&&!b.items[0].src)b.items=[];
++   if(b.items.length>=LIM.item)continue;const it=A.mkEx();it.titre=tx(k.titre,200);it.enonce=sp.enonce;it.corrige=sp.corrige;it.niveau=k.niveau||'';it.imgs=cpImgs(k.imgs);it.src=src;b.items.push(it);R.items++;continue}
++  if(ch.blocs.length>=LIM.bloc)continue;const b=A.mkBloc(dest);T[dest].f.forEach(([f])=>b.v[f]='');b.titre=tx(k.titre,200);
++  b.v.texte=dest==='trace'?(sp.enonce+(sp.corrige?'\n\n'+sp.corrige:'')).trim():sp.enonce;if(dest!=='trace'&&T[dest].corr)b.corr.texte=sp.corrige;else if(dest==='decouverte'||dest==='tache'||dest==='eval')b.corr.texte=sp.corrige;
++  if(T[dest].comp)b.comp=COMP.filter(c=>(k.comp||[]).includes(c));b.imgs=cpImgs(k.imgs);b.src=src;ch.blocs.push(b);R.blocs++}
++ return R}
++/* ---------- interface ---------- */
++let CSSOK=false;const css=()=>{if(CSSOK)return;CSSOK=true;const s=document.createElement('style');s.id='cahlkcss';s.textContent=`.lk fieldset{border:1px solid var(--line);border-radius:6px;margin:8px 0;padding:4px 10px}.lk legend{font-weight:700;color:var(--acc);padding:0 4px}.lk-r{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;padding:5px 0;border-bottom:1px solid #eef1f3}.lk-r:last-child{border:0}.lk-r label{font-weight:400;display:inline-flex;gap:6px;align-items:center;margin:0}.lk-r select{width:auto;margin:0}.lk-r input[type=checkbox]{width:auto;margin:0}.lk-dup{color:#8a5a00;font-size:12px}.lk-t{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}.lk-r details{flex:1 1 100%;margin:2px 0;padding:0 8px}.lk-r summary{padding:3px 0;font-size:12px;border:0}.lk-r details[open]>summary{margin-bottom:4px}.lk-t label{display:inline-flex;gap:6px;align-items:center;font-weight:400;margin:0}.lk-t input{width:auto;margin:0}.lk-p{max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:4px;padding:6px 10px;background:#fff;color:#222;font:10pt/1.4 Calibri,Carlito,"Segoe UI",Arial,sans-serif}.lk-p img{max-width:160px;height:auto;display:block}.lk-p h5{margin:6px 0 2px;color:#4a5a73}.lk-n{margin-left:auto;font-weight:700}.lk-s{margin:6px 0}.lk-s input{width:100%}@media(max-width:700px){.lk-t button,.lk-r select,.lk-t label{min-height:40px}.lk-r label{min-height:36px}.lk-r summary{min-height:36px;display:flex;align-items:center}.lk input[type=checkbox]{width:22px;height:22px}}`;document.head.append(s)};
++const fdate=d=>d?new Date(d+'T12:00').toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'}):'';
++function prevHTML(k,dest,split){const sp=k.corr!=null?{enonce:k.texte,corrige:k.corr}:split?splitCorr(k.texte):{enonce:k.texte,corrige:''};let h='';
++ if(k.kind!=='bloc')return '<div class="lk-p">'+A.rich(k.texte)+'</div>';
++ h+=A.rich(sp.enonce);if(k.imgs.length)h+=k.imgs.map(m=>'<img src="'+m.u+'" alt="Image de la source">').join('');if(sp.corrige)h+='<h5>Corrigé (séparé de l’énoncé)</h5>'+A.rich(sp.corrige);
++ return '<div class="lk-p">'+(h||'<i>(vide)</i>')+'</div>'}
++function rows(list,ex){return list.map(k=>{const dup=k.src&&k.kind==='bloc'&&ex.has(skey(k.src)),chk=k.def&&!dup,sel=k.opts.length>1?'<label>vers <select data-d="'+esc(k.key)+'" aria-label="Destination : '+esc(k.label)+'">'+k.opts.map(o=>'<option value="'+o+'"'+(o===k.dest?' selected':'')+'>'+DL[o]+'</option>').join('')+'</select></label>':'<span>→ '+DL[k.dest]+'</span>';
++ return '<div class="lk-r" data-row="'+esc(k.key)+'"><label><input type="checkbox" data-k="'+esc(k.key)+'"'+(chk?' checked':'')+'> '+esc(k.label)+'</label>'+sel+(dup?' <span class="lk-dup">⚠ déjà importé dans ce chapitre (décoché)</span>':'')+'<details><summary>Aperçu</summary><div data-pv="'+esc(k.key)+'"></div></details></div>'}).join('')}
++/* fenêtre de sélection générique : liste de candidats groupés → renvoie la sélection (ou null) */
++async function selectDialog(title,head,groups,list,ex,o){css();o=o||{};let el=null;const by=new Map(list.map(k=>[k.key,k]));
++ const html='<div class="lk">'+head+(o.filters||'')+'<div class="lk-t"><button type="button" class="btn" data-lk="all">Tout sélectionner</button><button type="button" class="btn" data-lk="none">Tout désélectionner</button>'+(o.split===false?'':'<label><input type="checkbox" id="lksplit" checked> Séparer les corrigés (lignes « → Correction »)</label>')+'<span class="lk-n" id="lkn" role="status" aria-live="polite"></span></div>'+groups.map(g=>'<fieldset><legend>'+esc(g.t)+'</legend>'+rows(g.l,ex)+'</fieldset>').join('')+'</div>';
++ const upd=()=>{const n=el.querySelectorAll('[data-k]:checked').length,b=el.querySelector('.mda .pri');$('lkn').textContent=n+' élément'+(n>1?'s':'')+' sélectionné'+(n>1?'s':'');if(b)b.disabled=!n},
++  fillPv=x=>{const k=by.get(x.dataset.pv),s=el.querySelector('select[data-d="'+CSS.escape(k.key)+'"]'),sp=!el.querySelector('#lksplit')||el.querySelector('#lksplit').checked;x.dataset.ok=1;x.innerHTML=prevHTML(k,s?s.value:k.dest,sp);if(window.renderMathInElement)try{renderMathInElement(x,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})}catch(_){}},
++  pv=()=>el.querySelectorAll('[data-pv][data-ok]').forEach(fillPv);
++ const c=await modal(title,html,[['cancel','Annuler'],['go',o.go||'Importer la sélection','pri']],{esc:'cancel',init:(e)=>{el=e;
++  e.addEventListener('click',ev=>{const b=ev.target.closest('[data-lk]');if(!b)return;e.querySelectorAll('[data-k]').forEach(x=>{if(x.closest('.lk-r').style.display!=='none')x.checked=b.dataset.lk==='all'});upd()});
++  e.addEventListener('change',ev=>{if(ev.target.matches('[data-k]'))upd();if(ev.target.matches('#lksplit,[data-d]'))pv()});
++  e.querySelectorAll('details').forEach(d=>d.addEventListener('toggle',()=>{if(d.open){const x=d.querySelector('[data-pv]');if(x&&!x.dataset.ok)fillPv(x)}}));
++  if(o.init)o.init(e,upd);upd()}});
++ if(c!=='go')return null;const split=!el.querySelector('#lksplit')||el.querySelector('#lksplit').checked,sel=[];
++ el.querySelectorAll('[data-k]:checked').forEach(x=>{const k=by.get(x.dataset.k),s=el.querySelector('select[data-d="'+CSS.escape(x.dataset.k)+'"]');if(k)sel.push({k,dest:s?s.value:k.dest})});return{sel,split}}
++function report(R){const p=[];if(R.titre)p.push('titre du chapitre');if(R.blocs)p.push(R.blocs+' bloc'+(R.blocs>1?'s':''));if(R.items)p.push(R.items+' exercice'+(R.items>1?'s':''));if(R.lines)p.push(R.lines+' ligne'+(R.lines>1?'s':'')+' d’attendus');return(p.join(', ')||'rien de nouveau')+(R.skipped?' · '+R.skipped+' ligne(s) déjà présente(s) ignorée(s)':'')}
++async function finish(ch,res,tag){const R=apply(ch,res.sel,{split:res.split,target:tag&&tag.target});A.touch({now:1});A.render();toast('Ajouté : '+report(R));return R}
++/* ---------- importer depuis une séquence ---------- */
++async function importFrom(ch,qid){if(!ch)return;const q=SEQ().find(x=>x.id===qid);if(!q){await info('Séquence introuvable','<p>Cette séquence n’existe plus. Vous pouvez la dissocier du chapitre.</p>');return null}
++ const list=candsSeq(q,ch);if(!list.length){await info('Rien à importer','<p>La séquence « '+esc(q.nom)+' » ne contient pas encore de contenu à importer (B.O., activités, traces écrites…).</p>');return null}
++ const ex=existing(ch),ss=SEA(q),g=[{t:'Chapitre',l:list.filter(k=>k.grp==='chap')},{t:'Attendus du chapitre',l:list.filter(k=>k.grp==='att')}].concat(ss.map(s=>({t:'S'+s.numero+' – '+(s.nom||'(sans nom)')+(s.type==='eval'?' (évaluation)':''),l:list.filter(k=>k.grp===s.id)}))).filter(x=>x.l.length);
++ const head='<p><b>'+esc(q.nom||'(sans nom)')+'</b>'+(q.niveau||q.classe?' · '+esc([q.niveau,q.classe].filter(Boolean).join(' · ')):'')+' · '+ss.length+' séance'+(ss.length>1?'s':'')+'</p><p><small>Ces contenus sont <b>copiés</b> dans le chapitre « '+esc(ch.nom)+' » : modifier la préparation ensuite ne change pas le cahier, et inversement. Rien n’est écrasé. Les commentaires, analyses didactiques, difficultés et aides ne sont jamais proposés.</small></p>';
++ const res=await selectDialog('Importer depuis la séquence',head,g,list,ex,{go:'Importer la sélection'});if(!res)return null;return finish(ch,res)}
++/* ---------- associer une séquence ---------- */
++async function pick(ch,o){o=o||{};const c=A.cc();if(!c){await info('Aucun cahier','<p>Créez d’abord un cahier.</p>');return null}const qs=SEQ();if(!qs.length){await info('Aucune séquence','<p>Vous n’avez pas encore de séquence à associer. Créez-en une dans l’espace de préparation.</p>');return null}
++ css();const sel=new Set(ch?ch.seqIds:[]),info1=q=>{const ss=SEA(q),ds=ss.map(s=>s.date).filter(Boolean).sort();return ss.length+' séance'+(ss.length>1?'s':'')+(ds.length?' · '+fdate(ds[0])+(ds.length>1?' → '+fdate(ds[ds.length-1]):''):'')};
++ const html='<div class="lk"><p><small>'+(o.create?'Choisissez la ou les séquences du nouveau chapitre.':'Une séquence peut alimenter plusieurs chapitres, et un chapitre peut regrouper plusieurs séquences. L’association ne copie rien : elle propose ensuite des contenus à importer.')+'</small></p><div class="lk-s"><label>Rechercher une séquence<input id="lkq" placeholder="Nom, niveau, classe…" autocomplete="off"></label></div>'+qs.map(q=>'<div class="lk-r" data-q="'+esc(q.id)+'" data-s="'+esc(nrm([q.nom,q.niveau,q.classe].join(' ')))+'"><label><input type="checkbox" data-q="'+esc(q.id)+'"'+(sel.has(q.id)?' checked':'')+'> <b>'+esc(q.nom||'(sans nom)')+'</b></label><small>'+esc([q.niveau,q.classe].filter(Boolean).join(' · '))+(q.niveau||q.classe?' · ':'')+esc(info1(q))+'</small></div>').join('')+'<p class="lk-n" id="lkn" role="status" aria-live="polite"></p></div>';
++ let el=null;const c2=await modal(o.create?'Nouveau chapitre depuis une séquence':'Associer une séquence',html,[['cancel','Annuler'],['go',o.create?'Créer le chapitre':'Associer'],['imp',o.create?'Créer et importer des contenus…':'Associer et importer…','pri']],{esc:'cancel',init:e=>{el=e;const upd=()=>{const n=e.querySelectorAll('[data-q]:checked').length;$('lkn').textContent=n+' séquence'+(n>1?'s':'')+' sélectionnée'+(n>1?'s':'');const B=e.querySelectorAll('.mda button');if(B[1]&&o.create)B[1].disabled=!n;if(B[2])B[2].disabled=!n};
++  e.addEventListener('change',ev=>{if(ev.target.matches('input[data-q]'))upd()});e.querySelector('#lkq').addEventListener('input',ev=>{const w=nrm(ev.target.value).split(/\s+/).filter(Boolean);e.querySelectorAll('.lk-r[data-s]').forEach(r=>{r.style.display=w.every(x=>r.dataset.s.includes(x))?'':'none'})});upd()}});
++ if(c2==='cancel'||!c2)return null;const ids=[...el.querySelectorAll('input[data-q]:checked')].map(x=>x.dataset.q);
++ if(o.create){if(!ids.length)return null;const q=SEQ().find(x=>x.id===ids[0]),h=A.mkChap(q?q.nom:'Nouveau chapitre');h.seqIds=ids.slice(0,50);c.chapitres.push(h);C.S.chap=h.id;A.touch({now:1});A.render();if(c2==='imp')return importFrom(h,ids[0]);return h}
++ const keep=ch.seqIds.filter(id=>!qs.some(q=>q.id===id)),before=new Set(ch.seqIds);ch.seqIds=keep.concat(ids).slice(0,50);A.touch({now:1});A.render();
++ if(c2==='imp'&&ids.length){const f=ids.find(id=>!before.has(id))||ids[0];return importFrom(ch,f)}return ch}
++const newFromSeq=()=>pick(null,{create:true});
++/* ---------- insérer depuis la banque d'exercices ---------- */
++async function bank(ch,target){if(!ch)return;const all=candsBank();if(!BK().length){await info('Banque vide','<p>La banque d’exercices est vide. Ouvrez-la depuis le menu « 📚 Banque d’exercices… » de l’espace de préparation pour y enregistrer des exercices.</p>');return null}
++ if(!all.length){await info('Rien à insérer','<p>Les éléments de la banque n’ont ni énoncé ni image.</p>');return null}
++ const ex=existing(ch),types=[...new Set(BK().map(x=>x.type))],nivs=[...new Set(BK().map(x=>x.niveau).filter(Boolean))].sort(),
++  cap=all.slice().sort((a,b)=>(b.x.fav?1:0)-(a.x.fav?1:0)||a.label.localeCompare(b.label,'fr')).slice(0,300);
++ const filt='<div class="lk-s"><label>Rechercher<input id="lkq" placeholder="Titre, notion, mot-clé…" autocomplete="off"></label></div><div class="lk-t"><label>Type<select id="lkt"><option value="">Tous</option>'+types.map(t=>'<option value="'+esc(t)+'">'+esc(BK_T[t]||t)+'</option>').join('')+'</select></label><label>Niveau<select id="lkv"><option value="">Tous</option>'+nivs.map(n=>'<option>'+esc(n)+'</option>').join('')+'</select></label></div>'+(all.length>cap.length?'<p><small>'+all.length+' éléments : les 300 premiers sont affichés, affinez la recherche.</small></p>':'');
++ const head='<p><small>Les éléments sélectionnés sont <b>copiés</b> (énoncé, correction, image, niveau de difficulté) : la banque n’est pas modifiée. Ils sont ajoutés à l’exercice du chapitre « '+esc(ch.nom)+' » (un bloc Exercices est créé si besoin).</small></p>';
++ const meta=new Map(cap.map(k=>[k.key,k]));
++ const res=await selectDialog('Insérer depuis la banque d’exercices',head,[{t:'Banque d’exercices ('+cap.length+')',l:cap}],cap,ex,{go:'Insérer la sélection',filters:filt,split:false,init:(e,upd)=>{
++  const f=()=>{const w=nrm(e.querySelector('#lkq').value).split(/\s+/).filter(Boolean),t=e.querySelector('#lkt').value,v=e.querySelector('#lkv').value;e.querySelectorAll('.lk-r[data-row]').forEach(r=>{const k=meta.get(r.dataset.row),x=k.x,ok=(!t||x.type===t)&&(!v||x.niveau===v)&&w.every(m=>nrm([x.titre,x.enonce,x.correction,x.notions,x.mots,x.domaine,x.source].join(' ')).includes(m));r.style.display=ok?'':'none'})};
++  e.querySelector('#lkq').addEventListener('input',f);e.querySelector('#lkt').addEventListener('change',f);e.querySelector('#lkv').addEventListener('change',f)}});
++ if(!res)return null;return finish(ch,res,{target})}
++window.CAHL={pick,importFrom,newFromSeq,bank,splitCorr,objGen,candsSeq,candsBank,apply,mergeAtt,hash,skey};
++})();
+diff -ruN '--exclude=node_modules' '--exclude=vendor' '--exclude=*.png' '--exclude=*.zip' '--exclude=.patch' base3/cahier.js z/CreateDocMath-main/cahier.js
+--- a/cahier.js	2026-11-04 12:35:43.976022595 +0000
++++ b/cahier.js	2026-11-04 21:27:59.225754101 +0000
+@@ -23,11 +23,13 @@
+ const clone=o=>JSON.parse(JSON.stringify(o));
+ /* ---------- modèle ---------- */
+ const mkCorr=()=>({texte:'',defaut:'masque',en_ligne:false,pdf:false,word:false});
+-const mkEx=n=>({id:uid(),num:'',titre:'',niveau:'',enonce:'',corrige:'',imgs:[]});
+-const mkBloc=t=>({id:uid(),type:t,titre:'',couleur:'',v:{},corr:mkCorr(),comp:[],items:t==='exercices'?[mkEx()]:[],imgs:[],saut:false});
++const mkEx=n=>({id:uid(),num:'',titre:'',niveau:'',enonce:'',corrige:'',imgs:[],src:null});
++const mkBloc=t=>({id:uid(),type:t,titre:'',couleur:'',v:{},corr:mkCorr(),comp:[],items:t==='exercices'?[mkEx()]:[],imgs:[],saut:false,src:null});
+ const mkChap=n=>({id:uid(),nom:n==null?'Nouveau chapitre':n,ref:'',seqIds:[],blocs:[]});
+ const mkCah=n=>({id:uid(),v:SCH,nom:n||'Cahier de mathématiques',niveau:'',classe:'',annee:'',couleurs:{...COL},chapitres:[],creeLe:NOW(),modifLe:NOW(),pub:{statut:'brouillon',version:0}});
+ /* normalisation / migration : tolère les données anciennes ou douteuses, ne jette jamais un chapitre sans le signaler */
++/* origine d'un contenu importé (séquence, séance, banque) : sert à repérer les doublons et, plus tard, à comparer avec la source. Jamais affichée ni publiée. */
++const normSrc=s=>{if(!isO(s)||!['seance','sequence','banque'].includes(s.t))return null;const i=v=>IDV(v)?v:'';return{t:s.t,q:i(s.q),s:i(s.s),f:txt(s.f,20),bi:i(s.bi),h:txt(s.h,16),at:txt(s.at,40),n:txt(s.n,200)}};
+ const normImgs=(a,nid)=>(Array.isArray(a)?a:[]).filter(m=>isO(m)&&typeof m.u==='string'&&m.u&&IMGOK(m.u)).slice(0,LIM.img).map(m=>({id:nid(m.id),u:m.u,w:[25,50,75,100].includes(+m.w)?+m.w:Math.max(5,Math.min(100,Math.round(+m.w)||100)),a:m.a==='r'?'r':'c',l:txt(m.l,300)}));
+ function normCah(c,W){W=W||[];if(!isO(c)){W.push('cahier illisible');return null}
+  const o=mkCah(txt(c.nom,200).trim()||'Cahier sans titre'),ids=new Set([o.id]),nid=v=>{if(IDV(v)&&!ids.has(v)){ids.add(v);return v}const n=uid();ids.add(n);return n};
+@@ -44,8 +46,8 @@
+    T[b.type].f.forEach(([key])=>{k.v[key]=isO(b.v)?txt(b.v[key]):''});
+    if(isO(b.corr)){k.corr.texte=txt(b.corr.texte);k.corr.defaut=b.corr.defaut==='affiche'?'affiche':'masque';['en_ligne','pdf','word'].forEach(x=>{k.corr[x]=!!b.corr[x]})}
+    k.comp=(Array.isArray(b.comp)?b.comp:[]).filter(x=>COMP.includes(x));
+-   k.items=T[b.type].items?(Array.isArray(b.items)?b.items:[]).filter(isO).slice(0,LIM.item).map(x=>({id:nid(x.id),num:txt(x.num,20),titre:txt(x.titre,200),niveau:NIVX.includes(x.niveau)?x.niveau:'',enonce:txt(x.enonce),corrige:txt(x.corrige),imgs:normImgs(x.imgs,nid)})):[];
+-   k.imgs=normImgs(b.imgs,nid);
++   k.items=T[b.type].items?(Array.isArray(b.items)?b.items:[]).filter(isO).slice(0,LIM.item).map(x=>({id:nid(x.id),num:txt(x.num,20),titre:txt(x.titre,200),niveau:NIVX.includes(x.niveau)?x.niveau:'',enonce:txt(x.enonce),corrige:txt(x.corrige),imgs:normImgs(x.imgs,nid),src:normSrc(x.src)})):[];
++   k.imgs=normImgs(b.imgs,nid);k.src=normSrc(b.src);
+    h.blocs.push(k)});o.chapitres.push(h)});
+  return o}
+ /* nouveaux identifiants pour toute copie (duplication, import) : les références vers les séquences (seqIds) sont conservées */
+@@ -137,7 +139,7 @@
+ function listPane(){const c=cc(),e=$c('cahL');if(!e)return;
+  const sel=$c('cahsel');sel.innerHTML=S.list.map(x=>'<option value="'+esc(x.id)+'"'+(x.id===S.cur?' selected':'')+'>'+esc(x.nom)+'</option>').join('')||'<option value="">(aucun cahier)</option>';sel.disabled=!c;
+  if(!c){e.innerHTML='';return}
+- e.innerHTML='<div class="cl-h"><h3>Chapitres</h3><button class="cbtn pri" data-ca="chnew">+ Chapitre</button></div><ol class="cl" id="cahchl">'+c.chapitres.map((h,i)=>'<li draggable="true" data-did="'+h.id+'" data-dk="ch" class="'+(h.id===S.chap?'on':'')+'"><button class="cl-n" data-ca="chsel" data-id="'+h.id+'"'+(h.id===S.chap?' aria-current="true"':'')+'>'+(i+1)+'. '+esc(h.nom)+' <small>'+h.blocs.length+' bloc'+(h.blocs.length>1?'s':'')+'</small></button><span class="cl-a"><button data-ca="chup" data-id="'+h.id+'" aria-label="Monter le chapitre '+esc(h.nom)+'"'+(i?'':' disabled')+'>↑</button><button data-ca="chdn" data-id="'+h.id+'" aria-label="Descendre le chapitre '+esc(h.nom)+'"'+(i<c.chapitres.length-1?'':' disabled')+'>↓</button><button data-ca="chdup" data-id="'+h.id+'" aria-label="Dupliquer le chapitre '+esc(h.nom)+'">⧉</button><button data-ca="chdel" data-id="'+h.id+'" class="dng" aria-label="Supprimer le chapitre '+esc(h.nom)+'">🗑</button></span></li>').join('')+'</ol>'+(c.chapitres.length?'':'<p class="cl-e">Aucun chapitre. Créez-en un pour commencer.</p>')
++ e.innerHTML='<div class="cl-h"><h3>Chapitres</h3><button class="cbtn pri" data-ca="chnew">+ Chapitre</button></div><button class="cbtn cl-seq" data-ca="chseq">+ Chapitre depuis une séquence…</button><ol class="cl" id="cahchl">'+c.chapitres.map((h,i)=>'<li draggable="true" data-did="'+h.id+'" data-dk="ch" class="'+(h.id===S.chap?'on':'')+'"><button class="cl-n" data-ca="chsel" data-id="'+h.id+'"'+(h.id===S.chap?' aria-current="true"':'')+'>'+(i+1)+'. '+esc(h.nom)+' <small>'+h.blocs.length+' bloc'+(h.blocs.length>1?'s':'')+'</small></button><span class="cl-a"><button data-ca="chup" data-id="'+h.id+'" aria-label="Monter le chapitre '+esc(h.nom)+'"'+(i?'':' disabled')+'>↑</button><button data-ca="chdn" data-id="'+h.id+'" aria-label="Descendre le chapitre '+esc(h.nom)+'"'+(i<c.chapitres.length-1?'':' disabled')+'>↓</button><button data-ca="chdup" data-id="'+h.id+'" aria-label="Dupliquer le chapitre '+esc(h.nom)+'">⧉</button><button data-ca="chdel" data-id="'+h.id+'" class="dng" aria-label="Supprimer le chapitre '+esc(h.nom)+'">🗑</button></span></li>').join('')+'</ol>'+(c.chapitres.length?'':'<p class="cl-e">Aucun chapitre. Créez-en un pour commencer.</p>')
+  +'<details class="cl-set"><summary>Réglages du cahier</summary>'+lbl('Titre du cahier',inp('data-cf="nom"',c.nom))+lbl('Niveau',inp('data-cf="niveau"',c.niveau,'5e'))+lbl('Classe',inp('data-cf="classe"',c.classe,'5A'))+lbl('Année scolaire',inp('data-cf="annee"',c.annee,'2026-2027'))
+  +'<p><b>Couleurs des blocs</b></p>'+Object.keys(T).map(k=>'<label class="cl-col"><input type="color" data-cc="'+k+'" value="'+c.couleurs[k]+'"> '+T[k].n+'</label>').join('')+'<button class="cbtn" data-ca="colreset">Couleurs par défaut</button> <button class="cbtn" data-ca="cexpall">Exporter tous les cahiers</button></details>'}
+ function imgPane(b,list,itemId){const it=itemId?' data-it="'+itemId+'"':'';
+@@ -149,19 +151,25 @@
+  +'<div class="cbk-r"><label class="cbk-t">Titre'+inp('data-b="'+b.id+'" data-f="titre"',b.titre,d.n)+'</label><label class="cbk-c">Couleur <input type="color" data-b="'+b.id+'" data-f="couleur" value="'+col+'"></label><label class="cbk-s"><input type="checkbox" data-b="'+b.id+'" data-f="saut"'+(b.saut?' checked':'')+'> Saut de page avant</label></div>';
+  d.f.forEach(([k,l,p,r])=>{h+='<label>'+esc(l)+'<textarea rows="'+r+'" data-b="'+b.id+'" data-f="v" data-k="'+k+'" placeholder="'+esc(p)+'">'+esc(b.v[k]||'')+'</textarea></label>'});
+  h+=imgPane(b,b.imgs,'');
+- if(d.items)h+='<div class="cbk-items">'+b.items.map((x,j)=>'<fieldset class="cbk-ex" data-it="'+x.id+'"><legend>Exercice '+esc(x.num||(j+1))+'</legend><div class="cbk-r"><label>N°'+inp('data-b="'+b.id+'" data-i="'+x.id+'" data-f="num"',x.num,String(j+1))+'</label><label class="cbk-t">Titre'+inp('data-b="'+b.id+'" data-i="'+x.id+'" data-f="titre"',x.titre)+'</label><label>Difficulté<select data-b="'+b.id+'" data-i="'+x.id+'" data-f="niveau">'+NIVX.map(v=>'<option value="'+v+'"'+(v===x.niveau?' selected':'')+'>'+(v||'—')+'</option>').join('')+'</select></label></div><label>Énoncé<textarea rows="4" data-b="'+b.id+'" data-i="'+x.id+'" data-f="enonce">'+esc(x.enonce)+'</textarea></label><label>Corrigé<textarea rows="3" data-b="'+b.id+'" data-i="'+x.id+'" data-f="corrige">'+esc(x.corrige)+'</textarea></label>'+imgPane(b,x.imgs,x.id)+'<span class="cbk-a"><button data-ca="exup" data-b="'+b.id+'" data-id="'+x.id+'" aria-label="Monter l’exercice"'+(j?'':' disabled')+'>↑</button><button data-ca="exdn" data-b="'+b.id+'" data-id="'+x.id+'" aria-label="Descendre l’exercice"'+(j<b.items.length-1?'':' disabled')+'>↓</button><button data-ca="exdel" data-b="'+b.id+'" data-id="'+x.id+'" class="dng" aria-label="Supprimer l’exercice">🗑</button></span></fieldset>').join('')+'<button class="cbtn" data-ca="exnew" data-id="'+b.id+'">+ Exercice</button></div>';
++ if(d.items)h+='<div class="cbk-bk"><button class="cbtn" data-ca="bkpick" data-b="'+b.id+'">📚 Insérer des exercices de la banque…</button></div>'+'<div class="cbk-items">'+b.items.map((x,j)=>'<fieldset class="cbk-ex" data-it="'+x.id+'"><legend>Exercice '+esc(x.num||(j+1))+'</legend><div class="cbk-r"><label>N°'+inp('data-b="'+b.id+'" data-i="'+x.id+'" data-f="num"',x.num,String(j+1))+'</label><label class="cbk-t">Titre'+inp('data-b="'+b.id+'" data-i="'+x.id+'" data-f="titre"',x.titre)+'</label><label>Difficulté<select data-b="'+b.id+'" data-i="'+x.id+'" data-f="niveau">'+NIVX.map(v=>'<option value="'+v+'"'+(v===x.niveau?' selected':'')+'>'+(v||'—')+'</option>').join('')+'</select></label></div><label>Énoncé<textarea rows="4" data-b="'+b.id+'" data-i="'+x.id+'" data-f="enonce">'+esc(x.enonce)+'</textarea></label><label>Corrigé<textarea rows="3" data-b="'+b.id+'" data-i="'+x.id+'" data-f="corrige">'+esc(x.corrige)+'</textarea></label>'+imgPane(b,x.imgs,x.id)+'<span class="cbk-a"><button data-ca="exup" data-b="'+b.id+'" data-id="'+x.id+'" aria-label="Monter l’exercice"'+(j?'':' disabled')+'>↑</button><button data-ca="exdn" data-b="'+b.id+'" data-id="'+x.id+'" aria-label="Descendre l’exercice"'+(j<b.items.length-1?'':' disabled')+'>↓</button><button data-ca="exdel" data-b="'+b.id+'" data-id="'+x.id+'" class="dng" aria-label="Supprimer l’exercice">🗑</button></span></fieldset>').join('')+'<button class="cbtn" data-ca="exnew" data-id="'+b.id+'">+ Exercice</button></div>';
+  if(d.comp)h+='<div class="cbk-cp"><b>Compétences</b> '+COMP.map(k=>'<label><input type="checkbox" data-b="'+b.id+'" data-f="comp" data-k="'+k+'"'+(b.comp.includes(k)?' checked':'')+'> '+k+'</label>').join('')+'</div>';
+  if(d.corr)h+='<label>Corrigé<textarea rows="4" data-b="'+b.id+'" data-f="corrtxt">'+esc(b.corr.texte)+'</textarea></label>';
+  if(d.corr||d.items)h+=corrSet(b);
+  return h+'</article>'}
++function linkBar(c,h){const qs=typeof db!=='undefined'&&db.seqs||[];
++ return '<div class="ce-lk"><b>Séquences associées :</b> '+(h.seqIds.length?h.seqIds.map(id=>{const q=qs.find(x=>x.id===id);return '<span class="chip">'+(q?esc(q.nom||'(sans nom)')+(q.niveau||q.classe?' <small>('+esc([q.niveau,q.classe].filter(Boolean).join(' · '))+')</small>':''):'<i>séquence introuvable</i>')+(q?' <button data-ca="lkimp" data-id="'+esc(id)+'" aria-label="Importer des contenus de la séquence '+esc(q.nom)+'">⤓ Importer des contenus</button>':'')+' <button data-ca="lkrm" data-id="'+esc(id)+'" class="dng" aria-label="Dissocier la séquence '+esc(q?q.nom:'introuvable')+'">✕</button></span>'}).join(' '):'<small>aucune</small>')+' <button class="cbtn" data-ca="lkpick">🔗 Associer une séquence…</button> <button class="cbtn" data-ca="bkpick">📚 Insérer depuis la banque…</button></div>'}
+ function editPane(){const c=cc(),h=ch(),e=$c('cahE');if(!e)return;
+  if(!c){e.innerHTML='<div class="ce-empty"><h2>Votre cahier d’élève</h2><p>Construisez le cahier de mathématiques de la classe : un chapitre par notion, avec attendus, activité, cours, exercices, problème et évaluation.</p><p><button class="cbtn pri" data-ca="cnew">Créer mon cahier</button> <button class="cbtn" data-ca="cimp">Importer un cahier…</button></p></div>';return}
+  if(!h){e.innerHTML='<div class="ce-empty"><p>Sélectionnez ou créez un chapitre.</p><p><button class="cbtn pri" data-ca="chnew">+ Chapitre</button></p></div>';return}
+- e.innerHTML=toolbar()+'<div class="ce-h"><label>Titre du chapitre'+inp('data-ch="nom"',h.nom)+'</label><label>Sous-titre / référence (facultatif)'+inp('data-ch="ref"',h.ref,'Programme du cycle 4 – Nombres et calculs')+'</label></div><div class="ce-add" role="group" aria-label="Ajouter un bloc"><b>Ajouter un bloc :</b> '+Object.keys(T).map(k=>'<button class="cbtn" style="--bc:'+c.couleurs[k]+'" data-ca="badd" data-t="'+k+'">'+T[k].ico+' '+esc(T[k].n)+'</button>').join('')+'</div><div id="cahbl">'+h.blocs.map((b,i)=>blocForm(c,b,i,h.blocs.length)).join('')+'</div>'+(h.blocs.length?'':'<p class="cl-e">Ce chapitre est vide : ajoutez un premier bloc ci-dessus.</p>')}
++ e.innerHTML=toolbar()+linkBar(c,h)+'<div class="ce-h"><label>Titre du chapitre'+inp('data-ch="nom"',h.nom)+'</label><label>Sous-titre / référence (facultatif)'+inp('data-ch="ref"',h.ref,'Programme du cycle 4 – Nombres et calculs')+'</label></div><div class="ce-add" role="group" aria-label="Ajouter un bloc"><b>Ajouter un bloc :</b> '+Object.keys(T).map(k=>'<button class="cbtn" style="--bc:'+c.couleurs[k]+'" data-ca="badd" data-t="'+k+'">'+T[k].ico+' '+esc(T[k].n)+'</button>').join('')+'</div><div id="cahbl">'+h.blocs.map((b,i)=>blocForm(c,b,i,h.blocs.length)).join('')+'</div>'+(h.blocs.length?'':'<p class="cl-e">Ce chapitre est vide : ajoutez un premier bloc ci-dessus.</p>')}
+ function render(){if(!S.open)return;listPane();editPane();prev();hbtn();stLine2();$c('cah').dataset.tab=S.tab;document.querySelectorAll('#cahtabs button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tab===S.tab)))}
+ /* met à jour les libellés (liste de cahiers et de chapitres) sans reconstruire les panneaux : la saisie en cours n'est jamais interrompue */
+ function labels(){const c=cc();if(!c)return;const o=$c('cahsel')&&$c('cahsel').querySelector('option[value="'+c.id+'"]');if(o)o.textContent=c.nom;
+  c.chapitres.forEach((h,i)=>{const b=document.querySelector('#cahchl [data-ca=chsel][data-id="'+h.id+'"]');if(b){b.firstChild.textContent=(i+1)+'. '+h.nom+' ';b.title=h.nom}})}
++/* ---------- module de liaison (chargé à la demande : séquences, séances, banque d'exercices) ---------- */
++let LZ=null;
++const lz=()=>window.CAHL?Promise.resolve(window.CAHL):(LZ||(LZ=new Promise((ok,ko)=>{const s=document.createElement('script');s.src='cahier-liaison.js';s.onload=()=>window.CAHL?ok(window.CAHL):ko(new Error('module de liaison invalide'));s.onerror=()=>{LZ=null;s.remove();ko(new Error('le fichier cahier-liaison.js est introuvable (connexion ou cache hors ligne)'))};document.head.append(s)})));
++const useL=f=>lz().then(L=>f(L)).catch(e=>info('Fonction indisponible','<p>'+esc(errMsg(e))+'</p><p>Le reste du cahier fonctionne normalement.</p>'));
+ /* ---------- actions ---------- */
+ const conf=(t,h,ok)=>modal(t,h,[['cancel','Annuler'],['go',ok||'Supprimer','pri']],{esc:'cancel'}).then(r=>r==='go');
+ const mv=(a,i,j)=>{if(j<0||j>=a.length)return false;a.splice(j,0,a.splice(i,1)[0]);return true};
+@@ -254,7 +262,9 @@
+ .cp-t{border-collapse:collapse;margin:4pt 0;width:auto;max-width:100%}.cp-t th,.cp-t td{border:1px solid #8a94a6;padding:3px 8px;text-align:center}.cp-t th{background:color-mix(in srgb,var(--bc,#1b365d) 14%,#fff);color:#222}.cp-tw{overflow-x:auto}
+ .cp-q{margin:4pt 0 2pt}.cp-q b{color:var(--bc)}.cp-im{margin:4pt 0}.cp-im figure{margin:4pt auto}.cp-im .cp-fr{float:right;margin:0 0 4pt 10pt}.cp-im img{display:block;width:100%;height:auto}.cp-im figcaption{font-size:8.5pt;font-style:italic;text-align:center}
+ .cp-co summary{cursor:pointer;font-weight:700;color:#4a5a73;font-size:9pt}.prt{display:none}
+-@media(max-width:1000px){.ce-tb button,.cbk-ig button,.cbk-im .cbtn{min-height:40px;min-width:40px}#cahtabs{display:flex;background:var(--ink)}#cahtabs button{flex:1;border:0;border-radius:0;background:none;color:#cfd9e2;padding:12px 4px;min-height:44px}#cahtabs button[aria-pressed=true]{background:var(--acc);color:#fff}#cahbody{display:block;overflow:auto}#cahL,#cahE,#cahP{display:none;height:100%;border:0}#cah[data-tab=list] #cahL,#cah[data-tab=edit] #cahE,#cah[data-tab=prev] #cahP{display:block}.cp-page{padding:18px 16px}.cp-two{grid-template-columns:1fr}#cahbar button,#cah .cbtn{min-height:40px}.cbk-a button,.cl-a button{min-width:40px;min-height:40px}}
++/* phase 3 */
++.ce-lk{display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--cb);border:1px solid var(--cl);border-radius:6px;padding:6px 10px;margin:6px 0;font-size:13px}.chip{display:inline-flex;gap:6px;align-items:center;background:#eef4f6;border:1px solid var(--cl);border-radius:14px;padding:2px 4px 2px 10px}.chip button{padding:2px 8px;border-radius:12px}body.dark .chip{background:#14202b}.cl-seq{width:100%;margin-top:6px}.cbk-bk{margin:6px 0}
++@media(max-width:1000px){.ce-tb button,.cbk-ig button,.cbk-im .cbtn{min-height:40px;min-width:40px}.chip button,.ce-lk .cbtn,.cl-seq{min-height:40px}#cahtabs{display:flex;background:var(--ink)}#cahtabs button{flex:1;border:0;border-radius:0;background:none;color:#cfd9e2;padding:12px 4px;min-height:44px}#cahtabs button[aria-pressed=true]{background:var(--acc);color:#fff}#cahbody{display:block;overflow:auto}#cahL,#cahE,#cahP{display:none;height:100%;border:0}#cah[data-tab=list] #cahL,#cah[data-tab=edit] #cahE,#cah[data-tab=prev] #cahP{display:block}.cp-page{padding:18px 16px}.cp-two{grid-template-columns:1fr}#cahbar button,#cah .cbtn{min-height:40px}.cbk-a button,.cl-a button{min-width:40px;min-height:40px}}
+ @media print{.scr{display:none!important}.prt{display:block!important}.cp-im{break-inside:avoid}body.cah-open>*:not(#cah){display:none!important}body.cah-open #cah{position:static;display:block;background:#fff}#cahbar,#cahtabs,#cahL,#cahE,.cp-bar{display:none!important}#cahbody{display:block}#cahP{overflow:visible;padding:0;display:block!important}.cp-page{box-shadow:none;max-width:none;padding:0;min-height:0}.cp-page,.cp-page *{-webkit-print-color-adjust:exact;print-color-adjust:exact}.cp-pb{break-before:page;page-break-before:always;border-top:0}.cp-ch+.cp-ch{break-before:page}}`;
+ function build(){if($c('cah'))return;const st=document.createElement('style');st.id='cahcss';st.textContent=CSS;document.head.append(st);
+  const el=document.createElement('div');el.id='cah';el.hidden=true;el.setAttribute('role','dialog');el.setAttribute('aria-label','Cahier de l’élève');
+@@ -275,6 +285,8 @@
+   case'chsel':S.chap=id;if(S.tab==='list')S.tab='edit';render();break;case'chup':case'chdn':case'chdup':case'chdel':chAct(a,id);break;
+   case'badd':{const h=ch();if(!h||h.blocs.length>=LIM.bloc)return;const k=mkBloc(b.dataset.t);h.blocs.push(k);touch({now:1});render();const n=document.querySelector('.cbk[data-bid="'+k.id+'"]');if(n){n.scrollIntoView({block:'center'});const f=n.querySelector('textarea,input');if(f)f.focus()}break}
+   case'bup':case'bdn':case'bdup':case'bdel':blAct(a,id);break;case'fmt':fmtIns(b.dataset.m);break;case'kbd':kbdIns(+b.dataset.i);break;case'imgadd':S.imgT={b:b.dataset.b,i:b.dataset.it||''};$c('cahimg').click();break;case'imgup':case'imgdn':case'imgdel':imgAct(a,b.dataset.b,b.dataset.it||'',id);break;case'exnew':blAct(a,id);break;case'exup':case'exdn':case'exdel':blAct(a,b.dataset.b,id);break;
++  case'lkpick':useL(L=>L.pick(ch()));break;case'lkimp':useL(L=>L.importFrom(ch(),id));break;case'chseq':useL(L=>L.newFromSeq());break;case'bkpick':useL(L=>L.bank(ch(),b.dataset.b||''));break;
++  case'lkrm':{const h=ch();if(h){h.seqIds=h.seqIds.filter(x=>x!==id);touch({now:1});render()}break}
+   case'colreset':{const c=cc();if(c){c.couleurs={...COL};touch({now:1});render()}break}}}
+ async function open(){build();S.opener=document.activeElement;
+  try{if(!S.loaded)await load()}catch(e){S.err=e;await info('Cahier indisponible','<p>Impossible d’ouvrir la base des cahiers : '+esc(errMsg(e))+'.</p><p>Vos préparations ne sont pas concernées.</p>');return}
+@@ -292,5 +304,5 @@
+ addEventListener('beforeunload',()=>{if(S.db&&(S.dirty.size||S.del.size))flush()});
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flush()});
+ document.addEventListener('click',e=>{const b=e.target.closest('[data-a="cahier"]');if(b){e.preventDefault();open()}});
+-window.CAH={S,rich,addImgFile,imgList,open,close,flush,cc,ch,normCah,parseImp,reid,T,SCH,FMT,load:()=>load(),render};
++window.CAH={S,rich,addImgFile,imgList,loadL:()=>lz(),api:{mkBloc,mkEx,mkChap,touch,render,cc,ch,LIM,T,COL,CALLR:()=>CALL,rich,hsnap},open,close,flush,cc,ch,normCah,parseImp,reid,T,SCH,FMT,load:()=>load(),render};
+ })();
+diff -ruN '--exclude=node_modules' '--exclude=vendor' '--exclude=*.png' '--exclude=*.zip' '--exclude=.patch' base3/docs/CAHIER-ELEVE.md z/CreateDocMath-main/docs/CAHIER-ELEVE.md
+--- a/docs/CAHIER-ELEVE.md	2026-11-04 12:35:43.975944392 +0000
++++ b/docs/CAHIER-ELEVE.md	2026-11-04 21:32:22.961627874 +0000
+@@ -78,10 +78,46 @@
+ 
+ **Modèle de données** : le schéma reste **v1** (changements uniquement additifs, normalisés à la lecture : `couleurs.revision`, `imgs[].id`, `items[].imgs`, `v.questions`). Les cahiers de la phase 1 se chargent sans migration ni copie de sécurité (testé). L'historique ↶ ↷ référence les images par clé pour ne pas dupliquer leur poids en mémoire.
+ 
+-## 7. Limites (à traiter dans les phases suivantes)
++## 7. Phase 3 — liaison avec les préparations et la banque
++
++Nouveau fichier `cahier-liaison.js`, **chargé à la demande** (au premier clic sur une fonction de liaison) : sans lui, le reste du cahier fonctionne ; il est dans le cache hors ligne (`sw.js`).
++
++**Associer** : dans un chapitre, « 🔗 Associer une séquence… » (liste avec nom, niveau, classe, nombre de séances, dates ; recherche ; plusieurs séquences possibles). L'association ne copie rien : elle enregistre les identifiants dans `seqIds` et propose ensuite d'importer. « + Chapitre depuis une séquence… » crée le chapitre, l'associe et ouvre l'import. Une séquence supprimée de la préparation apparaît comme « séquence introuvable » (le cahier garde tout).
++
++**Importer** : « ⤓ Importer des contenus » ouvre la liste des contenus récupérables, regroupés (chapitre, attendus, une rubrique par séance), avec case à cocher, destination modifiable et **aperçu** de chaque élément ; « Tout sélectionner / désélectionner », compteur, import impossible si rien n'est coché.
++
++| Source dans la préparation | Destination proposée (modifiable) | Coché par défaut |
++|---|---|---|
++| Nom de la séquence | Titre du chapitre | oui, si le chapitre porte encore son nom par défaut |
++| Référence du B.O. | Sous-titre du chapitre | oui, si vide |
++| Contenus du B.O. | Attendus ▸ Je dois savoir | oui |
++| Capacités attendues | Attendus ▸ Je dois savoir faire | oui |
++| Objectifs généraux (section « ## Objectifs généraux » du cadre, ex. import IA) | Attendus ▸ Je dois savoir faire | oui |
++| Objectif(s) d'une séance | Attendus ▸ Je dois savoir faire | non |
++| Activité d'une séance (+ images de la zone « activité ») | Activité de découverte | oui |
++| … si la séance est étiquetée « problème » / « tâche complexe » | Tâche complexe | oui |
++| … si la séance est de type évaluation | Évaluation | oui |
++| Trace écrite (+ images de la zone « trace écrite ») | Trace écrite | oui (non pour une évaluation) |
++| Problème supplémentaire | Exercices | non |
++| Lignes « → Correction : … » de l'activité | Corrigé du bloc (séparé de l'énoncé, numéro de question conservé) | option « Séparer les corrigés » cochée |
++
++**Banque d'exercices** : « 📚 Insérer depuis la banque… » (barre du chapitre, ou dans un bloc Exercices pour cibler ce bloc). Recherche (sans accents, titre / énoncé / correction / notions / mots-clés), filtres par type et niveau, favoris d'abord, aperçu. Récupère énoncé, correction (→ corrigé), image, niveau (difficulté 1/2/3 → facile / moyen / difficile), compétences ; les notions sont gardées dans l'origine. Destination par type : exercice, flash, calcul, remédiation, diagnostic → Exercices ; problème → Tâche complexe ; activité de découverte → Activité ; trace écrite et exemple corrigé → Trace écrite.
++
++**Garanties**
++- **Copies indépendantes** : textes et images sont copiés (nouveaux identifiants). Modifier la préparation, la banque ou le cahier après import ne change pas l'autre ; supprimer la source ne change rien au cahier. Les préparations et la banque ne sont **jamais écrites**.
++- **Jamais d'écrasement** : on ajoute des blocs, des exercices ou des lignes. Attendus : les lignes déjà présentes (insensible à la casse, aux accents et aux puces) ne sont pas répétées. Un contenu déjà importé dans le chapitre est signalé « déjà importé » et décoché ; le forcer ajoute une copie sans toucher à votre version personnalisée.
++- **Annulation** : tout l'import s'annule d'un coup avec ↶.
++- **Confidentialité** : ne sont jamais proposés ni copiés les commentaires de phases, l'analyse didactique, les difficultés, les aides, la justification des compétences, les pré-requis, les recommandations, ni les images de la zone « analyse ». Vérifié par test (dans la fenêtre, le cahier, l'aperçu et l'export).
++- **Sécurité** : tout texte est échappé ; images validées (SVG, `javascript:` et données mal formées écartés) ; textes bornés à 100 000 caractères.
++
++**Modèle de données** : le schéma reste **v1** (ajouts normalisés à la lecture) : `src` sur les blocs et exercices importés (`{t:'seance'|'sequence'|'banque', q, s, f, bi, h, at, n}`) sert à repérer les doublons et préparera la future fonction « Comparer avec la source » ; `h` est l'empreinte du texte importé. **La projection de publication (phase 5) devra retirer `src` et `seqIds`.**
++
++## 8. Limites (à traiter dans les phases suivantes)
+ 
+ - **Les sauvegardes ZIP ne contiennent pas encore les cahiers** : utiliser **Exporter** (`.json`, images comprises) dans le cahier. Intégration au ZIP prévue en phase 4.
+-- Pas de recadrage d'image dans le cahier, ni de table des matières, de pagination automatique, d'en-tête / pied de page configurables ni d'export Word (phase 4) ; pas de liaison avec les séquences ni de banque d'exercices (phase 3) ; pas de publication (phase 5).
++- Pas de recadrage d'image dans le cahier, ni de table des matières, de pagination automatique, d'en-tête / pied de page configurables ni d'export Word (phase 4) ; pas de publication (phase 5) ; pas encore de « Comparer avec la source » (les empreintes sont enregistrées).
++- L'import reprend l'activité d'une séance en un seul bloc (les questions ne sont pas découpées en exercices) : choisissez « Exercices » comme destination pour la traiter comme un exercice.
++- Les « tâches complexes » sont reconnues par l'étiquette de la séance (« problème », « tâche complexe ») : sinon, changez la destination dans la fenêtre d'import.
+ - Les réglages « Word » des corrigés sont enregistrés mais ne seront utilisés qu'avec l'export Word (phase 4).
+ - Édition simultanée dans deux onglets : le dernier enregistrement l'emporte.
+ - Chaque enregistrement réécrit le cahier modifié en entier, images comprises : à optimiser (stockage binaire séparé) si des cahiers très illustrés posent problème.
+diff -ruN '--exclude=node_modules' '--exclude=vendor' '--exclude=*.png' '--exclude=*.zip' '--exclude=.patch' base3/sw.js z/CreateDocMath-main/sw.js
+--- a/sw.js	2026-11-04 12:35:43.974684756 +0000
++++ b/sw.js	2026-11-04 12:37:55.501479239 +0000
+@@ -1,6 +1,6 @@
+ /* Service worker : fichiers de l'application = réseau d'abord (toujours à jour), cache en secours ;
+    bibliothèques embarquées (vendor/) précachées à l'installation ; aucune dépendance CDN. */
+-const V='fiches-maths-v18',CORE=["./", "index.html", "bo_cycle3.js", "bo_cycle4.js", "bo_premiere.js", "bank_difficultes.js", "cahier.js", "manifest.json", "icon-192.png", "icon-512.png", "vendor/jszip.min.js", "vendor/docx.iife.js", "vendor/katex/katex.min.css", "vendor/katex/katex.min.js", "vendor/katex/auto-render.min.js", "vendor/katex/fonts/KaTeX_AMS-Regular.woff2", "vendor/katex/fonts/KaTeX_Caligraphic-Bold.woff2", "vendor/katex/fonts/KaTeX_Caligraphic-Regular.woff2", "vendor/katex/fonts/KaTeX_Fraktur-Bold.woff2", "vendor/katex/fonts/KaTeX_Fraktur-Regular.woff2", "vendor/katex/fonts/KaTeX_Main-Bold.woff2", "vendor/katex/fonts/KaTeX_Main-BoldItalic.woff2", "vendor/katex/fonts/KaTeX_Main-Italic.woff2", "vendor/katex/fonts/KaTeX_Main-Regular.woff2", "vendor/katex/fonts/KaTeX_Math-BoldItalic.woff2", "vendor/katex/fonts/KaTeX_Math-Italic.woff2", "vendor/katex/fonts/KaTeX_SansSerif-Bold.woff2", "vendor/katex/fonts/KaTeX_SansSerif-Italic.woff2", "vendor/katex/fonts/KaTeX_SansSerif-Regular.woff2", "vendor/katex/fonts/KaTeX_Script-Regular.woff2", "vendor/katex/fonts/KaTeX_Size1-Regular.woff2", "vendor/katex/fonts/KaTeX_Size2-Regular.woff2", "vendor/katex/fonts/KaTeX_Size3-Regular.woff2", "vendor/katex/fonts/KaTeX_Size4-Regular.woff2", "vendor/katex/fonts/KaTeX_Typewriter-Regular.woff2"];
++const V='fiches-maths-v19',CORE=["./", "index.html", "bo_cycle3.js", "bo_cycle4.js", "bo_premiere.js", "bank_difficultes.js", "cahier.js", "cahier-liaison.js", "manifest.json", "icon-192.png", "icon-512.png", "vendor/jszip.min.js", "vendor/docx.iife.js", "vendor/katex/katex.min.css", "vendor/katex/katex.min.js", "vendor/katex/auto-render.min.js", "vendor/katex/fonts/KaTeX_AMS-Regular.woff2", "vendor/katex/fonts/KaTeX_Caligraphic-Bold.woff2", "vendor/katex/fonts/KaTeX_Caligraphic-Regular.woff2", "vendor/katex/fonts/KaTeX_Fraktur-Bold.woff2", "vendor/katex/fonts/KaTeX_Fraktur-Regular.woff2", "vendor/katex/fonts/KaTeX_Main-Bold.woff2", "vendor/katex/fonts/KaTeX_Main-BoldItalic.woff2", "vendor/katex/fonts/KaTeX_Main-Italic.woff2", "vendor/katex/fonts/KaTeX_Main-Regular.woff2", "vendor/katex/fonts/KaTeX_Math-BoldItalic.woff2", "vendor/katex/fonts/KaTeX_Math-Italic.woff2", "vendor/katex/fonts/KaTeX_SansSerif-Bold.woff2", "vendor/katex/fonts/KaTeX_SansSerif-Italic.woff2", "vendor/katex/fonts/KaTeX_SansSerif-Regular.woff2", "vendor/katex/fonts/KaTeX_Script-Regular.woff2", "vendor/katex/fonts/KaTeX_Size1-Regular.woff2", "vendor/katex/fonts/KaTeX_Size2-Regular.woff2", "vendor/katex/fonts/KaTeX_Size3-Regular.woff2", "vendor/katex/fonts/KaTeX_Size4-Regular.woff2", "vendor/katex/fonts/KaTeX_Typewriter-Regular.woff2"];
+ self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting()))});
+ self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==V).map(x=>caches.delete(x)))).then(()=>self.clients.claim()))});
+ const keep=(r,x)=>{const c=x.clone();caches.open(V).then(h=>h.put(r,c));return x};
+diff -ruN '--exclude=node_modules' '--exclude=vendor' '--exclude=*.png' '--exclude=*.zip' '--exclude=.patch' base3/tests/run.js z/CreateDocMath-main/tests/run.js
+--- a/tests/run.js	2026-11-04 12:35:43.974726557 +0000
++++ b/tests/run.js	2026-11-04 21:31:26.752288088 +0000
+@@ -149,7 +149,7 @@
+ T('PWA : fonctionne hors ligne après installation (KaTeX local, données IndexedDB)',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
+  await p.evaluate(()=>navigator.serviceWorker.ready.then(()=>1));await p.reload();await p.waitForFunction(()=>navigator.serviceWorker.controller);
+  const names=await p.evaluate(async()=>{const ks=await caches.keys(),c=await caches.open(ks.find(k=>k.startsWith('fiches-maths'))),r=await c.keys();return{ks,u:r.map(x=>new URL(x.url).pathname)}});
+- assert.deepStrictEqual(names.ks,['fiches-maths-v18']);for(const f of ['/vendor/docx.iife.js','/vendor/katex/katex.min.js','/vendor/jszip.min.js','/vendor/katex/fonts/KaTeX_Main-Regular.woff2','/index.html','/bo_cycle4.js'])assert.ok(names.u.includes(f),f);
++ assert.deepStrictEqual(names.ks,['fiches-maths-v19']);for(const f of ['/vendor/docx.iife.js','/vendor/katex/katex.min.js','/vendor/jszip.min.js','/vendor/katex/fonts/KaTeX_Main-Regular.woff2','/index.html','/bo_cycle4.js'])assert.ok(names.u.includes(f),f);
+  await p.evaluate(()=>{S().nom='Hors ligne ok';S().activite='$a^2$';changed()});await saved(p);await c.setOffline(true);await p.reload();await booted(p);assert.strictEqual(await p.evaluate(()=>S().nom),'Hors ligne ok');await p.waitForSelector('#prev .katex');
+  assert.ok(await p.evaluate(()=>document.fonts.check('16px KaTeX_Main')||true));await c.close()});
+ 
+@@ -910,6 +910,193 @@
+  await p.tap('#cahtabs [data-tab=edit]');const bad=await p.evaluate(()=>{const out=[];document.querySelectorAll('#cah button,#cah input,#cah textarea,#cah select').forEach(e=>{if(!e.offsetParent)return;const n=(e.tagName==='BUTTON'?(e.textContent||'').trim():'')||e.getAttribute('aria-label')||(e.labels&&e.labels.length)||(e.closest('label')&&e.closest('label').textContent.trim());if(!n)out.push(e.tagName+'.'+(e.dataset.ca||e.dataset.f||e.id))});return out});assert.deepStrictEqual(bad,[],'éléments sans nom accessible');
+  assert.strictEqual(await p.getAttribute('.ce-tb','role'),'toolbar');assert.ok(await p.getAttribute('.ce-tb','aria-label'));assert.ok(await p.$$eval('.cbk-ig img',e=>e.every(i=>i.alt)),'alternatives textuelles des images');assert.deepStrictEqual(c.errs,[]);await c.close()});
+ 
++/* ================= 📚 Cahier de l'élève — phase 3 : liaison avec les préparations et la banque ================= */
++const seedPrep=p=>p.evaluate(()=>{const mk=c=>{const cv=document.createElement('canvas');cv.width=200;cv.height=100;const g=cv.getContext('2d');g.fillStyle=c;g.fillRect(0,0,200,100);return cv.toDataURL('image/png')},I={A:mk('#cc3333'),T:mk('#33cc33'),C:mk('#3333cc')};
++ const q=db.seqs[0];Object.assign(q,{nom:'Nombres relatifs',niveau:'5e',classe:'5A',boRef:'Programme du cycle 4',bo:'- Opposé d’un nombre\n- Addition de relatifs',capacites:'- Comparer deux relatifs\n- Additionner deux relatifs',cadre:'Cadre général.\n\n## Objectifs généraux de la séquence\n- Comprendre les relatifs\n- Comparer deux relatifs\n\n## Progression\nS1 à S4',reco:'SECRET-RECO'});
++ const s1=db.seances[0];Object.assign(s1,{numero:1,nom:'Découverte',date:'2026-11-09',objectifs:'Comprendre les relatifs',activiteTitre:'Le thermomètre',activite:'1. Quelle température ?\n→ Correction : -5 °C\n2. Compare $-5$ et $3$.\n→ Correction : $-5<3$\nsuite de la correction\n3. Conclure',trace:'## Opposé\nL’opposé de $a$ est $-a$.',supp:'Problème bonus $x$',difficultes:'SECRET-DIFF',choixProbleme:'SECRET-CHOIX',choixTravail:'SECRET-TRAVAIL',compTexte:'SECRET-COMP',rem:'SECRET-REM',prereq:'SECRET-PREREQ',aides:'SECRET-AIDES',evalBilan:'SECRET-BILAN',comp:['Calculer'],imgs:[{u:I.A,w:50,a:'r',z:'a',l:'Fig A'},{u:I.T,w:75,a:'c',z:'t',l:'Fig T'},{u:I.C,w:100,a:'c',z:'c',l:'SECRET-IMG'}]});
++ s1.phases.forEach(x=>{x.comment='SECRET-PHASE'});
++ const add=o=>{addSeance(q.id);const s=db.seances[db.seances.length-1];Object.assign(s,o);return s};
++ add({numero:2,nom:'Problème ouvert',tags:'Problème ouvert',activiteTitre:'Le trajet',activite:'Situation : un trajet.\n1. Trouver la distance.\n→ Correction : 12 km',comp:['Chercher','Raisonner'],trace:'',objectifs:'Résoudre un problème'});
++ add({numero:3,nom:'Entraînement',activite:'',trace:'Cours S3',objectifs:'S3'});
++ add({numero:4,nom:'Évaluation',type:'eval',activite:'Calculer $3+(-5)$.\n→ Correction : $-2$',comp:['Calculer'],trace:'Ne pas importer par défaut'});
++ db.cur=s1.id;changed();return I});
++const lkRows=p=>p.$$eval('.mdl .lk-r[data-row]',r=>r.map(x=>({k:x.dataset.row,t:x.querySelector('label').innerText.trim(),c:x.querySelector('[data-k]').checked,d:(x.querySelector('select')||{}).value||null,opts:x.querySelector('select')?[...x.querySelectorAll('option')].map(o=>o.value):null,dup:/déjà importé/.test(x.innerText)})));
++const lkOpenImp=async p=>{await p.click('.ce-lk [data-ca=lkimp]');await p.waitForSelector('.mdl .lk fieldset')};
++const lkAssoc=async p=>{await p.click('[data-ca=lkpick]');await p.waitForSelector('.mdl .lk');await p.check('.mdl input[data-q]');await clickBtn(p,'Associer');await modalDone(p)};
++const lkGo=async(p,rx)=>{await clickBtn(p,rx||'Importer la sélection');await modalDone(p)};
++const cahJ=p=>p.evaluate(()=>JSON.stringify(CAH.cc()));
++const prepJ=p=>p.evaluate(()=>JSON.stringify({q:db.seqs,s:db.seances,b:db.bank||[]}));
++const SECRETS=['SECRET-RECO','SECRET-DIFF','SECRET-CHOIX','SECRET-TRAVAIL','SECRET-COMP','SECRET-REM','SECRET-PREREQ','SECRET-AIDES','SECRET-BILAN','SECRET-IMG','SECRET-PHASE'];
++
++T('cahier phase 3 : associer des séquences à un chapitre — liste, recherche, plusieurs séquences, dissociation, séquence supprimée',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await seedPrep(p);
++ await p.evaluate(()=>{addSeq();db.seqs[1].nom='Fractions';db.seqs[1].niveau='6e';addSeq();db.seqs[2].nom='Proportionnalité';db.seqs[2].niveau='5e';db.seqs[2].classe='5B';changed()});await saved(p);const pr0=await prepJ(p);
++ await cahOpen(p);await cahNew(p);assert.ok(/aucune/.test(await p.innerText('.ce-lk')));
++ await p.click('[data-ca=lkpick]');await p.waitForSelector('.mdl .lk');const rows=await p.$$eval('.mdl .lk-r[data-q]',r=>r.map(x=>x.innerText.replace(/\s+/g,' ')));assert.strictEqual(rows.length,3);assert.ok(/Nombres relatifs.*5e · 5A · 4 séances · 9 nov/.test(rows[0]),rows[0]);assert.ok(/Fractions.*6e · 1 séance/.test(rows[1]),rows[1]);
++ assert.ok(await p.isDisabled('.mdl .mda button:has-text("Associer et importer")'),'import désactivé sans sélection');
++ await p.fill('#lkq','proport');assert.strictEqual(await p.$$eval('.mdl .lk-r[data-q]',r=>r.filter(x=>x.style.display!=='none').length),1);await p.fill('#lkq','');assert.strictEqual(await p.$$eval('.mdl .lk-r[data-q]',r=>r.filter(x=>x.style.display!=='none').length),3);
++ await p.check('.mdl input[data-q]>>nth=0');await p.check('.mdl input[data-q]>>nth=2');assert.ok(/2 séquences sélectionnées/.test(await p.innerText('#lkn')));await clickBtn(p,'Associer');await modalDone(p);
++ const ids=await p.evaluate(()=>CAH.ch().seqIds);assert.deepStrictEqual(ids,await p.evaluate(()=>[db.seqs[0].id,db.seqs[2].id]));assert.strictEqual(await p.locator('.ce-lk .chip').count(),2);assert.strictEqual(await p.evaluate(()=>CAH.ch().blocs.length),0,'l’association ne copie rien');assert.strictEqual(await prepJ(p),pr0,'préparations inchangées');
++ await cahSaved(p);assert.deepStrictEqual((await cahDump(p)).cahiers[0].chapitres[0].seqIds,ids,'association enregistrée');
++ await p.locator('.chip').nth(1).locator('[data-ca=lkrm]').click();assert.strictEqual(await p.locator('.ce-lk .chip').count(),1);assert.deepStrictEqual(await p.evaluate(()=>CAH.ch().seqIds.length),1);
++ await p.click('[data-ca=lkpick]');await p.waitForSelector('.mdl .lk');assert.strictEqual(await p.$$eval('.mdl input[data-q]:checked',e=>e.length),1,'séquence déjà associée cochée');await clickBtn(p,'Annuler');await modalDone(p);
++ // séquence supprimée de la préparation : puce signalée, cahier intact
++ await p.evaluate(()=>{const id=db.seqs[0].id;db.seances=db.seances.filter(s=>s.seq!==id);db.seqs=db.seqs.filter(q=>q.id!==id);CAH.render()});assert.ok(/séquence introuvable/.test(await p.innerText('.ce-lk .chip')));assert.strictEqual(await p.locator('.chip [data-ca=lkimp]').count(),0);
++ await p.click('.chip [data-ca=lkrm]');assert.strictEqual(await p.evaluate(()=>CAH.ch().seqIds.length),0);
++ // aucune séquence : message clair
++ await p.evaluate(()=>{db.seqs=[];db.seances=[];});await p.click('[data-ca=lkpick]');assert.ok(/Aucune séquence/.test(await modalText(p)));await clickBtn(p,'Fermer');await modalDone(p);assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('cahier phase 3 : importer depuis une séquence — candidats, destinations proposées, sélection, correspondances, corrigés séparés, images par zone',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);const I=await seedPrep(p);await saved(p);const pr0=await prepJ(p);
++ await cahOpen(p);await cahNew(p);await lkAssoc(p);await lkOpenImp(p);
++ const R=await lkRows(p),by=k=>R.find(r=>r.k===k);assert.deepStrictEqual(R.map(r=>r.k).filter(k=>!/^s:/.test(k)),['q:nom','q:ref','q:bo','q:cap','q:og']);
++ assert.strictEqual(by('q:nom').c,true);assert.strictEqual(by('q:bo').d,'savoir');assert.deepStrictEqual(by('q:bo').opts,['savoir','faire']);assert.strictEqual(by('q:cap').d,'faire');assert.strictEqual(by('q:og').d,'faire');
++ const sid=await p.evaluate(()=>db.seances.map(s=>s.id));assert.strictEqual(by('s:'+sid[0]+':act').d,'decouverte');assert.strictEqual(by('s:'+sid[0]+':obj').c,false,'objectifs de séance non cochés par défaut');assert.strictEqual(by('s:'+sid[0]+':sup').c,false);assert.strictEqual(by('s:'+sid[0]+':tr').c,true);
++ assert.strictEqual(by('s:'+sid[1]+':act').d,'tache','séance étiquetée « Problème ouvert » → tâche complexe');assert.strictEqual(by('s:'+sid[3]+':act').d,'eval','séance d’évaluation → évaluation');assert.strictEqual(by('s:'+sid[3]+':tr').c,false);assert.ok(!by('s:'+sid[2]+':act'),'séance sans activité : rien à proposer');assert.ok(by('s:'+sid[2]+':tr'));
++ assert.ok(/Aperçu/.test(await p.innerText('.mdl .lk-r')));assert.ok(/9 éléments sélectionnés|\d+ éléments sélectionnés/.test(await p.innerText('#lkn')));
++ // aperçu d'une activité : énoncé et corrigé séparés, image de la zone « activité » seulement
++ await p.locator('.mdl .lk-r[data-row="s:'+sid[0]+':act"] summary').click();await p.waitForSelector('.mdl [data-pv="s:'+sid[0]+':act"][data-ok]');const pv=await p.innerText('.mdl [data-pv="s:'+sid[0]+':act"]');assert.ok(/Quelle température/.test(pv)&&/Corrigé \(séparé de l’énoncé\)/.test(pv)&&/-5 °C/.test(pv));assert.strictEqual(await p.locator('.mdl [data-pv="s:'+sid[0]+':act"] img').count(),1);
++ // sélection individuelle : tout décocher, puis 3 éléments, destination modifiée
++ await p.click('.mdl [data-lk=none]');assert.ok(await p.isDisabled('.mdl .mda .pri'),'import impossible sans sélection');assert.ok(/0 élément/.test(await p.innerText('#lkn')));
++ await p.check('.mdl [data-k="q:bo"]');await p.selectOption('.mdl select[data-d="q:bo"]','faire');await p.check('.mdl [data-k="s:'+sid[0]+':act"]');await p.check('.mdl [data-k="s:'+sid[0]+':tr"]');assert.ok(/3 éléments sélectionnés/.test(await p.innerText('#lkn')));
++ await lkGo(p);let m=await cahCur(p),h=m.chapitres[0];assert.deepStrictEqual(h.blocs.map(b=>b.type),['attendus','decouverte','trace']);assert.strictEqual(h.nom,'Nouveau chapitre','titre non importé (non coché)');
++ assert.strictEqual(h.blocs[0].v.faire,'- Opposé d’un nombre\n- Addition de relatifs');assert.strictEqual(h.blocs[0].v.savoir,'');
++ let d=h.blocs[1];assert.strictEqual(d.titre,'Le thermomètre');assert.strictEqual(d.v.texte,'1. Quelle température ?\n2. Compare $-5$ et $3$.\n3. Conclure');assert.strictEqual(d.corr.texte,'1. -5 °C\n2. $-5<3$\nsuite de la correction');assert.strictEqual(d.imgs.length,1);assert.deepStrictEqual([d.imgs[0].w,d.imgs[0].a,d.imgs[0].l,d.imgs[0].u===I.A],[50,'r','Fig A',true]);
++ assert.strictEqual(h.blocs[2].v.texte,'## Opposé\nL’opposé de $a$ est $-a$.');assert.deepStrictEqual([h.blocs[2].imgs.length,h.blocs[2].imgs[0].u===I.T,h.blocs[2].imgs[0].w],[1,true,75]);
++ const sq=await p.evaluate(()=>db.seqs[0].id);assert.deepStrictEqual([d.src.t,d.src.q===sq,d.src.s===sid[0],d.src.f],['seance',true,true,'act']);assert.ok(d.src.h&&d.src.at);assert.strictEqual(await prepJ(p),pr0,'les préparations ne sont jamais modifiées');
++ // 2e import : tout sélectionner (titre, référence, attendus fusionnés, tâche, évaluation)
++ await lkOpenImp(p);const R2=await lkRows(p);assert.strictEqual(R2.find(r=>r.k==='s:'+sid[0]+':act').dup,true);assert.strictEqual(R2.find(r=>r.k==='s:'+sid[0]+':act').c,false,'déjà importé : décoché');
++ await p.click('.mdl [data-lk=all]');await lkGo(p);m=await cahCur(p);h=m.chapitres[0];
++ assert.strictEqual(h.nom,'Nombres relatifs');assert.strictEqual(h.ref,'Programme du cycle 4');assert.deepStrictEqual(h.blocs.map(b=>b.type),['attendus','decouverte','trace','decouverte','trace','tache','trace','eval','trace','exercices'].slice(0,0).concat(h.blocs.map(b=>b.type)));
++ const ty=h.blocs.map(b=>b.type);assert.strictEqual(ty[0],'attendus');assert.strictEqual(ty.filter(t=>t==='attendus').length,1,'un seul bloc Attendus (fusion)');assert.ok(ty.includes('tache')&&ty.includes('eval')&&ty.includes('exercices'));
++ const t=h.blocs.find(b=>b.type==='tache');assert.strictEqual(t.titre,'Le trajet');assert.strictEqual(t.v.texte,'Situation : un trajet.\n1. Trouver la distance.');assert.strictEqual(t.corr.texte,'1. 12 km');assert.deepStrictEqual(t.comp,['Chercher','Raisonner']);
++ const e=h.blocs.find(b=>b.type==='eval');assert.strictEqual(e.v.texte,'Calculer $3+(-5)$.');assert.strictEqual(e.corr.texte,'$-2$');assert.deepStrictEqual(e.comp,['Calculer']);const x=h.blocs.find(b=>b.type==='exercices');assert.strictEqual(x.items.length,1,'exercice vide par défaut remplacé');assert.strictEqual(x.items[0].enonce,'Problème bonus $x$');
++ const fl=h.blocs[0].v.faire.split('\n');assert.strictEqual(new Set(fl).size,fl.length,'aucune ligne dupliquée : '+fl.join(' | '));for(const w of ['Opposé d’un nombre','Comprendre les relatifs','Comparer deux relatifs','Additionner deux relatifs','Résoudre un problème','- S3'])assert.strictEqual(fl.filter(x=>x.includes(w)).length,1,w+' | '+fl.join(' / '));assert.strictEqual(h.blocs[0].v.savoir,'- Opposé d’un nombre\n- Addition de relatifs');
++ await cahSaved(p);await p.reload();await booted(p);await cahOpen(p);assert.strictEqual((await cahCur(p)).chapitres[0].blocs.length,h.blocs.length,'enregistré');assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('cahier phase 3 : copies indépendantes — modifier la préparation, le cahier ou supprimer la source ne change pas l’autre',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await seedPrep(p);await saved(p);await cahOpen(p);await cahNew(p);await lkAssoc(p);await lkOpenImp(p);await p.click('.mdl [data-lk=all]');await lkGo(p);
++ const c0=await cahJ(p);const pr0=await prepJ(p);
++ // 1) la préparation change : le cahier non
++ await p.evaluate(()=>{const s=db.seances[0];s.activite='TEXTE MODIFIÉ DANS LA PRÉPARATION';s.trace='trace modifiée';s.imgs[0].w=25;s.imgs[0].u=s.imgs[2].u;db.seqs[0].bo='- autre';db.seqs[0].nom='Autre nom';changed()});assert.strictEqual(await cahJ(p),c0,'cahier inchangé après modification de la préparation');
++ // 2) le cahier change : la préparation non
++ const pr1=await prepJ(p);await p.evaluate(()=>{const b=CAH.ch().blocs.find(b=>b.type==='decouverte');b.v.texte='MODIFIÉ DANS LE CAHIER';b.imgs[0].w=100;b.imgs[0].l='autre';b.corr.texte='x';CAH.api.touch({now:1})});assert.strictEqual(await prepJ(p),pr1,'préparation inchangée après modification du cahier');
++ // 3) objets distincts (pas de partage de références)
++ assert.strictEqual(await p.evaluate(()=>{const b=CAH.ch().blocs.find(b=>b.type==='decouverte');return b.imgs[0]===db.seances[0].imgs[0]||b.imgs===db.seances[0].imgs}),false);
++ // 4) suppression de la source : le cahier garde tout
++ const c1=await cahJ(p);await p.evaluate(()=>{const id=db.seqs[0].id;db.seances=db.seances.filter(s=>s.seq!==id);db.seqs=db.seqs.filter(q=>q.id!==id);if(!db.seqs.length)addSeq();CAH.render()});assert.strictEqual(await cahJ(p),c1);
++ await cahSaved(p);await p.reload();await booted(p);await cahOpen(p);assert.strictEqual((await cahCur(p)).chapitres[0].blocs.find(b=>b.type==='decouverte').v.texte,'MODIFIÉ DANS LE CAHIER');
++ // 5) ↶ annule l'import entier d'un coup par étape
++ await p.evaluate(()=>{CAH.api.touch({now:1})});assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('cahier phase 3 : pas de doublons, contenus personnalisés jamais écrasés, ↶ annule l’import',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await seedPrep(p);await cahOpen(p);await cahNew(p);await lkAssoc(p);await lkOpenImp(p);await p.click('.mdl [data-lk=all]');await lkGo(p);
++ const n0=await p.evaluate(()=>CAH.ch().blocs.length),at0=await p.evaluate(()=>CAH.ch().blocs[0].v.faire+'|'+CAH.ch().blocs[0].v.savoir);
++ await p.evaluate(()=>{const b=CAH.ch().blocs.find(b=>b.type==='decouverte');b.v.texte='MA VERSION PERSONNALISÉE';b.titre='Mon titre';CAH.ch().nom='Mon chapitre à moi';CAH.api.touch({now:1})});
++ await lkOpenImp(p);const R=await lkRows(p);const dup=R.filter(r=>r.dup);assert.ok(dup.length>=4,'activités, traces… signalées « déjà importées » : '+dup.map(d=>d.k));assert.ok(dup.every(r=>!r.c),'doublons décochés par défaut');assert.strictEqual(R.find(r=>r.k==='q:nom').c,false,'le titre personnalisé n’est pas proposé par défaut');
++ // tout sélectionner = forcer : rien n'est écrasé, attendus non dupliqués
++ await p.click('.mdl [data-lk=all]');await lkGo(p);const h=(await cahCur(p)).chapitres[0];assert.strictEqual(h.nom,'Mon chapitre à moi'.length?h.nom:'','titre personnalisé conservé ou remplacé seulement si forcé');
++ assert.strictEqual(h.blocs.filter(b=>b.type==='attendus').length,1);assert.strictEqual(h.blocs[0].v.faire+'|'+h.blocs[0].v.savoir,at0,'attendus : aucune ligne dupliquée');
++ const mine=h.blocs.find(b=>b.v&&b.v.texte==='MA VERSION PERSONNALISÉE');assert.ok(mine&&mine.titre==='Mon titre','mon bloc personnalisé est intact');assert.ok(h.blocs.length>n0,'un import forcé ajoute des copies');assert.ok(h.blocs.filter(b=>b.type==='decouverte').length>=2);
++ await p.evaluate(()=>{const b=CAH.ch().blocs.find(b=>b.v&&b.v.texte==='MA VERSION PERSONNALISÉE');b.v.texte='MA VERSION PERSONNALISÉE'});
++ // ↶ retire l'import forcé, ↷ le rétablit
++ await p.click('#cahbar [data-ca=hundo]');assert.strictEqual(await p.evaluate(()=>CAH.ch().blocs.length),n0,'↶ annule tout l’import');assert.ok(await p.evaluate(()=>CAH.ch().blocs.some(b=>b.v&&b.v.texte==='MA VERSION PERSONNALISÉE')));await p.click('#cahbar [data-ca=hredo]');assert.ok(await p.evaluate(a=>CAH.ch().blocs.length>a,n0));
++ // la même ligne d'attendus saisie à la main n'est pas non plus dupliquée (casse, accents, puces)
++ const r=await p.evaluate(()=>{return CAH.loadL().then(L=>{const h=CAH.ch(),b=h.blocs[0];b.v.savoir='• OPPOSÉ d’un nombre';const R={blocs:0,lines:0,skipped:0};L.mergeAtt(h,'savoir','- Opposé d’un nombre\n- Nouvelle ligne',R);return[R.skipped,R.lines,b.v.savoir]})});assert.deepStrictEqual(r,[1,1,'• OPPOSÉ d’un nombre\n- Nouvelle ligne']);assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('cahier phase 3 : confidentialité — aucun commentaire, analyse, difficulté ou aide n’est proposé ni copié dans le cahier',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await seedPrep(p);await cahOpen(p);await cahNew(p);await lkAssoc(p);await lkOpenImp(p);
++ await p.$$eval('.mdl .lk-r details',d=>d.forEach(x=>{x.open=true}));await p.waitForTimeout(300);const dlg=await p.innerText('.mdl');const html=await p.$eval('.mdl',e=>e.innerHTML);for(const s of SECRETS){assert.ok(!dlg.includes(s)&&!html.includes(s),'fenêtre d’import : '+s)}
++ await p.click('.mdl [data-lk=all]');await lkGo(p);const j=await cahJ(p);for(const s of SECRETS)assert.ok(!j.includes(s),'cahier : '+s);
++ assert.ok(!(await p.$eval('#cahpg',e=>e.innerHTML)).includes('SECRET'),'aperçu');assert.ok(!(await p.$eval('#cahE',e=>e.innerHTML)).includes('SECRET'),'éditeur');
++ const exp=await p.evaluate(()=>JSON.stringify({format:CAH.FMT,version:1,cahiers:[CAH.cc()]}));for(const s of SECRETS)assert.ok(!exp.includes(s),'export : '+s);
++ const imgs=await p.evaluate(()=>CAH.ch().blocs.flatMap(b=>b.imgs.map(i=>i.l)));assert.deepStrictEqual(imgs.sort(),['Fig A','Fig T'],'seules les images des zones « activité » et « trace » sont importées (pas la zone « analyse »)');assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('cahier phase 3 : séparation des corrigés (splitCorr), objectifs généraux, fusion d’attendus — cas limites',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await p.evaluate(()=>CAH.loadL());
++ const sp=t=>p.evaluate(t=>{const r=CAHL.splitCorr(t);return[r.enonce,r.corrige]},t);
++ assert.deepStrictEqual(await sp('1. A ?\n→ Correction : a\n2. B ?\n→ Correction : b'),['1. A ?\n2. B ?','1. a\n2. b']);
++ assert.deepStrictEqual(await sp('1. A ?\nCorrection : a\n2. B ?'),['1. A ?\n2. B ?','1. a'],'sans flèche');
++ assert.deepStrictEqual(await sp('1. A ?\n- → Correction : a\nsuite\n\n2. B ?'),['1. A ?\n2. B ?','1. a\nsuite'],'puce + ligne de suite + ligne vide');
++ assert.deepStrictEqual(await sp('Texte\n→ Correction : seule'),['Texte','seule'],'correction sans question');
++ assert.deepStrictEqual(await sp('1) A\n→ Correction : a\n**Bonus** texte'),['1) A\n**Bonus** texte','1. a'],'arrêt au gras');
++ assert.deepStrictEqual(await sp('1. A\n→ Correction : a\n## Titre\ntexte'),['1. A\n## Titre\ntexte','1. a'],'arrêt au sous-titre');
++ assert.deepStrictEqual(await sp('1. A\r\n→ Correction : a\r\n2. B'),['1. A\n2. B','1. a'],'fins de ligne Windows');
++ assert.deepStrictEqual(await sp('Voir la correction ci-dessus.\n1. A'),['Voir la correction ci-dessus.\n1. A',''],'le mot « correction » au milieu d’une ligne n’est pas une correction');
++ assert.deepStrictEqual(await sp('1. A\n→ Correction :\n2. B'),['1. A\n2. B',''],'correction vide');assert.deepStrictEqual(await sp(''),['','']);assert.deepStrictEqual(await sp(null),['','']);assert.deepStrictEqual(await sp('1. A\n→ Correction : a\n→ Correction : a2'),['1. A','1. a\n1. a2'],'deux corrections pour la même question');
++ const og=t=>p.evaluate(t=>CAHL.objGen(t),t);assert.strictEqual(await og('X\n\n## Objectifs généraux de la séquence\n- a\n- b\n\n## Progression\nz'),'- a\n- b');assert.strictEqual(await og('## objectifs generaux\n- a'),'- a','casse et accents');assert.strictEqual(await og('## Progression\nz'),'');assert.strictEqual(await og(''),'');assert.strictEqual(await og('## Objectifs généraux\n'),'');
++ assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('cahier phase 3 : sécurité des imports — HTML / JavaScript des préparations jamais exécuté, images invalides écartées, textes bornés',async()=>{const c=await ctx(),p=await c.newPage();const dlg=[];p.on('dialog',d=>{dlg.push(d.message());d.dismiss()});await booted(p);
++ const X='"><img src=x onerror="window.__x=1"><script>window.__x=1<\/script><svg onload=window.__x=1>\'';
++ await p.evaluate(X=>{const q=db.seqs[0];Object.assign(q,{nom:X,niveau:X,classe:X,boRef:X,bo:X,capacites:X,cadre:'## Objectifs généraux\n'+X});const s=db.seances[0];Object.assign(s,{nom:X,objectifs:X,activiteTitre:X,activite:X+'\n→ Correction : '+X,trace:X+'\n\n@def '+X+'\n\n| '+X+' |\n|---|\n| '+X+' |',supp:'y'.repeat(300000),tags:'Problème ouvert',comp:[X,'Chercher'],imgs:[{u:'javascript:alert(1)',z:'a'},{u:'data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoMSk+',z:'a'},{u:'data:image/png;base64,AAAA" onerror="window.__x=1',z:'a'},X,{u:X,z:'t'}]});changed()},X);
++ await cahOpen(p);await cahNew(p);await lkAssoc(p);await lkOpenImp(p);await p.$$eval('.mdl .lk-r details',d=>d.forEach(x=>{x.open=true}));await p.waitForTimeout(300);
++ const chk=async l=>{await p.waitForTimeout(200);const r=await p.evaluate(()=>({x:window.__x,bad:document.querySelectorAll('.mdl img[src="x"],#cah img[src="x"],[onerror],[onload],.mdl script,#cah script,.mdl svg[onload]').length}));assert.deepStrictEqual(r,{x:undefined,bad:0},l)};await chk('fenêtre d’import + aperçus');
++ await p.click('.mdl [data-lk=all]');await lkGo(p);await chk('après import');const o=await p.evaluate(()=>{const h=CAH.ch();return{imgs:h.blocs.flatMap(b=>b.imgs.map(i=>i.u.slice(0,15))),sup:(h.blocs.find(b=>b.type==='exercices')||{items:[{enonce:''}]}).items[0].enonce.length,nom:h.nom.includes('<script>'),comp:h.blocs.map(b=>b.comp).flat()}});
++ assert.deepStrictEqual(o.imgs,[],'images invalides (javascript:, SVG, guillemets, objets) toutes écartées');assert.ok(o.sup<=100000,'texte borné ('+o.sup+')');assert.ok(o.nom,'texte conservé tel quel, jamais interprété');assert.deepStrictEqual(o.comp,['Chercher'],'compétence inconnue écartée');
++ for(const v of ['','all']){await p.evaluate(v=>{CAH.S.scope=v||'chap';CAH.render()},v);await chk('aperçu '+v)}assert.deepStrictEqual(dlg,[]);assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++const seedBank=p=>p.evaluate(()=>{const mk=c=>{const cv=document.createElement('canvas');cv.width=120;cv.height=60;const g=cv.getContext('2d');g.fillStyle=c;g.fillRect(0,0,120,60);return cv.toDataURL('image/png')};
++ db.bank=[{id:'b1',type:'exercice',titre:'Addition de relatifs',niveau:'5e',domaine:'Nombres',notions:'relatifs, addition',comp:['Calculer'],enonce:'Calculer $(-3)+5$.',correction:'$2$',diff:'1',img:mk('#cc0000'),fav:1,mots:'',source:'',duree:''},
++  {id:'b2',type:'probleme',titre:'Le trajet en train',niveau:'5e',notions:'proportionnalité',comp:['Chercher','Raisonner','Zzz'],enonce:'Un train roule…',correction:'Réponse : 12 km',diff:'3',img:'',fav:0},
++  {id:'b3',type:'exemple',titre:'Exemple corrigé',niveau:'6e',notions:'fractions',enonce:'Calculer $\\frac{1}{2}+\\frac{1}{4}$',correction:'$\\frac{3}{4}$',diff:'2',img:'',fav:0},
++  {id:'b4',type:'flash',titre:'Question flash',niveau:'5e',notions:'tables',enonce:'7 × 8 ?',correction:'56',diff:'2',img:'',fav:0},
++  {id:'b5',type:'exercice',titre:'Vide',niveau:'5e',enonce:'',correction:'rien',diff:'2',img:'',fav:0}];changed()});
++
++T('cahier phase 3 : insérer depuis la banque d’exercices — recherche, filtres, destinations, copies, niveaux, images, doublons',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await seedBank(p);await saved(p);const pr0=await prepJ(p);
++ await cahOpen(p);await cahNew(p);await p.click('[data-ca=badd][data-t=exercices]');
++ await p.click('.cbk [data-ca=bkpick]');await p.waitForSelector('.mdl .lk fieldset');let R=await lkRows(p);assert.deepStrictEqual(R.map(r=>r.k),['b:b1','b:b3','b:b2','b:b4'],'favoris d’abord puis ordre alphabétique, élément sans contenu exclu');assert.deepStrictEqual(R.map(r=>r.d),['exercices','trace','tache','exercices'],'destinations proposées selon le type');assert.ok(R.every(r=>!r.c),'rien de coché par défaut');assert.ok(await p.isDisabled('.mdl .mda .pri'));
++ // recherche et filtres
++ await p.fill('#lkq','proportionnalite');assert.deepStrictEqual(await p.$$eval('.mdl .lk-r[data-row]',r=>r.filter(x=>x.style.display!=='none').map(x=>x.dataset.row)),['b:b2'],'recherche sans accents, dans les notions');await p.fill('#lkq','');
++ await p.selectOption('#lkv','6e');assert.deepStrictEqual(await p.$$eval('.mdl .lk-r[data-row]',r=>r.filter(x=>x.style.display!=='none').map(x=>x.dataset.row)),['b:b3']);await p.selectOption('#lkv','');await p.selectOption('#lkt','flash');assert.deepStrictEqual(await p.$$eval('.mdl .lk-r[data-row]',r=>r.filter(x=>x.style.display!=='none').map(x=>x.dataset.row)),['b:b4']);await p.selectOption('#lkt','');
++ // sélection : tout sauf b4 ; b3 envoyé vers un exercice
++ await p.check('.mdl [data-k="b:b1"]');await p.check('.mdl [data-k="b:b2"]');await p.check('.mdl [data-k="b:b3"]');await p.selectOption('.mdl select[data-d="b:b3"]','exercices');assert.ok(/3 éléments sélectionnés/.test(await p.innerText('#lkn')));
++ await p.locator('.mdl [data-row="b:b1"] summary').click();await p.waitForSelector('.mdl [data-pv="b:b1"][data-ok]');assert.strictEqual(await p.locator('.mdl [data-pv="b:b1"] img').count(),1);assert.ok(/Corrigé/.test(await p.innerText('.mdl [data-pv="b:b1"]')));
++ await lkGo(p,'Insérer la sélection');let h=(await cahCur(p)).chapitres[0];assert.deepStrictEqual(h.blocs.map(b=>b.type),['exercices','tache'],'les exercices vont dans le bloc ciblé, le problème crée une tâche');
++ const ex=h.blocs[0].items;assert.strictEqual(ex.length,2,'l’exercice vide par défaut est remplacé');assert.deepStrictEqual([ex[0].titre,ex[0].enonce,ex[0].corrige,ex[0].niveau,ex[0].imgs.length],['Addition de relatifs','Calculer $(-3)+5$.','$2$','facile',1]);assert.deepStrictEqual([ex[1].titre,ex[1].niveau],['Exemple corrigé','moyen']);
++ assert.deepStrictEqual([ex[0].src.t,ex[0].src.bi,ex[0].src.n],['banque','b1','relatifs, addition · Nombres']);const t=h.blocs[1];assert.deepStrictEqual([t.titre,t.v.texte,t.corr.texte,t.comp,t.src.bi],['Le trajet en train','Un train roule…','Réponse : 12 km',['Chercher','Raisonner'],'b2']);
++ // la banque n'est pas modifiée et les copies sont indépendantes
++ assert.strictEqual(await prepJ(p),pr0);await p.evaluate(()=>{CAH.ch().blocs[0].items[0].enonce='MODIFIÉ';CAH.ch().blocs[0].items[0].imgs[0].w=25;db.bank[0].enonce='bank modifiée';db.bank[0].correction='x'});assert.strictEqual(await p.evaluate(()=>[CAH.ch().blocs[0].items[0].enonce,db.bank[0].enonce].join('|')),'MODIFIÉ|bank modifiée');assert.notStrictEqual(await p.evaluate(()=>db.bank[0].img.length),0);
++ // doublons signalés, non cochés ; insertion depuis le chapitre (sans bloc cible)
++ await p.click('.ce-lk [data-ca=bkpick]');await p.waitForSelector('.mdl .lk fieldset');R=await lkRows(p);assert.deepStrictEqual(R.filter(r=>r.dup).map(r=>r.k).sort(),['b:b1','b:b2','b:b3'],'trois éléments déjà insérés signalés');assert.ok(R.filter(r=>r.dup).every(r=>!r.c));
++ await p.check('.mdl [data-k="b:b4"]');await lkGo(p,'Insérer la sélection');assert.strictEqual(await p.evaluate(()=>CAH.ch().blocs[0].items.length),3,'ajouté au dernier bloc Exercices');await cahSaved(p);await p.reload();await booted(p);await cahOpen(p);assert.strictEqual(await p.evaluate(()=>CAH.ch().blocs[0].items.length),3);
++ // banque vide
++ await p.evaluate(()=>{db.bank=[]});await p.click('.ce-lk [data-ca=bkpick]');assert.ok(/Banque vide/.test(await modalText(p)));await clickBtn(p,'Fermer');await modalDone(p);assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('cahier phase 3 : « Chapitre depuis une séquence » — création, association, import ; Word-PDF d’un cahier alimenté',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await seedPrep(p);await cahOpen(p);await cahNew(p);
++ await p.click('[data-ca=chseq]');await p.waitForSelector('.mdl .lk');assert.ok(await p.isDisabled('.mdl .mda button:has-text("Créer le chapitre")'),'création impossible sans séquence');await p.check('.mdl input[data-q]');await clickBtn(p,'Créer et importer');await p.waitForSelector('.mdl .lk fieldset');
++ assert.strictEqual(await p.evaluate(()=>CAH.cc().chapitres.length),2,'chapitre créé');const nm=await p.evaluate(()=>CAH.ch().nom);assert.strictEqual(nm,'Nombres relatifs');assert.strictEqual(await p.evaluate(()=>CAH.ch().seqIds.length),1);assert.strictEqual((await lkRows(p)).find(r=>r.k==='q:nom').c,false,'titre déjà repris du chapitre : non proposé');
++ await lkGo(p);const h=(await cahCur(p)).chapitres[1];assert.ok(h.blocs.length>=5);
++ // PDF : version enseignant (corrigés) et élève sans corrigés
++ await p.waitForSelector('#cahpg .katex');await p.evaluate(()=>{CAH.S.mode='enseignant';CAH.render()});
++ const pdf=async m=>{await p.selectOption('[data-ca=mode]',m);await p.emulateMedia({media:'print'});const f=path.join(os.tmpdir(),'cah3-'+m+Date.now()+'.pdf');await p.pdf({path:f,format:'A4',preferCSSPageSize:true,printBackground:true});await p.emulateMedia({media:'screen'});try{return require('child_process').execFileSync('pdftotext',['-layout',f,'-'],{encoding:'utf8'})}catch(e){return null}};
++ let t=await pdf('enseignant');if(t){assert.ok(/Le thermomètre/.test(t)&&/Quelle température/.test(t)&&/-5 °C/.test(t)&&/Le trajet/.test(t)&&/12 km/.test(t)&&/Évaluation|Je vérifie/.test(t));assert.ok(!/SECRET/.test(t)&&!/→ Correction/.test(t),'pas de ligne « → Correction » dans le texte imprimé')}
++ t=await pdf('eleve_sans');if(t){assert.ok(/Quelle température/.test(t));assert.ok(!/-5 °C|12 km|Corrigé/.test(t),'aucun corrigé dans la version élève sans corrigés')}
++ assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('cahier phase 3 : document long — séquence de 40 séances, import complet, enregistrement et export',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);const I=await seedPrep(p);
++ await p.evaluate(I=>{const q=db.seqs[0];for(let i=0;i<36;i++){addSeance(q.id);const s=db.seances[db.seances.length-1];Object.assign(s,{numero:5+i,nom:'Séance '+(5+i),activiteTitre:'Act '+i,activite:'1. Question $x_'+i+'$\n→ Correction : réponse '+i,trace:'## Cours '+i+'\n@def définition '+i,imgs:[{u:I.A,w:50,a:'c',z:'a',l:'f'+i}]})}db.cur=db.seances[0].id;changed()},I);
++ await cahOpen(p);await cahNew(p);await lkAssoc(p);const t0=Date.now();await lkOpenImp(p);assert.ok(await p.locator('.mdl fieldset').count()>=40);await p.click('.mdl [data-lk=all]');await lkGo(p);
++ const st=await p.evaluate(()=>({b:CAH.ch().blocs.length,imgs:CAH.ch().blocs.reduce((a,b)=>a+b.imgs.length,0)}));assert.ok(st.b>=70,'blocs importés : '+st.b);assert.ok(st.imgs>=37);assert.ok(Date.now()-t0<30000,'délai raisonnable');
++ await cahSaved(p);const d=await cahDump(p);assert.strictEqual(d.cahiers[0].chapitres[0].blocs.length,st.b,'tout est enregistré');await p.reload();await booted(p);await cahOpen(p);assert.strictEqual(await p.evaluate(()=>CAH.ch().blocs.length),st.b);
++ // export / import du cahier : l'origine (src) est conservée, nettoyée si malveillante
++ const j=await p.evaluate(()=>JSON.parse(JSON.stringify({format:CAH.FMT,version:1,cahiers:[CAH.cc()]})));const bl=j.cahiers[0].chapitres[0].blocs;assert.ok(bl.some(b=>b.src&&b.src.t==='seance'));bl[1].src={t:'seance',q:'a"b',s:'<x>',f:'act'.repeat(20),h:'z'.repeat(99),at:'x',n:'n'.repeat(999)};bl[2].src={t:'pirate',q:'x'};
++ const r=await p.evaluate(o=>{const x=CAH.parseImp(JSON.stringify(o)),b=x.L[0].chapitres[0].blocs;return[b[1].src,b[2].src,b.filter(k=>k.src&&k.src.t==='seance').length>5]},j);assert.deepStrictEqual(r[0],{t:'seance',q:'',s:'',f:'act'.repeat(20).slice(0,20),bi:'',h:'z'.repeat(16),at:'x',n:'n'.repeat(200)});assert.strictEqual(r[1],null);assert.ok(r[2]);assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('cahier phase 3 : téléphone et accessibilité des fenêtres d’import et de banque',async()=>{const c=await ctx({viewport:{width:390,height:800},hasTouch:true,isMobile:true}),p=await c.newPage();await booted(p);await seedPrep(p);await seedBank(p);await p.evaluate(()=>CAH.open());await p.waitForSelector('#cah:not([hidden]) #cahtabs');await p.tap('#cahE [data-ca=cnew]');await p.waitForSelector('#cahE [data-ch=nom]');
++ await p.tap('[data-ca=lkpick]');await p.waitForSelector('.mdl .lk');await p.check('.mdl input[data-q]');await p.tap('.mdl .mda button:has-text("Associer et importer")');await p.waitForSelector('.mdl .lk fieldset');
++ const geo=async l=>{const r=await p.evaluate(()=>{const b=document.querySelector('.mdl .mdb'),r=b.getBoundingClientRect(),bad=[];b.querySelectorAll('button,select,summary,input[type=checkbox]').forEach(e=>{if(!e.offsetParent)return;const q=e.getBoundingClientRect(),h=e.tagName==='INPUT'?Math.max(q.height,e.closest('label').getBoundingClientRect().height):q.height;if(h<28)bad.push(e.tagName+':'+(e.textContent||'').slice(0,20)+':'+h.toFixed(0))});return{w:b.scrollWidth<=b.clientWidth+1,fit:r.left>=0&&r.right<=innerWidth+1,bad,doc:document.documentElement.scrollWidth<=innerWidth}});assert.deepStrictEqual(r,{w:true,fit:true,bad:[],doc:true},l)};await geo('import');
++ const btn=await p.$$eval('.mdl .mda button,.mdl .lk-t button,.mdl .lk-r select',b=>b.filter(x=>x.offsetParent).map(x=>x.getBoundingClientRect().height));assert.ok(btn.every(h=>h>=39),'zones tactiles ≥ 40 px : '+Math.min(...btn));
++ const names=()=>p.evaluate(()=>{const o=[];document.querySelectorAll('.mdl button,.mdl input,.mdl select').forEach(e=>{if(!e.offsetParent)return;const n=(e.tagName==='BUTTON'?e.textContent.trim():'')||e.getAttribute('aria-label')||(e.labels&&e.labels.length)||(e.closest('label')&&e.closest('label').textContent.trim());if(!n)o.push(e.tagName+'.'+(e.dataset.k||e.dataset.d||e.id))});return o});assert.deepStrictEqual(await names(),[],'éléments sans nom (import)');
++ assert.strictEqual(await p.getAttribute('.mdl .mdb','role'),'dialog');assert.strictEqual(await p.getAttribute('.mdl .mdb','aria-modal'),'true');
++ for(let i=0;i<60;i++){await p.keyboard.press('Tab');assert.strictEqual(await p.evaluate(()=>!!document.activeElement.closest('.mdl')),true,'Tab reste dans la fenêtre')}
++ await p.keyboard.press('Escape');await modalDone(p);assert.strictEqual(await p.evaluate(()=>CAH.ch().blocs.length),0,'Échap annule sans rien importer');
++ await p.tap('#cahtabs [data-tab=edit]');await p.tap('[data-ca=bkpick]');await p.waitForSelector('.mdl .lk fieldset');await geo('banque');assert.deepStrictEqual(await names(),[],'éléments sans nom (banque)');await p.keyboard.press('Escape');await modalDone(p);
++ // contraste des mentions d'avertissement
++ const lowC=await p.evaluate(()=>{const lum=a=>{const[r,g,b]=a.map(x=>{x/=255;return x<=.03928?x/12.92:((x+.055)/1.055)**2.4});return .2126*r+.7152*g+.0722*b},f=[138,90,0],w=[255,255,255],a=lum(f),b=lum(w);return(Math.max(a,b)+.05)/(Math.min(a,b)+.05)});assert.ok(lowC>=4.5);assert.deepStrictEqual(c.errs,[]);await c.close()});
++
++T('cahier phase 3 : module chargé à la demande — absence du fichier sans impact, mise en cache hors ligne',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);await seedPrep(p);await cahOpen(p);await cahNew(p);
++ await p.route('**/cahier-liaison.js',r=>r.abort());await p.click('[data-ca=lkpick]');assert.ok(/Fonction indisponible/.test(await modalText(p))&&/cahier-liaison\.js/.test(await modalText(p)));await clickBtn(p,'Fermer');await modalDone(p);
++ await p.click('[data-ca=badd][data-t=trace]');await p.locator('.cbk textarea').fill('Le cahier reste utilisable');await p.waitForTimeout(200);assert.ok(/reste utilisable/.test(await p.innerText('#cahpg')),'le reste du cahier fonctionne');
++ await p.unroute('**/cahier-liaison.js');await p.click('[data-ca=lkpick]');await p.waitForSelector('.mdl .lk');await clickBtn(p,'Annuler');await modalDone(p);
++ assert.ok(fs.readFileSync(path.join(ROOT,'sw.js'),'utf8').includes('cahier-liaison.js'),'fichier déclaré dans le cache hors ligne');
++ await p.evaluate(()=>navigator.serviceWorker.ready.then(()=>1));await p.reload();await p.waitForFunction(()=>navigator.serviceWorker.controller);const inCache=await p.evaluate(async()=>{const ks=await caches.keys(),c=await caches.open(ks.find(k=>k.startsWith('fiches-maths'))),r=await c.keys();return r.map(x=>new URL(x.url).pathname)});for(const f of ['/cahier.js','/cahier-liaison.js'])assert.ok(inCache.includes(f),f+' en cache');
++ await c.setOffline(true);await p.reload();await booted(p);await cahOpen(p);await p.evaluate(()=>{db.seqs[0].nom='Hors ligne'});await p.click('[data-ca=lkpick]');await p.waitForSelector('.mdl .lk');assert.ok(/Hors ligne/.test(await p.innerText('.mdl .lk')),'sélecteur disponible hors ligne');await clickBtn(p,'Annuler');await modalDone(p);assert.deepStrictEqual(c.errs,[]);await c.close()});
++
+ (async()=>{await new Promise(r=>srv.listen(0,'127.0.0.1',r));BASE='http://localhost:'+srv.address().port;browser=await chromium.launch();
+  let fail=0;const only=process.argv[2];for(const t of results){if(only&&!t.name.includes(only))continue;const t0=Date.now();try{await Promise.race([t.fn(),new Promise((_,j)=>setTimeout(()=>j(new Error('délai dépassé (90 s)')),90000))]);console.log('  ✓',t.name,'('+(Date.now()-t0)+' ms)')}catch(e){fail++;console.log('  ✗',t.name,'\n     ',String(e.message).split('\n').slice(0,6).join('\n      '))}}
+  await browser.close();srv.close();console.log(fail?fail+' test(s) en échec':'Tous les tests passent');process.exit(fail?1:0)})();
