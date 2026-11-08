@@ -482,14 +482,25 @@ async function stSync(){if(STORE!=='idb')return;if(sv.busy||(sv.dirty&&pending()
 
 /* --- sauvegarde complète (.zip : manifest + data.json + images binaires, sommes SHA-256) --- */
 const shaC=new Map(),EXT={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif'};
-async function buildZip(d){if(!window.JSZip)throw new Error('bibliothèque JSZip absente');
+async function buildZip(d,opt){if(!window.JSZip)throw new Error('bibliothèque JSZip absente');
  const Z=new JSZip(),used=new Map(),ref=m=>{if(!m||typeof m!=='object'||!isData(m.u))return m;let r=shaC.get(m.u);if(!r){const b=d2b(m.u);r={h:sha256(b.data),type:b.type,size:b.data.length};r.name='img/'+r.h+'.'+(EXT[b.type]||'bin');shaC.set(m.u,r)}used.set(r.name,{r,u:m.u});return{...m,u:r.name}};
  const{seqs,seances,...settings}=d;if(Array.isArray(settings.bank))settings.bank=settings.bank.map(x=>x&&isData(x.img)?{...x,img:ref({u:x.img}).u}:x);const data={seqs,seances:seances.map(s=>({...s,imgs:(s.imgs||[]).map(ref)})),settings},dj=JSON.stringify(data),dh=sha256(new TextEncoder().encode(dj));
- const man={format:'createdocmath-backup',formatVersion:1,schema:SCHEMA,app:APP_V,created:new Date().toISOString(),counts:countsOf(d),data:{name:'data.json',sha256:dh,size:dj.length},images:[...used.values()].map(({r})=>({name:r.name,sha256:r.h,size:r.size,type:r.type}))};
- Z.file('manifest.json',JSON.stringify(man,null,1));Z.file('data.json',dj);
- Z.file('LISEZMOI.txt','Sauvegarde CreateDocMath (format 1).\nNe modifiez pas ces fichiers : ouvrez l’archive avec « Importer » dans l’application.\nmanifest.json = description et sommes de contrôle ; data.json = séquences et séances ; img/ = images.\n');
+ /* cahiers de l'élève (base IndexedDB séparée) : mêmes images dédupliquées dans img/, section facultative et additive du format 1 */
+ const cahs=opt&&Array.isArray(opt.cahiers)&&opt.cahiers.length?opt.cahiers.map(c=>({...c,chapitres:c.chapitres.map(h=>({...h,blocs:h.blocs.map(b=>({...b,imgs:(b.imgs||[]).map(ref),items:(b.items||[]).map(x=>({...x,imgs:(x.imgs||[]).map(ref)}))}))}))})):null,cjs=cahs?JSON.stringify({format:'createdocmath-cahiers',version:1,cahiers:cahs}):null,chh=cjs?sha256(new TextEncoder().encode(cjs)):null;
+ const man={format:'createdocmath-backup',formatVersion:1,schema:SCHEMA,app:APP_V,created:new Date().toISOString(),kind:cjs?'complete':'preparations',counts:countsOf(d),data:{name:'data.json',sha256:dh,size:dj.length},cahiers:cjs?{name:'cahiers.json',sha256:chh,size:cjs.length,count:cahs.length}:undefined,images:[...used.values()].map(({r})=>({name:r.name,sha256:r.h,size:r.size,type:r.type}))};
+ Z.file('manifest.json',JSON.stringify(man,null,1));Z.file('data.json',dj);if(cjs)Z.file('cahiers.json',cjs);
+ Z.file('LISEZMOI.txt','Sauvegarde CreateDocMath (format 1).\nNe modifiez pas ces fichiers : ouvrez l’archive avec « Importer » dans l’application.\nmanifest.json = description et sommes de contrôle ; data.json = séquences et séances ; cahiers.json = cahiers de l’élève (si présents) ; img/ = images.\n');
  for(const[n,{u}]of used)Z.file(n,d2b(u).data,{compression:'STORE'});
  return Z.generateAsync({type:'uint8array',compression:'DEFLATE',compressionOptions:{level:6}})}
+async function readCahiers(Z,man,im,R){R.cahiers=[];const mc=man.cahiers;if(!mc)return;
+ if(!window.CAH||!CAH.normCah){R.warnings.push('cette sauvegarde contient '+(+mc.count||0)+' cahier(s) : le module « Cahier » est absent, ils ne seront pas restaurés');return}
+ const f=Z.file('cahiers.json');if(!f){R.errors.push('cahiers.json absent de la sauvegarde');R.imgOnly=false;return}
+ const u8=await f.async('uint8array');if(!mc.sha256||sha256(u8)!==mc.sha256){R.errors.push('cahiers.json : somme de contrôle incorrecte (fichier altéré ou corrompu)');R.imgOnly=false;return}
+ let cd;try{cd=JSON.parse(new TextDecoder().decode(u8))}catch(e){R.errors.push('cahiers.json illisible');R.imgOnly=false;return}
+ if(!cd||cd.format!=='createdocmath-cahiers'||cd.version!==1||!Array.isArray(cd.cahiers)){R.errors.push('cahiers.json : format non reconnu');R.imgOnly=false;return}
+ const rs=m=>m&&typeof m.u==='string'&&m.u.startsWith('img/')?{...m,u:im.has(m.u)?im.get(m.u):''}:m,W=[],A=a=>Array.isArray(a)?a:[];
+ R.cahiers=cd.cahiers.slice(0,100).map(c=>c&&typeof c==='object'&&Array.isArray(c.chapitres)?CAH.normCah({...c,chapitres:c.chapitres.map(h=>({...h,blocs:A(h&&h.blocs).map(b=>({...b,imgs:A(b&&b.imgs).map(rs),items:A(b&&b.items).map(x=>({...x,imgs:A(x&&x.imgs).map(rs)}))}))}))},W):null).filter(Boolean);
+ W.slice(0,6).forEach(w=>R.warnings.push('cahiers : '+w));if(+mc.count!==R.cahiers.length)R.warnings.push('le nombre de cahiers ('+R.cahiers.length+') ne correspond pas au manifeste ('+(+mc.count||0)+')')}
 async function readZip(src){if(!window.JSZip)throw new Error('bibliothèque JSZip absente');
  if(src.size>3e8)throw new Error('Fichier trop volumineux (> 300 Mo).');
  const R={errors:[],warnings:[],imgOnly:true};let Z;try{Z=await JSZip.loadAsync(src)}catch(e){throw new Error('Fichier ZIP illisible ou corrompu.')}
@@ -507,18 +518,24 @@ async function readZip(src){if(!window.JSZip)throw new Error('bibliothèque JSZi
   const f=Z.file(x.name);if(!f){R.errors.push('image manquante : '+x.name);continue}const b=await f.async('uint8array');if(sha256(b)!==x.sha256){R.errors.push('image altérée : '+x.name);continue}im.set(x.name,b2d(x.type,b))}
  const d={...(data.settings||{}),seqs:data.seqs,seances:Array.isArray(data.seances)?data.seances.map(s=>({...s,imgs:(Array.isArray(s.imgs)?s.imgs:[]).map(m=>{if(m&&typeof m.u==='string'&&m.u.startsWith('img/')){if(im.has(m.u))return{...m,u:im.get(m.u)};return{...m,u:''}}return m})})):data.seances};
  if(Array.isArray(d.bank))d.bank=d.bank.map(x=>x&&typeof x.img==='string'&&x.img.startsWith('img/')?{...x,img:im.has(x.img)?im.get(x.img):''}:x);
- const v=validateDb(d);if(v.E.length){R.errors.push(...v.E);R.imgOnly=false}R.warnings.push(...v.W);if(v.E.length)throw Object.assign(new Error('Données invalides : '+v.E.slice(0,3).join(' · ')),{R});
+ await readCahiers(Z,man,im,R);const v=validateDb(d);if(v.E.length){R.errors.push(...v.E);R.imgOnly=false}R.warnings.push(...v.W);if(v.E.length)throw Object.assign(new Error('Données invalides : '+v.E.slice(0,3).join(' · ')),{R});
  normalizeDb(d);const c=countsOf(d);if(man.counts&&(man.counts.seqs!==c.seqs||man.counts.seances!==c.seances))R.warnings.push('les effectifs ne correspondent pas au manifeste');
  R.man=man;return{d,R}}
 function dlBytes(b,name,type){const l=document.createElement('a');l.href=URL.createObjectURL(new Blob([b],{type}));l.download=name;document.body.append(l);l.click();l.remove();setTimeout(()=>URL.revokeObjectURL(l.href),5000)}
-async function exportBackup(){try{toast('Préparation de la sauvegarde…');const z=await buildZip(db),r=await readZip(new Blob([z])),D=diffDb(db,r.d);
+/* cahiers de l'élève : toujours inclus dans les sauvegardes complètes (échec explicite plutôt qu'omission silencieuse) */
+const cahList=async()=>window.CAH&&CAH.backup?CAH.backup.exportAll():[];
+async function exportBackup(){try{toast('Préparation de la sauvegarde…');const cahs=await cahList(),z=await buildZip(db,{cahiers:cahs}),r=await readZip(new Blob([z])),D=diffDb(db,r.d);if(cahs.length&&!CAH.backup.sameList(cahs,r.R.cahiers))D.push('cahiers : contenu différent après relecture');
   if(r.R.errors.length||D.length){await info('Sauvegarde non fiable','<p>Le test de relecture a échoué ('+esc((r.R.errors[0]||D[0]))+'). Le fichier n’a pas été proposé. Réessayez ; si le problème persiste, signalez-le.</p>');return}
   dlBytes(z,'fiches_maths_'+stamp()+'.zip','application/zip');db.lastExport=Date.now();save();toast('Sauvegarde vérifiée et téléchargée ('+fmtB(z.length)+')')}
  catch(e){await info('Sauvegarde impossible','<p>'+esc(errMsg(e))+'</p>')}}
-async function snapshotBackup(kind){const z=await buildZip(db);await putBackup({kind,ts:Date.now(),zip:z,counts:countsOf(db)});
+async function snapshotBackup(kind,cah){cah=cah||[];const z=await buildZip(db,{cahiers:cah});await putBackup({kind,ts:Date.now(),zip:z,counts:{...countsOf(db),cahiers:cah.length}});
  const all=(await sAll('backups')).filter(x=>x[1].kind===kind).sort((a,b)=>b[1].ts-a[1].ts).slice(3);if(all.length){const t=idbh.transaction('backups','readwrite');all.forEach(x=>t.objectStore('backups').delete(x[0]));await tdone(t)}}
 
 /* --- import : aperçu, détection des doublons, fusion ou remplacement, rapport --- */
+function cahHTML(P){if(!P.length)return'';const lab={new:'nouveau',same:'déjà présent (identique) : ignoré',diff:'existe déjà, différent : importé en copie'},nb=c=>c.chapitres.reduce((a,h)=>a+h.blocs.length,0);
+ return '<p><b>'+P.length+'</b> cahier(s) de l’élève :</p><table><tr><th>Cahier</th><th>Chapitres</th><th>Blocs</th><th>Fusion</th></tr>'+P.slice(0,40).map(p=>'<tr><td>'+esc(p.c.nom||'(sans nom)')+(p.c.classe?' · '+esc(p.c.classe):'')+'</td><td>'+p.c.chapitres.length+'</td><td>'+nb(p.c)+'</td><td>'+lab[p.st]+(p.dup?' ⚠ même nom qu’un cahier existant':'')+'</td></tr>').join('')+'</table>'+(P.length>40?'<p>… et '+(P.length-40)+' autre(s).</p>':'')}
+async function cahReplaceNote(CL){if(!CL.length)return'<p>Cette source ne contient pas de cahiers : vos cahiers ne sont pas modifiés.</p>';const n=await CAH.backup.count();return'<p>Vos <b>'+n+' cahier(s)</b> seront aussi remplacés par les <b>'+CL.length+'</b> cahier(s) de la source.</p>'}
+async function cahRestore(mode,CL){try{if(mode==='merge'){const r=await CAH.backup.merge(CL);return'<p>Cahiers : <b>'+r.added+'</b> ajouté(s), <b>'+r.copied+'</b> ajouté(s) en copie, <b>'+r.skipped+'</b> ignoré(s) car déjà présent(s).</p>'}const r=await CAH.backup.replace(CL);return'<p>Cahiers remplacés : <b>'+r.replaced+'</b>.</p>'}catch(e){return'<p style="color:#b3261e">⚠ Cahiers non restaurés : '+esc(errMsg(e))+'. Vos cahiers actuels sont inchangés.</p>'}}
 async function importFlow(d,o){const R=o.R||{errors:[],warnings:[]};
  if(R.errors.length){const c=await modal('Fichier endommagé','<p>Des anomalies ont été détectées :</p><ul>'+R.errors.slice(0,8).map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>'+(R.imgOnly?'<p>Seules des images sont touchées : vous pouvez importer les textes sans ces images.</p>':'<p>L’import est refusé pour protéger vos fiches.</p>'),R.imgOnly?[['go','Importer sans les images endommagées'],['cancel','Annuler','pri']]:[['cancel','Fermer','pri']],{esc:'cancel'});if(c!=='go')return}
  const sk=m=>blobKey(m.u)||m.u,sigS=s=>cj({...s,imgs:(s.imgs||[]).map(m=>({...m,u:sk(m)}))}),eq=new Map(db.seqs.map(q=>[q.id,q])),es=new Map(db.seances.map(s=>[s.id,s]));
@@ -526,21 +543,23 @@ async function importFlow(d,o){const R=o.R||{errors:[],warnings:[]};
   if(eq.has(q.id)){const cur=db.seances.filter(s=>s.seq===q.id);st=cj(eq.get(q.id))===cj(q)&&cur.length===ss.length&&ss.every(s=>es.has(s.id)&&es.get(s.id).seq===q.id&&sigS(es.get(s.id))===sigS(s))?'same':'diff'}
   return{q,ss,st,dup:st==='new'&&db.seqs.some(x=>x.nom===q.nom&&(x.classe||'')===(q.classe||''))}});
  const orph=d.seances.filter(s=>!d.seqs.some(q=>q.id===s.seq)).length,n={new:0,same:0,diff:0};plan.forEach(p=>n[p.st]++);
+ const CL=R.cahiers||[],CP=CL.length&&window.CAH&&CAH.backup?await CAH.backup.plan(CL):[],nC={new:0,same:0,diff:0};CP.forEach(p=>nC[p.st]++);const nm=n.new+n.diff+nC.new+nC.diff;
  const lab={new:'nouvelle',same:'déjà présente (identique) : ignorée',diff:'existe déjà, différente : importée en copie'};
  let h='<p>Source : <b>'+esc(o.name||'')+'</b>'+(R.man?' · créée le '+esc(fmtDT(R.man.created)):'')+'</p><p><b>'+d.seqs.length+'</b> séquence(s), <b>'+d.seances.length+'</b> séance(s). Actuellement : '+db.seqs.length+' séquence(s), '+db.seances.length+' séance(s).</p>'
   +'<table><tr><th>Séquence</th><th>Séances</th><th>Fusion</th></tr>'+plan.slice(0,40).map(p=>'<tr><td>'+esc(p.q.nom||'(sans nom)')+(p.q.classe?' · '+esc(p.q.classe):'')+'</td><td>'+p.ss.length+'</td><td>'+lab[p.st]+(p.dup?' ⚠ même nom qu’une séquence existante':'')+'</td></tr>').join('')+'</table>'+(plan.length>40?'<p>… et '+(plan.length-40)+' autre(s).</p>':'');
- const W=[...R.warnings];if(orph)W.push(orph+' séance(s) sans séquence : ignorée(s)');if(W.length)h+='<p>Avertissements :</p><ul>'+W.slice(0,6).map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>';
- const b=[];if(n.new+n.diff)b.push(['merge','Fusionner ('+(n.new+n.diff)+')','pri']);b.push(['replace','Remplacer tout','dng'],['cancel','Annuler']);
- if(!(n.new+n.diff))h+='<p><b>Rien de nouveau à fusionner</b> : tout est déjà présent.</p>';
+ h+=cahHTML(CP);const W=[...R.warnings];if(orph)W.push(orph+' séance(s) sans séquence : ignorée(s)');if(W.length)h+='<p>Avertissements :</p><ul>'+W.slice(0,6).map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>';
+ const b=[];if(nm)b.push(['merge','Fusionner ('+nm+')','pri']);b.push(['replace','Remplacer tout','dng'],['cancel','Annuler']);
+ if(!nm)h+='<p><b>Rien de nouveau à fusionner</b> : tout est déjà présent.</p>';
  const c=await modal('Importer des fiches',h,b,{esc:'cancel'});if(!c||c==='cancel')return;let rep='';
  if(c==='merge'){let a=0,cp=0,sk2=n.same;const uS=new Set(db.seances.map(s=>s.id)),uQ=new Set(db.seqs.map(q=>q.id));let first=null;
   for(const p of plan){if(p.st==='same')continue;const keep=p.st==='new'&&!uQ.has(p.q.id),nq=keep?p.q.id:uid(),q={...JSON.parse(JSON.stringify(p.q)),id:nq};if(!keep)q.nom=(q.nom||'')+' (importée)';db.seqs.push(q);uQ.add(nq);
    p.ss.forEach(s=>{const x=JSON.parse(JSON.stringify(s));x.seq=nq;if(uS.has(x.id))x.id=uid();uS.add(x.id);db.seances.push(x);first=first||x.id});keep?a++:cp++}
   (d.models||[]).forEach(m=>{if(!(db.models||[]).some(x=>x.label===m.label))(db.models=db.models||[]).push(m)});(d.seqModels||[]).forEach(m=>{if(!SM().some(x=>x.label===m.label))SM().push(m)});{const sg=x=>nmap((x.titre||'')+'|'+(x.enonce||'')).n,bs=new Set(BK().map(x=>x.id)),sgs=new Set(BK().map(sg));(d.bank||[]).forEach(x=>{if(x&&x.id&&!bs.has(x.id)&&!sgs.has(sg(x))){BK().push(JSON.parse(JSON.stringify(x)));bs.add(x.id)}})}
   if(first)db.cur=first;bv='';show();rep='<p>Fusion terminée : <b>'+a+'</b> séquence(s) ajoutée(s), <b>'+cp+'</b> ajoutée(s) en copie, <b>'+sk2+'</b> ignorée(s) car déjà présente(s).</p>'}
- else{const ok=await modal('Remplacer toutes vos fiches ?','<p>Vos <b>'+db.seqs.length+' séquence(s)</b> et <b>'+db.seances.length+' séance(s)</b> actuelles seront remplacées par le contenu de la source. Une copie de sécurité interne est créée d’abord (récupérable dans « Stockage et sauvegardes »).</p>',[['go','Remplacer','dng'],['cancel','Annuler','pri']],{esc:'cancel'});if(ok!=='go')return;
-  try{await snapshotBackup('pre-restore')}catch(e){await info('Remplacement annulé','<p>La copie de sécurité n’a pas pu être créée ('+esc(errMsg(e))+'). Vos fiches n’ont pas été modifiées.</p>');return}
+ else{const ok=await modal('Remplacer toutes vos fiches ?','<p>Vos <b>'+db.seqs.length+' séquence(s)</b> et <b>'+db.seances.length+' séance(s)</b> actuelles seront remplacées par le contenu de la source.</p>'+(await cahReplaceNote(CL))+'<p>Une copie de sécurité interne (cahiers compris) est créée d’abord, récupérable dans « Stockage et sauvegardes ».</p>',[['go','Remplacer','dng'],['cancel','Annuler','pri']],{esc:'cancel'});if(ok!=='go')return;
+  try{await snapshotBackup('pre-restore',await cahList())}catch(e){await info('Remplacement annulé','<p>La copie de sécurité n’a pas pu être créée ('+esc(errMsg(e))+'). Vos fiches n’ont pas été modifiées.</p>');return}
   trash.push({label:'toutes vos fiches (avant la restauration)',all:JSON.stringify(db)});d.lastExport=db.lastExport;db=d;fixDb();bv='';show();rep='<p>Remplacement terminé : <b>'+db.seqs.length+'</b> séquence(s), <b>'+db.seances.length+'</b> séance(s).</p>'}
+ if(CP.length)rep+=await cahRestore(c,CL);
  await stFlush();let D=[];try{D=STORE==='idb'?await stVerify():[]}catch(e){D=[errMsg(e)]}
  await info('Rapport d’import',rep+(W.length?'<p>'+W.length+' avertissement(s).</p>':'')+(STORE==='idb'?(D.length?'<p style="color:#b3261e">⚠ Vérification en base : '+esc(D[0])+'</p>':'<p>✓ Vérification : les données enregistrées correspondent au contenu importé.</p>'):''));return true}
 
@@ -703,11 +722,11 @@ async function storPanel(){for(;;){let est=null,pers=null;try{est=navigator.stor
  else if(c==='ver'){let D=[];try{await stFlush();D=STORE==='idb'?await stVerify():['mode historique : pas de vérification IndexedDB']}catch(e){D=[errMsg(e)]}await info('Intégrité',D.length?'<p style="color:#b3261e">⚠ '+esc(D.slice(0,3).join(' ; '))+'</p>':'<p>✓ Les données enregistrées sont identiques à celles affichées ('+db.seqs.length+' séquences, '+db.seances.length+' séances).</p>')}
  else if(c==='bk')await bkPanel(bk);else if(c==='purge')await purgeLegacy();else return}}
 async function bkPanel(bk){bk=bk.slice().sort((a,b)=>b[1].ts-a[1].ts);const lab={'pre-migration':'Avant migration','pre-restore':'Avant une restauration','illisible':'Données illisibles conservées'};
- const h=bk.length?'<table><tr><th>Type</th><th>Date</th><th>Contenu</th><th></th></tr>'+bk.map(([k,v])=>'<tr><td>'+esc(lab[v.kind]||v.kind)+'</td><td>'+esc(fmtDT(v.ts))+'</td><td>'+(v.counts?v.counts.seqs+' séq. · '+v.counts.seances+' séances':'—')+'</td><td><button class="btn" data-k="dl:'+esc(k)+'">Télécharger</button> <button class="btn" data-k="rs:'+esc(k)+'">Restaurer…</button></td></tr>').join('')+'</table>':'<p>Aucune copie de sécurité interne.</p>';
+ const h=bk.length?'<table><tr><th>Type</th><th>Date</th><th>Contenu</th><th></th></tr>'+bk.map(([k,v])=>'<tr><td>'+esc(lab[v.kind]||v.kind)+'</td><td>'+esc(fmtDT(v.ts))+'</td><td>'+(v.counts?v.counts.seqs+' séq. · '+v.counts.seances+' séances'+(v.counts.cahiers?' · '+v.counts.cahiers+' cahier(s)':''):'—')+'</td><td><button class="btn" data-k="dl:'+esc(k)+'">Télécharger</button> <button class="btn" data-k="rs:'+esc(k)+'">Restaurer…</button></td></tr>').join('')+'</table>':'<p>Aucune copie de sécurité interne.</p>';
  const c=await modal('Copies de sécurité internes',h,[['close','Retour','pri']],{esc:'close',init:(el,close)=>el.addEventListener('click',e=>{const x=e.target.closest('[data-k]');if(x)close(x.dataset.k)})});
  if(!c||c==='close')return;const a=c.slice(0,2),rec=bk.find(x=>x[0]===c.slice(3));if(!rec)return;const v=rec[1];
  if(a==='dl'){v.raw!==undefined?dlBytes(new TextEncoder().encode(v.raw),'cdm3_'+v.kind+'_'+stamp()+'.json','application/json'):dlBytes(new Uint8Array(v.zip),'copie_'+v.kind+'_'+stamp()+'.zip','application/zip')}
- else try{let d;if(v.raw!==undefined){d=JSON.parse(v.raw);const q=validateDb(d);if(q.E.length)throw new Error(q.E[0]);normalizeDb(d)}else d=(await readZip(new Blob([v.zip]))).d;await importFlow(d,{name:'copie interne du '+fmtDT(v.ts)})}catch(x){await info('Restauration impossible','<p>'+esc(errMsg(x))+'</p>')}}
+ else try{let d,cl=[];if(v.raw!==undefined){d=JSON.parse(v.raw);const q=validateDb(d);if(q.E.length)throw new Error(q.E[0]);normalizeDb(d)}else{const r=await readZip(new Blob([v.zip]));d=r.d;cl=r.R.cahiers}await importFlow(d,{name:'copie interne du '+fmtDT(v.ts),R:{errors:[],warnings:[],cahiers:cl}})}catch(x){await info('Restauration impossible','<p>'+esc(errMsg(x))+'</p>')}}
 async function purgeLegacy(){const mg=sv.mig;
  if(STORE!=='idb'||!mg||mg.state!=='done'||lsRaw()===null){await info('Rien à supprimer','<p>L’ancien stockage est absent ou la migration n’est pas terminée.</p>');return}
  let D;try{await stFlush();D=await stVerify()}catch(e){D=[errMsg(e)]}
@@ -1171,10 +1190,11 @@ const idb=()=>new Promise((r,j)=>{const q=indexedDB.open('cdm3h',1);q.onupgraden
 async function idbGet(k){const d=await idb();return new Promise(r=>{const q=d.transaction('h').objectStore('h').get(k);q.onsuccess=()=>r(q.result);q.onerror=()=>r(null)})}
 async function idbSet(k,v){const d=await idb();return new Promise(r=>{const t=d.transaction('h','readwrite');t.objectStore('h').put(v,k);t.oncomplete=()=>r()})}
 async function fsWrite(n,txt){const f=await dirH.getFileHandle(n,{create:true}),w=await f.createWritable();await w.write(txt);await w.close()}
-async function folderBackup(force){if(!dirH||(!force&&Date.now()-lastFS<20000)||(!force&&sv.ver===lastFSv))return;
+let lastFSc=-1;const cahV=()=>window.CAH&&CAH.backup?CAH.backup.ver():0;
+async function folderBackup(force){if(!dirH||(!force&&Date.now()-lastFS<20000)||(!force&&sv.ver===lastFSv&&cahV()===lastFSc))return;const cv=cahV();
  try{if(dirH.queryPermission&&(await dirH.queryPermission({mode:'readwrite'}))!=='granted'){fsUI('perm');return}
-  const z=await buildZip(db),d=new Date(),day=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-  await fsWrite('fiches_maths_auto.zip',z);await fsWrite('fiches_maths_'+day+'.zip',z);lastFS=Date.now();lastFSv=sv.ver;db.lastExport=lastFS;fsUI('ok')}catch(e){fsUI('err')}}
+  const z=await buildZip(db,{cahiers:await cahList()}),d=new Date(),day=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  await fsWrite('fiches_maths_auto.zip',z);await fsWrite('fiches_maths_'+day+'.zip',z);lastFS=Date.now();lastFSv=sv.ver;lastFSc=cv;db.lastExport=lastFS;fsUI('ok')}catch(e){fsUI('err')}}
 function fsUI(s){const e=$('fsst');if(!e)return;
  e.innerHTML=!dirH?'Aucun dossier choisi':s==='perm'?'⚠ Autorisation à renouveler : <u data-a="fsperm" style="cursor:pointer;color:#8fd3e6">réactiver</u>':s==='err'?'⚠ Écriture impossible':'✓ Dernière copie à '+new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})+' dans « '+esc(dirH.name)+' » · <u data-a="fsoff" style="cursor:pointer;color:#8fd3e6">arrêter</u>'}
 async function fsPick(){if(!FS){alert('Cette fonction demande Chrome ou Edge (version récente).');return}try{dirH=await showDirectoryPicker({mode:'readwrite',id:'fichesmaths'});await idbSet('dir',dirH);await folderBackup(true);toast('Sauvegarde automatique activée')}catch(e){}}

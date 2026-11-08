@@ -68,3 +68,21 @@ Tous optionnels, avec valeur par défaut : séquence `cov`, `compPrev`, `compBil
 
 ## 9. Version 2.2
 Nouveaux champs optionnels : base `seqModels` (modèles de séquence), modèles de séance enrichis (`niv`, `dom`, `tags`, `fav`), éléments de banque avec `img`. Les images de la banque sont stockées comme celles des séances (binaire) et incluses dans le `.zip`. Le champ `schema` n'est plus réécrit à chaque enregistrement (il n'est écrit que lors de la création de la base ou d'une migration), ce qui empêche toute rétrogradation accidentelle.
+
+## 10. Format de sauvegarde ZIP : section « cahiers » (phase 4, lot A)
+
+**Compatibilité** : le format reste `createdocmath-backup`, `formatVersion: 1`. La section est **facultative et additive** : un ZIP sans cahiers est identique à l'ancien format (`kind: "preparations"`). Aucune migration de données n'est nécessaire : la base `cdm3cahiers` (schéma de cahier v1) n'est pas modifiée.
+
+| Élément | Contenu |
+|---|---|
+| `manifest.json` | nouvelles clés : `kind` (`"complete"` ou `"preparations"`) et, si cahiers, `cahiers: {name:"cahiers.json", sha256, size, count}` ; toutes les clés historiques sont conservées |
+| `cahiers.json` | `{format:"createdocmath-cahiers", version:1, cahiers:[…]}` ; images remplacées par des références `img/<sha256>.<ext>` |
+| `img/` | images des préparations **et** des cahiers, une seule copie par contenu identique |
+| `data.json` | inchangé (préparations seules, empreinte vérifiable indépendamment) |
+
+**Ancienne version de l'application lisant un ZIP complet** : elle restaure les préparations et ignore `cahiers.json` sans erreur (les clés inconnues sont ignorées). Les cahiers ne sont alors pas restaurés : utiliser la version actuelle de l'application pour une restauration complète.
+
+**Restauration** : fusion additive par défaut (identiques ignorés, différents ajoutés en copie « (restauré) ») ; remplacement complet seulement après confirmation explicite, copie de sécurité interne d'abord. Les copies internes (`pre-restore`) et la sauvegarde automatique dans un dossier incluent les cahiers.
+
+**Retour arrière** : un ZIP complet reste lisible par la version précédente pour ce qui concerne les préparations ; aucune donnée existante n'est modifiée par l'export.
+
