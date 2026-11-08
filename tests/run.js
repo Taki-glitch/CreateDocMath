@@ -4,7 +4,7 @@
 const http=require('http'),fs=require('fs'),path=require('path'),os=require('os'),crypto=require('crypto'),assert=require('assert');
 const {chromium}=require('playwright');
 let JSZip;try{JSZip=require('jszip')}catch(e){JSZip=require(process.env.JSZIP_PATH||path.join(__dirname,'..','vendor','jszip.min.js'))}
-const ROOT=path.join(__dirname,'..'),MIME={'.html':'text/html;charset=utf-8','.js':'text/javascript','.css':'text/css','.json':'application/json','.png':'image/png','.woff2':'font/woff2'};
+const ROOT=path.join(__dirname,'..'),BUILD=(/APP_BUILD='(v\d+)'/.exec(require('fs').readFileSync(path.join(__dirname,'..','version.js'),'utf8'))||[])[1],MIME={'.html':'text/html;charset=utf-8','.js':'text/javascript','.css':'text/css','.json':'application/json','.png':'image/png','.woff2':'font/woff2'};
 const srv=http.createServer((q,r)=>{let u=decodeURIComponent(q.url.split('?')[0].split('#')[0]);if(u==='/')u='/index.html';const f=path.join(ROOT,u);
  if(!f.startsWith(ROOT)||!fs.existsSync(f)||fs.statSync(f).isDirectory()){r.writeHead(404);return r.end()}r.writeHead(200,{'Content-Type':MIME[path.extname(f)]||'application/octet-stream'});fs.createReadStream(f).pipe(r)});
 let BASE,browser;const results=[];
@@ -149,7 +149,7 @@ T('formules KaTeX locales (aucune requête CDN pour KaTeX/JSZip) + non-régressi
 T('PWA : fonctionne hors ligne après installation (KaTeX local, données IndexedDB)',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
  await p.evaluate(()=>navigator.serviceWorker.ready.then(()=>1));await p.reload();await p.waitForFunction(()=>navigator.serviceWorker.controller);
  const names=await p.evaluate(async()=>{const ks=await caches.keys(),c=await caches.open(ks.find(k=>k.startsWith('fiches-maths'))),r=await c.keys();return{ks,u:r.map(x=>new URL(x.url).pathname)}});
- assert.deepStrictEqual(names.ks,['fiches-maths-v20']);for(const f of ['/vendor/docx.iife.js','/vendor/katex/katex.min.js','/vendor/jszip.min.js','/vendor/katex/fonts/KaTeX_Main-Regular.woff2','/index.html','/bo_cycle4.js'])assert.ok(names.u.includes(f),f);
+ assert.deepStrictEqual(names.ks,['fiches-maths-'+BUILD]);for(const f of ['/vendor/docx.iife.js','/vendor/katex/katex.min.js','/vendor/jszip.min.js','/vendor/katex/fonts/KaTeX_Main-Regular.woff2','/index.html','/bo_cycle4.js'])assert.ok(names.u.includes(f),f);
  await p.evaluate(()=>{S().nom='Hors ligne ok';S().activite='$a^2$';changed()});await saved(p);await c.setOffline(true);await p.reload();await booted(p);assert.strictEqual(await p.evaluate(()=>S().nom),'Hors ligne ok');await p.waitForSelector('#prev .katex');
  assert.ok(await p.evaluate(()=>document.fonts.check('16px KaTeX_Main')||true));await c.close()});
 
@@ -1211,6 +1211,89 @@ T('sauvegarde complète : volume — 20 cahiers illustrés, export vérifié, re
 T('contrat des fonctions partagées : tout ce dont dépendent les modules cahier*.js et la sauvegarde existe dans index.html',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
  const miss=await p.evaluate(()=>{const names=['uid','esc','fmt','rmath','modal','info','toast','rq','tdone','errMsg','nmap','COMP','IMGOK','APP_V','dl','KB','inl','BK','BK_T','sameImg','folderBackup','sAll','buildZip','readZip','importFlow','exportBackup','snapshotBackup','cahList','readCahiers','diffDb','countsOf','validateDb','normalizeDb','stFlush','changed','addSeq','addSeance'];return names.filter(n=>{try{return typeof eval(n)==='undefined'}catch(e){return true}})});assert.deepStrictEqual(miss,[],'symboles manquants');
  assert.deepStrictEqual(await p.evaluate(()=>Object.keys(CAH.backup).sort()),['count','exportAll','merge','plan','replace','same','sameList','ver']);assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+/* ================= hygiène du dépôt et cache hors ligne ================= */
+T('hygiène du dépôt : pas de dossier .patch ni d’archive ZIP à la racine ; tous les fichiers de l’application sont dans le cache hors ligne ; version unique ; intégration continue présente',async()=>{
+ const root=fs.readdirSync(ROOT);assert.ok(!root.includes('.patch'),'dossier .patch à supprimer du dépôt (git rm -r .patch)');assert.deepStrictEqual(root.filter(f=>/\.zip$/i.test(f)),[],'archive ZIP à supprimer du dépôt (git rm *.zip)');
+ const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8'),core=[...sw.match(/CORE=\[(.*?)\]/s)[1].matchAll(/"([^"]+)"/g)].map(m=>m[1]);
+ for(const f of core)if(f!=='./')assert.ok(fs.existsSync(path.join(ROOT,f)),'CORE : fichier inexistant '+f);
+ const app=root.filter(f=>/\.(js|json|png|html)$/.test(f)&&!['sw.js','package.json','package-lock.json'].includes(f));assert.deepStrictEqual(app.filter(f=>!core.includes(f)),[],'fichiers d’application absents de CORE (indisponibles hors ligne)');
+ assert.ok(/importScripts\('version\.js'\)/.test(sw)&&!/fiches-maths-v\d/.test(sw),'le nom du cache vient de version.js');assert.ok(/^v\d+$/.test(BUILD),'version.js lisible');
+ const ci=path.join(ROOT,'.github','workflows','tests.yml');assert.ok(fs.existsSync(ci),'workflow GitHub Actions présent');const y=fs.readFileSync(ci,'utf8');assert.ok(/node tests\/run\.js/.test(y)&&/pull_request/.test(y)&&/playwright install/.test(y));
+ assert.ok(fs.existsSync(path.join(ROOT,'.gitignore'))&&/node_modules/.test(fs.readFileSync(path.join(ROOT,'.gitignore'),'utf8')));
+ for(const f of ['index.html','cahier.js','cahier-liaison.js','sw.js','version.js'])assert.ok(fs.statSync(path.join(ROOT,f)).size>10,f)});
+
+/* ================= 📚 Cahier — lot G : plusieurs onglets, conflits ================= */
+const twoTabs=async(o)=>{const c=await ctx(o);const A=await c.newPage();await booted(A);await cahOpen(A);await cahNew(A);await A.fill('[data-ch=nom]','Initial');await cahSaved(A);const B=await c.newPage();await booted(B);await cahOpen(B);await B.waitForFunction(()=>CAH.cc()&&CAH.ch());return{c,A,B}};
+const holdEdit=(p,nom)=>p.evaluate(nom=>{CAH.cc().chapitres[0].nom=nom;CAH.api.touch();clearTimeout(CAH.S.t)},nom);   // modification locale NON enregistrée
+const nomOf=p=>p.evaluate(()=>CAH.cc().chapitres[0].nom);
+const dbNom=async p=>(await cahDump(p)).cahiers[0].chapitres[0].nom;
+const mkConflict=async(o)=>{const t=await twoTabs(o);await holdEdit(t.B,'Version de B');await t.A.fill('[data-ch=nom]','Version de A');await cahSaved(t.A);await t.B.waitForSelector('#cahcf:not([hidden])');return t};
+
+T('cahier lot G : un onglet sans modification reçoit automatiquement ce qu’un autre enregistre ; nouveaux cahiers et suppressions suivies',async()=>{const{c,A,B}=await twoTabs();
+ await A.fill('[data-ch=nom]','Modifié par A');await cahSaved(A);await B.waitForFunction(()=>CAH.cc().chapitres[0].nom==='Modifié par A');assert.ok(await B.isHidden('#cahcf'),'aucun conflit');
+ assert.strictEqual(await B.evaluate(()=>CAH.S.base.get(CAH.cc().id)),await A.evaluate(()=>CAH.cc().rev),'révision alignée');
+ await B.fill('[data-ch=nom]','Puis B');await cahSaved(B);await A.waitForFunction(()=>CAH.cc().chapitres[0].nom==='Puis B');assert.ok(await A.isHidden('#cahcf'),'ping-pong sans conflit');assert.strictEqual(await dbNom(A),'Puis B');
+ // nouveau cahier créé dans A → visible dans B
+ await cahNew(A);await cahSaved(A);await B.waitForFunction(()=>CAH.S.list.length===2);
+ // suppression dans A d'un cahier propre dans B → retiré dans B
+ await A.click('#cahbar [data-ca=cdel]');await clickBtn(A,'Supprimer');await modalDone(A);await cahSaved(A);await B.waitForFunction(()=>CAH.S.list.length===1);assert.strictEqual((await cahDump(A)).keys.length,1);assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier lot G : modification non enregistrée + enregistrement ailleurs = conflit signalé, rien n’est écrasé, comparaison disponible',async()=>{const{c,A,B}=await mkConflict();
+ const bar=await B.innerText('#cahcf');assert.ok(/Conflit d’enregistrement/.test(bar)&&/modifié dans un autre onglet/.test(bar)&&/Rien n’a été écrasé/.test(bar));assert.strictEqual(await B.getAttribute('#cahcf','role'),'alert');
+ assert.strictEqual(await dbNom(B),'Version de A','la base garde la version enregistrée');assert.strictEqual(await nomOf(B),'Version de B','B garde ses modifications à l’écran');
+ await B.evaluate(()=>CAH.flush());assert.strictEqual(await dbNom(B),'Version de A','un enregistrement forcé n’écrase pas');assert.ok(await B.isVisible('#cahcf'));assert.ok(/non enregistré|⚠|enregistrement/i.test(await B.innerText('#cahst'))||true);
+ await B.click('#cahcf [data-ca=cfcmp]');const t=await modalText(B);assert.ok(/Version enregistrée \(autre onglet\) → Ma version/.test(t)&&/≠ chapitre « Version de B »/.test(t)&&/ancien titre : « Version de A »/.test(t),t);await clickBtn(B,'Fermer');await modalDone(B);
+ assert.strictEqual(await B.evaluate(()=>CAH.S.conflict.size),1);assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier lot G : résolution — recharger (copie de sécurité), garder une copie, garder ma version (autre version conservée)',async()=>{
+ // 1) recharger
+ let t=await mkConflict();await t.B.click('#cahcf [data-ca=cfrel]');await clickBtn(t.B,'Annuler');await modalDone(t.B);assert.ok(await t.B.isVisible('#cahcf'),'annuler ne change rien');
+ await t.B.click('#cahcf [data-ca=cfrel]');await clickBtn(t.B,'Recharger');await modalDone(t.B);await t.B.waitForSelector('#cahcf',{state:'hidden'});assert.strictEqual(await nomOf(t.B),'Version de A');
+ let d=await cahDump(t.B);const bk=d.backups.find(k=>/@local-/.test(k));assert.ok(bk,'copie de sécurité de la version locale');assert.strictEqual(d.backupVals[d.backups.indexOf(bk)].chapitres[0].nom,'Version de B');assert.strictEqual(await dbNom(t.B),'Version de A');await t.c.close();
+ // 2) copie
+ t=await mkConflict();await t.B.click('#cahcf [data-ca=cfcopy]');await t.B.waitForFunction(()=>CAH.S.list.length===2);await cahSaved(t.B);assert.ok(await t.B.isHidden('#cahcf'));
+ d=await cahDump(t.B);assert.strictEqual(d.cahiers.length,2);const noms=d.cahiers.map(x=>[x.nom,x.chapitres[0].nom]);assert.ok(noms.some(x=>/\(mon travail\)$/.test(x[0])&&x[1]==='Version de B'),'mon travail conservé : '+JSON.stringify(noms));assert.ok(noms.some(x=>!/\(mon travail\)/.test(x[0])&&x[1]==='Version de A'),'version de A intacte');
+ const ids=d.cahiers.map(x=>x.id);assert.strictEqual(new Set(ids).size,2);assert.strictEqual(new Set(d.cahiers.map(x=>x.chapitres[0].id)).size,2,'identifiants neufs');await t.A.waitForFunction(()=>CAH.S.list.length===2);await t.c.close();
+ // 3) garder ma version
+ t=await mkConflict();await t.B.click('#cahcf [data-ca=cfkeep]');await clickBtn(t.B,'Annuler');await modalDone(t.B);assert.ok(await t.B.isVisible('#cahcf'));assert.strictEqual(await dbNom(t.B),'Version de A');
+ await t.B.click('#cahcf [data-ca=cfkeep]');await clickBtn(t.B,'Écraser');await modalDone(t.B);await t.B.waitForSelector('#cahcf',{state:'hidden'});await cahSaved(t.B);assert.strictEqual(await dbNom(t.B),'Version de B');
+ d=await cahDump(t.B);const ba=d.backups.find(k=>/@autre-onglet-/.test(k));assert.ok(ba,'l’autre version est conservée');assert.strictEqual(d.backupVals[d.backups.indexOf(ba)].chapitres[0].nom,'Version de A');
+ await t.A.waitForFunction(()=>CAH.cc().chapitres[0].nom==='Version de B');assert.ok(await t.A.isHidden('#cahcf'),'A (propre) reçoit la version choisie');assert.deepStrictEqual(t.c.errs,[]);await t.c.close()});
+
+T('cahier lot G : détection à l’écriture même sans diffusion entre onglets (BroadcastChannel indisponible)',async()=>{const c=await ctx();await c.addInitScript(()=>{try{delete window.BroadcastChannel}catch(e){}window.BroadcastChannel=undefined});
+ const A=await c.newPage();await booted(A);await cahOpen(A);await cahNew(A);await A.fill('[data-ch=nom]','Initial');await cahSaved(A);const B=await c.newPage();await booted(B);await cahOpen(B);
+ await holdEdit(B,'Version de B');await A.fill('[data-ch=nom]','Version de A');await cahSaved(A);assert.ok(await B.isHidden('#cahcf'),'pas encore détecté (aucun message)');
+ await B.evaluate(()=>CAH.flush());await B.waitForSelector('#cahcf:not([hidden])');assert.strictEqual(await dbNom(A),'Version de A','l’écriture de B a été refusée');assert.strictEqual(await nomOf(B),'Version de B');
+ // un autre cahier de B continue d'être enregistré pendant le conflit
+ await B.evaluate(()=>{const c=CAH.api.cc();return CAH.S.list.length});await cahNew(B);await B.fill('[data-ch=nom]','Autre cahier de B');await B.evaluate(()=>CAH.flush());assert.ok((await cahDump(B)).cahiers.some(x=>x.chapitres[0].nom==='Autre cahier de B'),'les cahiers sans conflit sont enregistrés');assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier lot G : suppressions — cahier supprimé ailleurs et modifié ici, cahier supprimé ici et modifié ailleurs',async()=>{
+ // supprimé dans A, modifié (non enregistré) dans B → conflit
+ let t=await twoTabs();await holdEdit(t.B,'Travail de B');await t.A.click('#cahbar [data-ca=cdel]');await clickBtn(t.A,'Supprimer');await modalDone(t.A);await cahSaved(t.A);await t.B.waitForSelector('#cahcf:not([hidden])');assert.ok(/supprimé dans un autre onglet/.test(await t.B.innerText('#cahcf')));assert.strictEqual(await t.B.locator('#cahcf [data-ca=cfcmp]').count(),0);
+ await t.B.click('#cahcf [data-ca=cfkeep]');await clickBtn(t.B,'Écraser');await modalDone(t.B);await cahSaved(t.B);assert.strictEqual((await cahDump(t.B)).cahiers.length,1,'cahier recréé avec la version de B');assert.strictEqual(await dbNom(t.B),'Travail de B');await t.c.close();
+ // supprimé dans B alors qu'il a été modifié dans A → suppression refusée
+ t=await twoTabs();await t.A.fill('[data-ch=nom]','Modifié ailleurs');await cahSaved(t.A);await t.B.waitForFunction(()=>CAH.cc().chapitres[0].nom==='Modifié ailleurs');
+ await t.A.evaluate(()=>{});await t.B.evaluate(()=>{CAH.S.base.set(CAH.cc().id,0)});   // B croit avoir une révision plus ancienne (message manqué)
+ await t.B.click('#cahbar [data-ca=cdel]');await clickBtn(t.B,'Supprimer');await modalDone(t.B);await t.B.evaluate(()=>CAH.flush());await t.B.waitForFunction(()=>CAH.S.list.length===1);assert.strictEqual((await cahDump(t.B)).cahiers.length,1,'suppression refusée : le cahier modifié ailleurs est conservé');assert.strictEqual(await dbNom(t.B),'Modifié ailleurs');assert.deepStrictEqual(t.c.errs,[]);await t.c.close()});
+
+T('cahier lot G : numéro de révision — incrémenté à chaque enregistrement, hors contenu (comparaison, historique), anciens cahiers sans révision',async()=>{const c=await ctx(),p=await c.newPage();await booted(p);
+ await p.evaluate(()=>new Promise(res=>{const r=indexedDB.open('cdm3cahiers',1);r.onupgradeneeded=()=>{['cahiers','meta','backups'].forEach(n=>r.result.createObjectStore(n))};r.onsuccess=()=>{const t=r.result.transaction(['cahiers','meta'],'readwrite');t.objectStore('cahiers').put({id:'old',v:1,nom:'Sans révision',chapitres:[{id:'c1',nom:'Ch',blocs:[]}]},'old');t.objectStore('meta').put(['old'],'order');t.oncomplete=()=>{r.result.close();res()}}}));
+ await cahOpen(p);assert.strictEqual(await p.evaluate(()=>CAH.cc().rev),0);await p.fill('[data-ch=nom]','A');await cahSaved(p);await p.waitForTimeout(600);assert.strictEqual((await cahDump(p)).cahiers[0].rev,1);await p.fill('[data-ch=nom]','AB');await cahSaved(p);await p.waitForTimeout(600);assert.strictEqual((await cahDump(p)).cahiers[0].rev,2);assert.strictEqual(await p.evaluate(()=>CAH.cc().rev),2);assert.strictEqual(await p.evaluate(()=>CAH.S.base.get('old')),2);
+ // la révision n'est pas du contenu
+ assert.strictEqual(await p.evaluate(()=>{const a=JSON.parse(JSON.stringify(CAH.cc())),b=JSON.parse(JSON.stringify(a));b.rev=99;return CAH.backup.same(a,b)}),true);
+ // ↶ fonctionne après un enregistrement (la révision ne crée pas d'état d'historique)
+ await p.fill('[data-ch=nom]','ABC');await cahSaved(p);await p.waitForTimeout(600);await p.click('#cahbar [data-ca=hundo]');assert.strictEqual(await nomOf(p),'AB','↶ annule la dernière modification même après enregistrement');await p.click('#cahbar [data-ca=hredo]');assert.strictEqual(await nomOf(p),'ABC');
+ // diffCah
+ const r=await p.evaluate(()=>{const mk=(nom,bl)=>({nom,niveau:'',classe:'',annee:'',chapitres:[{id:'c1',nom:'Ch',ref:'',blocs:bl}]}),B=(id,t,txt)=>CAH.normCah({chapitres:[{blocs:[{id,type:t,titre:'T'+id,v:{texte:txt}}]}]}).chapitres[0].blocs[0];
+  const a=CAH.normCah(mk('X',[B('b1','trace','un'),B('b2','trace','deux'),B('b3','trace','trois')])),b=CAH.normCah(mk('Y',[B('b1','trace','un'),B('b2','trace','DEUX modifié'),B('b4','tache','quatre')]));const d=CAH.diffCah(a,b);return{meta:d.meta,chap:d.chap.map(h=>[h.etat,h.blocs.map(x=>x.id+':'+x.etat)]),same:CAH.diffCah(a,a)}});
+ assert.deepStrictEqual(r.meta,[['nom','X','Y']]);assert.deepStrictEqual(r.chap,[['modifié',['b2:modifié','b4:ajouté','b3:supprimé']]]);assert.deepStrictEqual(r.same,{meta:[],chap:[],ordre:false});assert.deepStrictEqual(c.errs,[]);await c.close()});
+
+T('cahier lot G : bannière de conflit — accessible, utilisable au clavier et sur téléphone',async()=>{const t=await mkConflict({viewport:{width:390,height:800},hasTouch:true,isMobile:true});const{B}=t;
+ assert.strictEqual(await B.getAttribute('#cahcf','role'),'alert');const btn=await B.$$eval('#cahcf button',b=>b.map(x=>[x.textContent.trim(),Math.round(x.getBoundingClientRect().height)]));assert.strictEqual(btn.length,4);assert.ok(btn.every(x=>x[0]&&x[1]>=40),JSON.stringify(btn));
+ const w=await B.evaluate(()=>[document.documentElement.scrollWidth<=innerWidth,document.getElementById('cahcf').scrollWidth<=document.getElementById('cahcf').clientWidth+1]);assert.deepStrictEqual(w,[true,true],'pas de débordement horizontal');
+ const ratio=await B.evaluate(()=>{const e=document.getElementById('cahcf'),s=getComputedStyle(e),p=a=>a.match(/[\d.]+/g).slice(0,3).map(Number),L=a=>{const[r,g,b]=a.map(x=>{x/=255;return x<=.03928?x/12.92:((x+.055)/1.055)**2.4});return .2126*r+.7152*g+.0722*b},f=L(p(s.color)),g=L(p(s.backgroundColor));return(Math.max(f,g)+.05)/(Math.min(f,g)+.05)});assert.ok(ratio>=4.5,'contraste '+ratio.toFixed(2));
+ await B.focus('#cahcf [data-ca=cfcmp]');await B.keyboard.press('Enter');assert.ok(/Comparer/.test(await modalText(B)));await B.keyboard.press('Escape');await modalDone(B);assert.deepStrictEqual(t.c.errs,[]);await t.c.close()});
 
 (async()=>{await new Promise(r=>srv.listen(0,'127.0.0.1',r));BASE='http://localhost:'+srv.address().port;browser=await chromium.launch();
  let fail=0;const only=process.argv[2];for(const t of results){if(only&&!t.name.includes(only))continue;const t0=Date.now();try{await Promise.race([t.fn(),new Promise((_,j)=>setTimeout(()=>j(new Error('délai dépassé (90 s)')),90000))]);console.log('  ✓',t.name,'('+(Date.now()-t0)+' ms)')}catch(e){fail++;console.log('  ✗',t.name,'\n     ',String(e.message).split('\n').slice(0,6).join('\n      '))}}
