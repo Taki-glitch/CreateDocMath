@@ -114,7 +114,7 @@ Nouveau fichier `cahier-liaison.js`, **chargé à la demande** (au premier clic 
 
 ## 8. Limites (à traiter dans les phases suivantes)
 
-- **Les sauvegardes ZIP ne contiennent pas encore les cahiers** : utiliser **Exporter** (`.json`, images comprises) dans le cahier. Intégration au ZIP prévue en phase 4.
+- Les cahiers sont dans les sauvegardes ZIP depuis la phase 4 (lot A) : voir `MIGRATION.md` §10. L'export `.json` propre au cahier reste disponible.
 - Pas de recadrage d'image dans le cahier, ni de table des matières, de pagination automatique, d'en-tête / pied de page configurables ni d'export Word (phase 4) ; pas de publication (phase 5) ; pas encore de « Comparer avec la source » (les empreintes sont enregistrées).
 - L'import reprend l'activité d'une séance en un seul bloc (les questions ne sont pas découpées en exercices) : choisissez « Exercices » comme destination pour la traiter comme un exercice.
 - Les « tâches complexes » sont reconnues par l'étiquette de la séance (« problème », « tâche complexe ») : sinon, changez la destination dans la fenêtre d'import.
@@ -122,3 +122,12 @@ Nouveau fichier `cahier-liaison.js`, **chargé à la demande** (au premier clic 
 - Édition simultanée dans deux onglets : le dernier enregistrement l'emporte.
 - Chaque enregistrement réécrit le cahier modifié en entier, images comprises : à optimiser (stockage binaire séparé) si des cahiers très illustrés posent problème.
 - Le glisser-déposer sur de longues distances dépend de l'auto-défilement du navigateur : utiliser ↑ ↓.
+
+## 9. Sauvegardes générales (phase 4, lot A)
+
+Le ZIP de sauvegarde, la copie interne « avant restauration » et la sauvegarde automatique dans un dossier contiennent tous les cahiers (`cahiers.json`) et leurs images (dossier `img/`, **dédupliquées** avec celles des préparations). Le manifeste porte `kind: 'complete'` et une section `cahiers` (nom, empreinte SHA-256, taille, nombre). Un ZIP sans cahiers reste `kind: 'preparations'`, identique à l'ancien format.
+
+- **Export** : relu et comparé avant téléchargement (échec explicite si les cahiers diffèrent après relecture). Si la base des cahiers est illisible, la sauvegarde s'arrête avec un message : jamais d'omission silencieuse.
+- **Restauration** : l'aperçu liste les cahiers (nouveau, identique, différent). **Fusion** (par défaut) : rien n'est supprimé ni écrasé ; un cahier identique est ignoré ; un cahier de même identifiant mais de contenu différent est ajouté en copie « (restauré) ». **Remplacer tout** : confirmation explicite qui mentionne le nombre de cahiers remplacés ; copie de sécurité interne (cahiers compris) créée d'abord ; une source sans cahiers ne touche pas aux cahiers.
+- **Intégrité** : empreinte de `cahiers.json` vérifiée ; fichier absent, altéré, illisible ou de format inconnu : restauration refusée avec message ; image manquante : restauration possible « sans les images endommagées ».
+- **Sécurité** : `cahiers.json` est normalisé comme n'importe quel cahier importé (types, couleurs, images, longueurs), même si son empreinte est valide.
