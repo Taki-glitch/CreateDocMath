@@ -201,6 +201,8 @@ Tout fonctionne dans le navigateur : les données restent sur votre appareil.
 | `bank_difficultes.js` | Banque d'obstacles classiques (modifiable) |
 | `bo_premiere.js` | 1re enseignement scientifique + bilan de compétences par chapitre |
 | `manifest.json`, `sw.js`, `icon-192.png`, `icon-512.png` | PWA (installation, hors-ligne) |
+| `version.js` | Numéro de build du cache hors ligne (source unique, à incrémenter à chaque livraison) |
+| `.github/workflows/tests.yml`, `docs/TESTS.md` | Intégration continue et guide des tests |
 | `vendor/` | KaTeX 0.16.45, JSZip 3.10.1 et docx 9.6.1 (tous MIT) embarqués, avec leurs licences |
 | `tests/` | Tests Playwright (`node tests/run.js`) |
 | `cahier.js`, `cahier-liaison.js`, `docs/CAHIER-ELEVE.md` | Module « Cahier de l'élève » (+ liaison avec séquences et banque, chargée à la demande) et son architecture |
