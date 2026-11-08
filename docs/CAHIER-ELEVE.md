@@ -131,3 +131,14 @@ Le ZIP de sauvegarde, la copie interne « avant restauration » et la sauvegarde
 - **Restauration** : l'aperçu liste les cahiers (nouveau, identique, différent). **Fusion** (par défaut) : rien n'est supprimé ni écrasé ; un cahier identique est ignoré ; un cahier de même identifiant mais de contenu différent est ajouté en copie « (restauré) ». **Remplacer tout** : confirmation explicite qui mentionne le nombre de cahiers remplacés ; copie de sécurité interne (cahiers compris) créée d'abord ; une source sans cahiers ne touche pas aux cahiers.
 - **Intégrité** : empreinte de `cahiers.json` vérifiée ; fichier absent, altéré, illisible ou de format inconnu : restauration refusée avec message ; image manquante : restauration possible « sans les images endommagées ».
 - **Sécurité** : `cahiers.json` est normalisé comme n'importe quel cahier importé (types, couleurs, images, longueurs), même si son empreinte est valide.
+
+## 10. Plusieurs onglets (phase 4, lot G)
+
+Chaque cahier porte un **numéro de révision** (`rev`, donnée de stockage, exclue des comparaisons de contenu et de l'historique). À l'enregistrement, la révision lue en base est comparée à celle chargée dans l'onglet, dans la même transaction ; les onglets se préviennent aussi par `BroadcastChannel('cdm3cahiers')`.
+
+- **Onglet sans modification en attente** : il reçoit automatiquement la version enregistrée ailleurs (message « mis à jour depuis un autre onglet »), y compris les nouveaux cahiers et les suppressions.
+- **Onglet avec modifications non enregistrées** : l'enregistrement du cahier concerné est **suspendu** (les autres cahiers continuent d'être enregistrés) et une bannière propose : **Comparer** (chapitres et blocs ajoutés, supprimés, modifiés), **Recharger la version enregistrée** (la version locale est conservée dans les sauvegardes internes, clé `…@local-…`), **Garder mon travail dans une copie** (nouveau cahier « (mon travail) », identifiants neufs), **Garder ma version** (l'autre version est conservée, clé `…@autre-onglet-…`).
+- Le conflit est aussi détecté **à l'écriture**, sans message préalable (navigateur sans `BroadcastChannel`).
+- Cahier supprimé ailleurs et modifié ici : proposition de le recréer ; cahier supprimé ici mais modifié ailleurs : suppression refusée, version la plus récente conservée.
+- Compatibilité : les cahiers sans `rev` se chargent avec la révision 0 (aucune migration) ; la révision 1 est écrite au premier enregistrement.
+
