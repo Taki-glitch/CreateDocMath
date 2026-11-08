@@ -75,7 +75,7 @@ async function write(){if(!S.dirty.size&&!S.del.size&&!S.ordDirty)return;
  try{const t=S.db.transaction(['cahiers','meta'],'readwrite'),o=t.objectStore('cahiers'),done=tdone(t);vals.forEach(([id,v])=>o.put(v,id));del.forEach(id=>o.delete(id));
   t.objectStore('meta').put(S.list.map(c=>c.id),'order');t.objectStore('meta').put(S.cur,'last');await done;
   const r=S.db.transaction('cahiers').objectStore('cahiers');for(const[id,v]of vals){const b=await rq(r.get(id));if(JSON.stringify(b)!==JSON.stringify(v))throw new Error('vérification d’intégrité : la relecture de « '+id+' » diffère')}
-  S.err=null}
+  S.err=null;if(typeof folderBackup==='function')setTimeout(()=>{try{folderBackup()}catch(_){}},0)}
  catch(e){ids.forEach(i=>S.dirty.add(i));del.forEach(i=>S.del.add(i));S.ordDirty=S.ordDirty||ord;S.err=e}
  stLine2();if(S.dirty.size&&!S.err)sched(100)}
 function touch(o){const c=cc();if(!c)return;c.modifLe=NOW();S.ver++;S.dirty.add(c.id);if(o&&o.ord)S.ordDirty=true;sched();clearTimeout(touch.p);touch.p=setTimeout(prev,120);clearTimeout(touch.h);touch.h=setTimeout(hsnap,o&&o.now?0:500);if(o&&o.now){clearTimeout(touch.h);hsnap()}}
@@ -237,6 +237,30 @@ async function impFile(f){try{if(!f)return;if(f.size>LIM.bytes)throw new Error('
   const ok=await modal('Importer des cahiers','<p>'+L.length+' cahier(s) seront <b>ajoutés</b> (rien n’est remplacé) :</p><ul>'+L.map(c=>'<li><b>'+esc(c.nom)+'</b> : '+c.chapitres.length+' chapitre(s), '+nb(c)+' bloc(s)'+(ex.has(c.nom)?' <small>(un cahier de même nom existe déjà)</small>':'')+'</li>').join('')+'</ul>'+(W.length?'<p><b>Avertissements ('+W.length+')</b></p><ul>'+W.slice(0,8).map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':''),[['cancel','Annuler'],['go','Ajouter à mes cahiers','pri']],{esc:'cancel'});
   if(ok!=='go')return;L.forEach(c=>{reid(c);c.pub={statut:'brouillon',version:0};S.list.push(c);S.dirty.add(c.id)});S.cur=L[0].id;S.chap=(L[0].chapitres[0]||{}).id||null;S.ordDirty=true;hreset();sched();render();toast(L.length+' cahier(s) importé(s)')}
  catch(x){await info('Import impossible','<p>'+esc(errMsg(x))+'</p><p>Vos cahiers n’ont pas été modifiés.</p>')}}
+/* ---------- sauvegarde / restauration générale (ZIP) : API utilisée par index.html ---------- */
+const canon=o=>Array.isArray(o)?'['+o.map(canon).join(',')+']':isO(o)?'{'+Object.keys(o).sort().map(k=>JSON.stringify(k)+':'+canon(o[k])).join(',')+'}':JSON.stringify(o);
+const imgsIn=c=>{const L=[];c.chapitres.forEach(h=>h.blocs.forEach(b=>{b.imgs.forEach(m=>L.push(m.u));b.items.forEach(x=>x.imgs.forEach(m=>L.push(m.u)))}));return L};
+const stripU=c=>JSON.parse(JSON.stringify(c,(k,v)=>k==='u'&&typeof v==='string'?'':v));
+/* deux cahiers sont identiques si leur contenu l'est, clés dans n'importe quel ordre, images comparées octet par octet (comme la sauvegarde des préparations) */
+const sameCah=(a,b)=>{if(canon(stripU(a))!==canon(stripU(b)))return false;const x=imgsIn(a),y=imgsIn(b);return x.length===y.length&&x.every((u,i)=>typeof sameImg==='function'?sameImg(u,y[i]):u===y[i])};
+async function ensure(){if(!S.loaded)await load()}
+const backup={
+ /* copie fidèle de tous les cahiers (modifications en attente comprises) */
+ async exportAll(){await ensure();await flush();if(S.err)throw S.err;return S.list.map(clone)},
+ async count(){await ensure();return S.list.length},
+ ver:()=>S.ver,
+ sameList:(a,b)=>Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((c,i)=>sameCah(c,b[i])),
+ same:sameCah,
+ /* plan de restauration : new = absent, same = identique (ignoré), diff = même identifiant mais contenu différent (importé en copie) */
+ async plan(list){await ensure();return list.map(c=>{const e=S.list.find(x=>x.id===c.id);const st=e?(sameCah(e,c)?'same':'diff'):'new';return{c,st,dup:st==='new'&&S.list.some(x=>x.nom===c.nom)}})},
+ /* fusion additive : rien n'est supprimé ni écrasé */
+ async merge(list){await ensure();let a=0,cp=0,sk=0;const first=[];
+  for(const c of list){const e=S.list.find(x=>x.id===c.id);if(e&&sameCah(e,c)){sk++;continue}const n=clone(c);if(e){reid(n);n.nom=(n.nom||'Cahier')+' (restauré)';cp++}else a++;n.pub={statut:'brouillon',version:0};S.list.push(n);S.dirty.add(n.id);first.push(n.id)}
+  if(first.length){S.ordDirty=true;if(!cc())S.cur=first[0];S.ver++;S.err=null;await flush();if(S.err){const e=S.err;S.list=S.list.filter(x=>!first.includes(x.id));first.forEach(i=>S.dirty.delete(i));throw e}hreset()}
+  if(S.open)render();return{added:a,copied:cp,skipped:sk}},
+ /* remplacement complet (après confirmation explicite et copie de sécurité faites par l'appelant) */
+ async replace(list){await ensure();const old=S.list.slice(),oldCur=S.cur;S.list=list.map(c=>{const n=clone(c);return n});S.del=new Set(old.map(c=>c.id).filter(id=>!S.list.some(c=>c.id===id)));S.list.forEach(c=>S.dirty.add(c.id));S.ordDirty=true;S.ver++;S.cur=(S.list.find(c=>c.id===oldCur)||S.list[0]||{}).id||null;S.chap=((cc()||{}).chapitres||[])[0]?cc().chapitres[0].id:null;S.err=null;await flush();
+  if(S.err){const e=S.err;S.list=old;S.del.clear();S.cur=oldCur;S.err=null;old.forEach(c=>S.dirty.add(c.id));S.ordDirty=true;await flush();throw e}hreset();if(S.open)render();return{replaced:S.list.length}}};
 /* ---------- interface : ouverture, fermeture, événements ---------- */
 const CSS=`#cah{position:fixed;inset:0;z-index:70;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;--cb:#fff;--cl:var(--line)}#cah[hidden]{display:none}
 body.dark #cah{--cb:#17212b}body.cah-open #toast{z-index:95}
@@ -304,5 +328,5 @@ addEventListener('beforeprint',()=>{if(!S.open)return;const c=cc();if(c)document
 addEventListener('beforeunload',()=>{if(S.db&&(S.dirty.size||S.del.size))flush()});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flush()});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-a="cahier"]');if(b){e.preventDefault();open()}});
-window.CAH={S,rich,addImgFile,imgList,loadL:()=>lz(),api:{mkBloc,mkEx,mkChap,touch,render,cc,ch,LIM,T,COL,CALLR:()=>CALL,rich,hsnap},open,close,flush,cc,ch,normCah,parseImp,reid,T,SCH,FMT,load:()=>load(),render};
+window.CAH={S,backup,rich,addImgFile,imgList,loadL:()=>lz(),api:{mkBloc,mkEx,mkChap,touch,render,cc,ch,LIM,T,COL,CALLR:()=>CALL,rich,hsnap},open,close,flush,cc,ch,normCah,parseImp,reid,T,SCH,FMT,load:()=>load(),render};
 })();
