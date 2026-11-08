@@ -86,3 +86,7 @@ Nouveaux champs optionnels : base `seqModels` (modèles de séquence), modèles 
 
 **Retour arrière** : un ZIP complet reste lisible par la version précédente pour ce qui concerne les préparations ; aucune donnée existante n'est modifiée par l'export.
 
+## 11. Champ `rev` des cahiers (phase 4, lot G)
+
+Champ entier facultatif ajouté à chaque cahier (`rev`, défaut 0), incrémenté à chaque enregistrement. Rétrocompatible : absent = 0. Il n'est pas comparé lors des sauvegardes ni de la détection de doublons. Aucune migration de la base `cdm3cahiers` (version 1 inchangée).
+

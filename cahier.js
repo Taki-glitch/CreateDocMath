@@ -14,7 +14,7 @@ const T={
  eval:{n:'Je vérifie mes connaissances',ico:'✅',f:[['conn','Connaissances mobilisées','',3],['texte','Exercices','',8],['bareme','Barème (facultatif)','',2]],corr:1,comp:1},
  revision:{n:'Fiche de révision',ico:'🔁',f:[['savoir','Points clés à retenir','',6],['methodes','Méthodes à maîtriser','',4],['conseil','Exercices conseillés pour s’entraîner','',3]]}};
 const NIVX=['','facile','moyen','difficile'],NOW=()=>new Date().toISOString();
-const S={loaded:false,open:false,list:[],cur:null,chap:null,scope:'chap',mode:'enseignant',tab:'edit',err:null,dirty:new Set(),del:new Set(),ordDirty:false,t:null,sch:Promise.resolve(),db:null,hist:[],hp:-1,trash:[],drag:null,rep:[],opener:null,ver:0};
+const S={loaded:false,open:false,list:[],cur:null,chap:null,scope:'chap',mode:'enseignant',tab:'edit',err:null,dirty:new Set(),del:new Set(),ordDirty:false,t:null,sch:Promise.resolve(),db:null,hist:[],hp:-1,trash:[],base:new Map(),conflict:new Map(),me:uid(),drag:null,rep:[],opener:null,ver:0};
 const $c=id=>document.getElementById(id);
 const isO=v=>v&&typeof v==='object'&&!Array.isArray(v);
 const txt=(v,n)=>typeof v==='string'?v.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g,'').slice(0,n||LIM.text):(typeof v==='number'&&isFinite(v)?String(v):'');
@@ -26,14 +26,14 @@ const mkCorr=()=>({texte:'',defaut:'masque',en_ligne:false,pdf:false,word:false}
 const mkEx=n=>({id:uid(),num:'',titre:'',niveau:'',enonce:'',corrige:'',imgs:[],src:null});
 const mkBloc=t=>({id:uid(),type:t,titre:'',couleur:'',v:{},corr:mkCorr(),comp:[],items:t==='exercices'?[mkEx()]:[],imgs:[],saut:false,src:null});
 const mkChap=n=>({id:uid(),nom:n==null?'Nouveau chapitre':n,ref:'',seqIds:[],blocs:[]});
-const mkCah=n=>({id:uid(),v:SCH,nom:n||'Cahier de mathématiques',niveau:'',classe:'',annee:'',couleurs:{...COL},chapitres:[],creeLe:NOW(),modifLe:NOW(),pub:{statut:'brouillon',version:0}});
+const mkCah=n=>({id:uid(),v:SCH,rev:0,nom:n||'Cahier de mathématiques',niveau:'',classe:'',annee:'',couleurs:{...COL},chapitres:[],creeLe:NOW(),modifLe:NOW(),pub:{statut:'brouillon',version:0}});
 /* normalisation / migration : tolère les données anciennes ou douteuses, ne jette jamais un chapitre sans le signaler */
 /* origine d'un contenu importé (séquence, séance, banque) : sert à repérer les doublons et, plus tard, à comparer avec la source. Jamais affichée ni publiée. */
 const normSrc=s=>{if(!isO(s)||!['seance','sequence','banque'].includes(s.t))return null;const i=v=>IDV(v)?v:'';return{t:s.t,q:i(s.q),s:i(s.s),f:txt(s.f,20),bi:i(s.bi),h:txt(s.h,16),at:txt(s.at,40),n:txt(s.n,200)}};
 const normImgs=(a,nid)=>(Array.isArray(a)?a:[]).filter(m=>isO(m)&&typeof m.u==='string'&&m.u&&IMGOK(m.u)).slice(0,LIM.img).map(m=>({id:nid(m.id),u:m.u,w:[25,50,75,100].includes(+m.w)?+m.w:Math.max(5,Math.min(100,Math.round(+m.w)||100)),a:m.a==='r'?'r':'c',l:txt(m.l,300)}));
 function normCah(c,W){W=W||[];if(!isO(c)){W.push('cahier illisible');return null}
  const o=mkCah(txt(c.nom,200).trim()||'Cahier sans titre'),ids=new Set([o.id]),nid=v=>{if(IDV(v)&&!ids.has(v)){ids.add(v);return v}const n=uid();ids.add(n);return n};
- o.id=IDV(c.id)?c.id:o.id;ids.add(o.id);o.niveau=txt(c.niveau,40);o.classe=txt(c.classe,40);o.annee=txt(c.annee,20);
+ o.id=IDV(c.id)?c.id:o.id;ids.add(o.id);o.rev=Math.max(0,parseInt(c.rev,10)||0);o.niveau=txt(c.niveau,40);o.classe=txt(c.classe,40);o.annee=txt(c.annee,20);
  o.creeLe=txt(c.creeLe,40)||o.creeLe;o.modifLe=txt(c.modifLe,40)||o.modifLe;
  if(isO(c.couleurs))Object.keys(COL).forEach(k=>{o.couleurs[k]=hex(c.couleurs[k])||COL[k]});
  if(isO(c.pub))o.pub={statut:['brouillon','publie','depublie'].includes(c.pub.statut)?c.pub.statut:'brouillon',version:Math.max(0,parseInt(c.pub.version,10)||0)};
@@ -60,7 +60,7 @@ const idbo=()=>new Promise((ok,ko)=>{let r;try{r=indexedDB.open(DBN,1)}catch(e){
 async function load(){S.rep=[];S.db=await idbo();const t=S.db.transaction(['cahiers','meta']),o=t.objectStore('cahiers');
  const[keys,vals,ord]=await Promise.all([rq(o.getAllKeys()),rq(o.getAll()),rq(t.objectStore('meta').get('order'))]);const L=[],back=[];
  keys.forEach((k,i)=>{const v=vals[i],W=[];if(!isO(v)){S.rep.push('enregistrement « '+k+' » illisible : conservé tel quel en base, non affiché');return}
-  const old=v.v;const n=normCah(v,W);if(!n)return;n.id=k;if(old!==SCH){back.push([k+'@v'+(old==null?0:old),v]);S.rep.push('« '+n.nom+' » : mis à niveau (schéma '+(old==null?0:old)+' → '+SCH+'), copie de sécurité conservée')}
+  const old=v.v;const n=normCah(v,W);if(!n)return;n.id=k;S.base.set(k,n.rev);if(old!==SCH){back.push([k+'@v'+(old==null?0:old),v]);S.rep.push('« '+n.nom+' » : mis à niveau (schéma '+(old==null?0:old)+' → '+SCH+'), copie de sécurité conservée')}
   W.forEach(w=>S.rep.push('« '+n.nom+' » : '+w));if(old!==SCH||W.length)S.dirty.add(n.id);L.push(n)});
  const rank=new Map((Array.isArray(ord)?ord:[]).map((x,i)=>[x,i]));L.sort((a,b)=>(rank.has(a.id)?rank.get(a.id):1e9)-(rank.has(b.id)?rank.get(b.id):1e9)||(a.creeLe||'').localeCompare(b.creeLe||''));
  if(back.length){const w=S.db.transaction('backups','readwrite');back.forEach(([k,v])=>w.objectStore('backups').put(v,k));await tdone(w)}
@@ -69,21 +69,68 @@ async function load(){S.rep=[];S.db=await idbo();const t=S.db.transaction(['cahi
 function stLine2(m){const e=$c('cahst');if(!e)return;e.innerHTML=m||(S.err?'⚠ Échec de l’enregistrement : '+esc(errMsg(S.err))+' · <u data-ca="retry" role="button" tabindex="0">réessayer</u>':S.dirty.size||S.del.size||S.ordDirty?'… enregistrement':'✓ Enregistré')}
 function sched(ms){clearTimeout(S.t);S.t=setTimeout(flush,ms==null?400:ms);stLine2()}
 function flush(){clearTimeout(S.t);if(!S.db)return Promise.resolve();S.sch=S.sch.then(write).catch(e=>{S.err=e;stLine2()});return S.sch}
+/* ---------- plusieurs onglets : contrôle de révision à l'écriture + diffusion entre onglets ----------
+   Jamais de « dernier enregistrement gagnant » silencieux : si la base a changé depuis le chargement, l'écriture du cahier concerné est suspendue
+   et l'utilisateur choisit (comparer, recharger, garder une copie, garder sa version). Les deux versions sont toujours conservées (store backups). */
+const BC=typeof BroadcastChannel==='function'?new BroadcastChannel('cdm3cahiers'):null;
+const readRec=id=>rq(S.db.transaction('cahiers').objectStore('cahiers').get(id));
+const putBak=async(key,val)=>{const w=S.db.transaction('backups','readwrite');w.objectStore('backups').put(val,key);await tdone(w)};
 async function write(){if(!S.dirty.size&&!S.del.size&&!S.ordDirty)return;
- const ids=[...S.dirty].filter(id=>S.list.some(c=>c.id===id)),del=[...S.del],ord=S.ordDirty,vals=ids.map(id=>[id,clone(S.list.find(c=>c.id===id))]),ver=S.ver;
- S.dirty.clear();S.del.clear();S.ordDirty=false;
- try{const t=S.db.transaction(['cahiers','meta'],'readwrite'),o=t.objectStore('cahiers'),done=tdone(t);vals.forEach(([id,v])=>o.put(v,id));del.forEach(id=>o.delete(id));
+ const ids=[...S.dirty].filter(id=>S.list.some(c=>c.id===id)&&!S.conflict.has(id)),del=[...S.del],ord=S.ordDirty,vals=ids.map(id=>[id,clone(S.list.find(c=>c.id===id))]);
+ S.dirty=new Set([...S.dirty].filter(id=>S.conflict.has(id)));S.del.clear();S.ordDirty=false;
+ try{const t=S.db.transaction(['cahiers','meta'],'readwrite'),o=t.objectStore('cahiers'),done=tdone(t);done.catch(()=>{});const ok=[],bad=[],dok=[],dbad=[];
+  for(const[id,v]of vals){const cur=await rq(o.get(id)),b=S.base.get(id);if(cur?(b===undefined||(cur.rev||0)!==b):b!==undefined){bad.push([id,cur?'modifie':'supprime']);continue}v.rev=(cur?cur.rev||0:0)+1;o.put(v,id);ok.push([id,v])}
+  for(const id of del){const cur=await rq(o.get(id)),b=S.base.get(id);if(cur&&b!==undefined&&(cur.rev||0)!==b){dbad.push(id);continue}o.delete(id);dok.push(id)}
   t.objectStore('meta').put(S.list.map(c=>c.id),'order');t.objectStore('meta').put(S.cur,'last');await done;
-  const r=S.db.transaction('cahiers').objectStore('cahiers');for(const[id,v]of vals){const b=await rq(r.get(id));if(JSON.stringify(b)!==JSON.stringify(v))throw new Error('vérification d’intégrité : la relecture de « '+id+' » diffère')}
+  const r=S.db.transaction('cahiers').objectStore('cahiers');for(const[id,v]of ok){const b=await rq(r.get(id));if(JSON.stringify(b)!==JSON.stringify(v))throw new Error('vérification d’intégrité : la relecture de « '+id+' » diffère')}
+  ok.forEach(([id,v])=>{S.base.set(id,v.rev);const l=S.list.find(c=>c.id===id);if(l)l.rev=v.rev});dok.forEach(id=>S.base.delete(id));
+  bad.forEach(([id,k])=>{S.conflict.set(id,{kind:k});S.dirty.add(id)});
+  if(BC&&(ok.length||dok.length||ord))try{BC.postMessage({tab:S.me,w:ok.map(([id,v])=>({id,rev:v.rev})),d:dok})}catch(_){}
+  dbad.forEach(id=>{refreshOne(id,'Suppression annulée : ce cahier a été modifié dans un autre onglet')});
   S.err=null;if(typeof folderBackup==='function')setTimeout(()=>{try{folderBackup()}catch(_){}},0)}
  catch(e){ids.forEach(i=>S.dirty.add(i));del.forEach(i=>S.del.add(i));S.ordDirty=S.ordDirty||ord;S.err=e}
- stLine2();if(S.dirty.size&&!S.err)sched(100)}
+ stLine2();confBar();if(S.dirty.size&&!S.err&&![...S.dirty].every(i=>S.conflict.has(i)))sched(100)}
+/* recharge un cahier depuis la base (version enregistrée) : remplace, ajoute ou retire l'entrée locale */
+async function refreshOne(id,msg){let r;try{r=await readRec(id)}catch(e){return}const i=S.list.findIndex(c=>c.id===id);
+ if(!r){if(i>=0){S.list.splice(i,1);S.base.delete(id);S.dirty.delete(id);S.conflict.delete(id);if(S.cur===id){S.cur=(S.list[0]||{}).id||null;S.chap=((cc()||{}).chapitres||[])[0]?cc().chapitres[0].id:null;hreset()}}}
+ else{const n=normCah(r,[]);if(n){n.id=id;if(i>=0)S.list[i]=n;else S.list.push(n);S.base.set(id,n.rev);S.dirty.delete(id);S.conflict.delete(id);if(S.cur===id){if(!ch())S.chap=((n.chapitres||[])[0]||{}).id||null;hreset()}}}
+ if(S.open)render();else confBar();if(msg)toast(msg)}
+function onRemote(m){if(!m||m.tab===S.me||!S.loaded)return;
+ for(const{id,rev}of(m.w||[])){const l=S.list.find(c=>c.id===id);if(!l){if(!S.del.has(id))refreshOne(id,'Nouveau cahier reçu depuis un autre onglet');continue}if(S.base.get(id)===rev)continue;if(S.dirty.has(id)||S.conflict.has(id))S.conflict.set(id,{kind:'modifie'});else refreshOne(id,'« '+l.nom+' » mis à jour depuis un autre onglet')}
+ for(const id of(m.d||[])){const l=S.list.find(c=>c.id===id);if(!l)continue;if(S.dirty.has(id))S.conflict.set(id,{kind:'supprime'});else refreshOne(id,'« '+l.nom+' » a été supprimé dans un autre onglet')}
+ confBar()}
+if(BC)BC.onmessage=e=>onRemote(e.data);
+/* ---------- comparaison de deux états d'un cahier (conflits ; réutilisée pour l'historique des versions) ---------- */
+const sameImgs=(x,y)=>{const a=x.imgs.concat(...x.items.map(i=>i.imgs)).map(m=>m.u),b=y.imgs.concat(...y.items.map(i=>i.imgs)).map(m=>m.u);return a.length===b.length&&a.every((u,i)=>typeof sameImg==='function'?sameImg(u,b[i]):u===b[i])};
+const sameBloc=(x,y)=>canon(stripU(x))===canon(stripU(y))&&sameImgs(x,y);
+function diffCah(a,b){const R={meta:[],chap:[],ordre:false};if(!a||!b)return R;['nom','niveau','classe','annee'].forEach(k=>{if(a[k]!==b[k])R.meta.push([k,a[k],b[k]])});
+ const A=new Map(a.chapitres.map(h=>[h.id,h])),B=new Map(b.chapitres.map(h=>[h.id,h])),bn=x=>({id:x.id,titre:x.titre||T[x.type].n,type:x.type});
+ for(const h of b.chapitres){const o=A.get(h.id);if(!o){R.chap.push({id:h.id,nom:h.nom,etat:'ajouté',blocs:h.blocs.map(x=>({...bn(x),etat:'ajouté'}))});continue}
+  const OB=new Map(o.blocs.map(x=>[x.id,x])),NB=new Map(h.blocs.map(x=>[x.id,x])),bl=[];
+  for(const x of h.blocs){const y=OB.get(x.id);if(!y)bl.push({...bn(x),etat:'ajouté'});else if(!sameBloc(y,x))bl.push({...bn(x),etat:'modifié'})}for(const y of o.blocs)if(!NB.has(y.id))bl.push({...bn(y),etat:'supprimé'});
+  const ord=o.blocs.map(x=>x.id).filter(i=>NB.has(i)).join()!==h.blocs.map(x=>x.id).filter(i=>OB.has(i)).join();if(o.nom!==h.nom||o.ref!==h.ref||bl.length||ord)R.chap.push({id:h.id,nom:h.nom,avant:o.nom!==h.nom?o.nom:null,refModif:o.ref!==h.ref,etat:'modifié',blocs:bl,ordre:ord})}
+ for(const h of a.chapitres)if(!B.has(h.id))R.chap.push({id:h.id,nom:h.nom,etat:'supprimé',blocs:h.blocs.map(x=>({...bn(x),etat:'supprimé'}))});
+ R.ordre=a.chapitres.map(h=>h.id).filter(i=>B.has(i)).join()!==b.chapitres.map(h=>h.id).filter(i=>A.has(i)).join();return R}
+const diffEmpty=R=>!R.meta.length&&!R.chap.length&&!R.ordre;
+function diffHTML(R,la,lb){if(diffEmpty(R))return'<p><b>Aucune différence.</b></p>';const K={'ajouté':'+','supprimé':'−','modifié':'≠'};
+ return '<p><small>'+esc(la)+' → '+esc(lb)+'</small></p><ul class="cmp">'+R.meta.map(([k,x,y])=>'<li>'+esc(k)+' : « '+esc(x)+' » → « '+esc(y)+' »</li>').join('')+(R.ordre?'<li>ordre des chapitres modifié</li>':'')+R.chap.map(h=>'<li><b>'+K[h.etat]+' chapitre « '+esc(h.nom)+' »</b> ('+h.etat+')'+(h.avant!=null?' <small>(ancien titre : « '+esc(h.avant)+' »)</small>':'')+(h.refModif?' <small>(sous-titre modifié)</small>':'')+(h.ordre?' <small>(ordre des blocs modifié)</small>':'')+(h.blocs.length?'<ul>'+h.blocs.map(x=>'<li>'+K[x.etat]+' '+esc(x.titre)+' <small>('+x.etat+')</small></li>').join('')+'</ul>':'')+'</li>').join('')+'</ul>'}
+/* ---------- bannière de conflit ---------- */
+function confBar(){const e=$c('cahcf');if(!e)return;const id=[...S.conflict.keys()].find(i=>S.list.some(c=>c.id===i));if(!id){e.hidden=true;e.innerHTML='';return}
+ const c=S.list.find(x=>x.id===id),k=S.conflict.get(id).kind;e.hidden=false;e.dataset.id=id;
+ e.innerHTML=k==='supprime'?'<b>⚠ Conflit</b> : le cahier « '+esc(c.nom)+' » a été <b>supprimé dans un autre onglet</b> alors que vous aviez des modifications non enregistrées. Rien n’a été écrasé.<span class="cf-b"><button data-ca="cfkeep">Recréer le cahier avec ma version</button><button data-ca="cfrel">Le supprimer aussi ici</button></span>'
+  :'<b>⚠ Conflit d’enregistrement</b> : le cahier « '+esc(c.nom)+' » a été <b>modifié dans un autre onglet</b> alors que vous aviez des modifications non enregistrées. <b>Rien n’a été écrasé</b> ; vos modifications ne sont pas encore enregistrées.<span class="cf-b"><button data-ca="cfcmp">Comparer</button><button data-ca="cfrel">Recharger la version enregistrée</button><button data-ca="cfcopy">Garder mon travail dans une copie</button><button data-ca="cfkeep">Garder ma version (écraser l’autre)</button></span>'}
+async function cfAct(a){const id=($c('cahcf')||{dataset:{}}).dataset.id,c=S.list.find(x=>x.id===id);if(!c)return;let rec=null;try{rec=await readRec(id)}catch(e){}
+ const bak=async(tag,v)=>{try{await putBak(id+'@'+tag+'-'+Date.now(),v)}catch(e){}};
+ if(a==='cfcmp'){const o=rec&&normCah(rec,[]);await modal('Comparer les deux versions',o?diffHTML(diffCah(o,c),'Version enregistrée (autre onglet)','Ma version (non enregistrée)'):'<p>La version enregistrée n’existe plus.</p>',[['ok','Fermer','pri']],{esc:'ok'});return}
+ if(a==='cfrel'){if(!await conf('Recharger la version enregistrée ?','<p>Vos modifications non enregistrées de « <b>'+esc(c.nom)+'</b> » seront retirées de cet onglet. Une copie de sécurité de votre version est conservée dans les sauvegardes internes du cahier.</p>','Recharger'))return;await bak('local',clone(c));S.dirty.delete(id);S.conflict.delete(id);await refreshOne(id,'Version enregistrée rechargée');return}
+ if(a==='cfcopy'){const n=reid(clone(c));n.nom=(c.nom||'Cahier')+' (mon travail)';n.rev=0;n.pub={statut:'brouillon',version:0};S.list.push(n);S.dirty.add(n.id);S.ordDirty=true;S.dirty.delete(id);S.conflict.delete(id);await refreshOne(id);sched(0);toast('Votre travail est conservé dans « '+n.nom+' »');return}
+ if(a==='cfkeep'){if(!await conf('Écraser l’autre version ?','<p>Votre version de « <b>'+esc(c.nom)+'</b> » remplacera celle enregistrée dans l’autre onglet. Cette dernière est conservée dans les sauvegardes internes du cahier.</p>','Écraser'))return;if(rec)await bak('autre-onglet',rec);if(rec)S.base.set(id,rec.rev||0);else S.base.delete(id);S.conflict.delete(id);S.dirty.add(id);S.ordDirty=true;confBar();sched(0);toast('Votre version sera enregistrée')}}
 function touch(o){const c=cc();if(!c)return;c.modifLe=NOW();S.ver++;S.dirty.add(c.id);if(o&&o.ord)S.ordDirty=true;sched();clearTimeout(touch.p);touch.p=setTimeout(prev,120);clearTimeout(touch.h);touch.h=setTimeout(hsnap,o&&o.now?0:500);if(o&&o.now){clearTimeout(touch.h);hsnap()}}
 /* ---------- annuler / rétablir (historique propre au cahier courant) ---------- */
-const IMK=new Map(),IMR=[],imgKey=v=>{if(!IMK.has(v)){IMK.set(v,IMR.length);IMR.push(v)}return'\u0001'+IMK.get(v)},ser=c=>JSON.stringify(c,(k,v)=>k==='u'&&typeof v==='string'&&v.length>2000?imgKey(v):v),deser=s=>JSON.parse(s,(k,v)=>typeof v==='string'&&v.charCodeAt(0)===1?IMR[+v.slice(1)]:v);
+const IMK=new Map(),IMR=[],imgKey=v=>{if(!IMK.has(v)){IMK.set(v,IMR.length);IMR.push(v)}return'\u0001'+IMK.get(v)},ser=c=>JSON.stringify(c,(k,v)=>k==='rev'?undefined:k==='u'&&typeof v==='string'&&v.length>2000?imgKey(v):v),deser=s=>JSON.parse(s,(k,v)=>typeof v==='string'&&v.charCodeAt(0)===1?IMR[+v.slice(1)]:v);
 function hsnap(){const c=cc();if(!c)return;const s=ser(c);if(s===S.hist[S.hp])return;S.hist.splice(S.hp+1);S.hist.push(s);if(S.hist.length>40)S.hist.shift();S.hp=S.hist.length-1;hbtn()}
 function hreset(){S.hist=[];S.hp=-1;hsnap()}
-function hgo(d){clearTimeout(touch.h);hsnap();const n=S.hp+d;if(n<0||n>=S.hist.length){toast(d<0?'Rien à annuler':'Rien à rétablir');return}S.hp=n;const o=deser(S.hist[n]),i=S.list.findIndex(x=>x.id===o.id);if(i<0)return;S.list[i]=o;S.dirty.add(o.id);if(!ch())S.chap=(o.chapitres[0]||{}).id||null;sched();render();toast(d<0?'↶ Annulé':'↷ Rétabli')}
+function hgo(d){clearTimeout(touch.h);hsnap();const n=S.hp+d;if(n<0||n>=S.hist.length){toast(d<0?'Rien à annuler':'Rien à rétablir');return}S.hp=n;const o=deser(S.hist[n]),i=S.list.findIndex(x=>x.id===o.id);if(i<0)return;o.rev=S.list[i].rev||0;S.list[i]=o;S.dirty.add(o.id);if(!ch())S.chap=(o.chapitres[0]||{}).id||null;sched();render();toast(d<0?'↶ Annulé':'↷ Rétabli')}
 const hbtn=()=>{const u=$c('cahu'),r=$c('cahr');if(u)u.disabled=S.hp<1;if(r)r.disabled=S.hp>=S.hist.length-1};
 /* ---------- aperçu = document de l'élève ---------- */
 const colOf=(c,b)=>b.couleur||c.couleurs[b.type]||COL[b.type];
@@ -162,7 +209,7 @@ function editPane(){const c=cc(),h=ch(),e=$c('cahE');if(!e)return;
  if(!c){e.innerHTML='<div class="ce-empty"><h2>Votre cahier d’élève</h2><p>Construisez le cahier de mathématiques de la classe : un chapitre par notion, avec attendus, activité, cours, exercices, problème et évaluation.</p><p><button class="cbtn pri" data-ca="cnew">Créer mon cahier</button> <button class="cbtn" data-ca="cimp">Importer un cahier…</button></p></div>';return}
  if(!h){e.innerHTML='<div class="ce-empty"><p>Sélectionnez ou créez un chapitre.</p><p><button class="cbtn pri" data-ca="chnew">+ Chapitre</button></p></div>';return}
  e.innerHTML=toolbar()+linkBar(c,h)+'<div class="ce-h"><label>Titre du chapitre'+inp('data-ch="nom"',h.nom)+'</label><label>Sous-titre / référence (facultatif)'+inp('data-ch="ref"',h.ref,'Programme du cycle 4 – Nombres et calculs')+'</label></div><div class="ce-add" role="group" aria-label="Ajouter un bloc"><b>Ajouter un bloc :</b> '+Object.keys(T).map(k=>'<button class="cbtn" style="--bc:'+c.couleurs[k]+'" data-ca="badd" data-t="'+k+'">'+T[k].ico+' '+esc(T[k].n)+'</button>').join('')+'</div><div id="cahbl">'+h.blocs.map((b,i)=>blocForm(c,b,i,h.blocs.length)).join('')+'</div>'+(h.blocs.length?'':'<p class="cl-e">Ce chapitre est vide : ajoutez un premier bloc ci-dessus.</p>')}
-function render(){if(!S.open)return;listPane();editPane();prev();hbtn();stLine2();$c('cah').dataset.tab=S.tab;document.querySelectorAll('#cahtabs button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tab===S.tab)))}
+function render(){if(!S.open)return;listPane();editPane();prev();hbtn();stLine2();confBar();$c('cah').dataset.tab=S.tab;document.querySelectorAll('#cahtabs button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tab===S.tab)))}
 /* met à jour les libellés (liste de cahiers et de chapitres) sans reconstruire les panneaux : la saisie en cours n'est jamais interrompue */
 function labels(){const c=cc();if(!c)return;const o=$c('cahsel')&&$c('cahsel').querySelector('option[value="'+c.id+'"]');if(o)o.textContent=c.nom;
  c.chapitres.forEach((h,i)=>{const b=document.querySelector('#cahchl [data-ca=chsel][data-id="'+h.id+'"]');if(b){b.firstChild.textContent=(i+1)+'. '+h.nom+' ';b.title=h.nom}})}
@@ -242,7 +289,7 @@ const canon=o=>Array.isArray(o)?'['+o.map(canon).join(',')+']':isO(o)?'{'+Object
 const imgsIn=c=>{const L=[];c.chapitres.forEach(h=>h.blocs.forEach(b=>{b.imgs.forEach(m=>L.push(m.u));b.items.forEach(x=>x.imgs.forEach(m=>L.push(m.u)))}));return L};
 const stripU=c=>JSON.parse(JSON.stringify(c,(k,v)=>k==='u'&&typeof v==='string'?'':v));
 /* deux cahiers sont identiques si leur contenu l'est, clés dans n'importe quel ordre, images comparées octet par octet (comme la sauvegarde des préparations) */
-const sameCah=(a,b)=>{if(canon(stripU(a))!==canon(stripU(b)))return false;const x=imgsIn(a),y=imgsIn(b);return x.length===y.length&&x.every((u,i)=>typeof sameImg==='function'?sameImg(u,y[i]):u===y[i])};
+const sameCah=(a,b)=>{const sa=stripU(a),sb=stripU(b);delete sa.rev;delete sb.rev;/* le numéro de révision est une donnée de stockage, pas du contenu */if(canon(sa)!==canon(sb))return false;const x=imgsIn(a),y=imgsIn(b);return x.length===y.length&&x.every((u,i)=>typeof sameImg==='function'?sameImg(u,y[i]):u===y[i])};
 async function ensure(){if(!S.loaded)await load()}
 const backup={
  /* copie fidèle de tous les cahiers (modifications en attente comprises) */
@@ -286,13 +333,15 @@ body.dark #cah{--cb:#17212b}body.cah-open #toast{z-index:95}
 .cp-t{border-collapse:collapse;margin:4pt 0;width:auto;max-width:100%}.cp-t th,.cp-t td{border:1px solid #8a94a6;padding:3px 8px;text-align:center}.cp-t th{background:color-mix(in srgb,var(--bc,#1b365d) 14%,#fff);color:#222}.cp-tw{overflow-x:auto}
 .cp-q{margin:4pt 0 2pt}.cp-q b{color:var(--bc)}.cp-im{margin:4pt 0}.cp-im figure{margin:4pt auto}.cp-im .cp-fr{float:right;margin:0 0 4pt 10pt}.cp-im img{display:block;width:100%;height:auto}.cp-im figcaption{font-size:8.5pt;font-style:italic;text-align:center}
 .cp-co summary{cursor:pointer;font-weight:700;color:#4a5a73;font-size:9pt}.prt{display:none}
+/* conflits entre onglets */
+#cahcf{background:#fff3cd;color:#5c4400;border-bottom:2px solid #f0d98a;padding:8px 12px;font-size:13px}#cahcf[hidden]{display:none}#cahcf .cf-b{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.cmp ul{margin:2px 0 2px 16px}.cmp{margin:4px 0 4px 18px;padding:0}
 /* phase 3 */
 .ce-lk{display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--cb);border:1px solid var(--cl);border-radius:6px;padding:6px 10px;margin:6px 0;font-size:13px}.chip{display:inline-flex;gap:6px;align-items:center;background:#eef4f6;border:1px solid var(--cl);border-radius:14px;padding:2px 4px 2px 10px}.chip button{padding:2px 8px;border-radius:12px}body.dark .chip{background:#14202b}.cl-seq{width:100%;margin-top:6px}.cbk-bk{margin:6px 0}
-@media(max-width:1000px){.ce-tb button,.cbk-ig button,.cbk-im .cbtn{min-height:40px;min-width:40px}.chip button,.ce-lk .cbtn,.cl-seq{min-height:40px}#cahtabs{display:flex;background:var(--ink)}#cahtabs button{flex:1;border:0;border-radius:0;background:none;color:#cfd9e2;padding:12px 4px;min-height:44px}#cahtabs button[aria-pressed=true]{background:var(--acc);color:#fff}#cahbody{display:block;overflow:auto}#cahL,#cahE,#cahP{display:none;height:100%;border:0}#cah[data-tab=list] #cahL,#cah[data-tab=edit] #cahE,#cah[data-tab=prev] #cahP{display:block}.cp-page{padding:18px 16px}.cp-two{grid-template-columns:1fr}#cahbar button,#cah .cbtn{min-height:40px}.cbk-a button,.cl-a button{min-width:40px;min-height:40px}}
+@media(max-width:1000px){.ce-tb button,.cbk-ig button,.cbk-im .cbtn{min-height:40px;min-width:40px}.chip button,.ce-lk .cbtn,.cl-seq{min-height:40px}#cahcf button{min-height:40px}#cahtabs{display:flex;background:var(--ink)}#cahtabs button{flex:1;border:0;border-radius:0;background:none;color:#cfd9e2;padding:12px 4px;min-height:44px}#cahtabs button[aria-pressed=true]{background:var(--acc);color:#fff}#cahbody{display:block;overflow:auto}#cahL,#cahE,#cahP{display:none;height:100%;border:0}#cah[data-tab=list] #cahL,#cah[data-tab=edit] #cahE,#cah[data-tab=prev] #cahP{display:block}.cp-page{padding:18px 16px}.cp-two{grid-template-columns:1fr}#cahbar button,#cah .cbtn{min-height:40px}.cbk-a button,.cl-a button{min-width:40px;min-height:40px}}
 @media print{.scr{display:none!important}.prt{display:block!important}.cp-im{break-inside:avoid}body.cah-open>*:not(#cah){display:none!important}body.cah-open #cah{position:static;display:block;background:#fff}#cahbar,#cahtabs,#cahL,#cahE,.cp-bar{display:none!important}#cahbody{display:block}#cahP{overflow:visible;padding:0;display:block!important}.cp-page{box-shadow:none;max-width:none;padding:0;min-height:0}.cp-page,.cp-page *{-webkit-print-color-adjust:exact;print-color-adjust:exact}.cp-pb{break-before:page;page-break-before:always;border-top:0}.cp-ch+.cp-ch{break-before:page}}`;
 function build(){if($c('cah'))return;const st=document.createElement('style');st.id='cahcss';st.textContent=CSS;document.head.append(st);
  const el=document.createElement('div');el.id='cah';el.hidden=true;el.setAttribute('role','dialog');el.setAttribute('aria-label','Cahier de l’élève');
- el.innerHTML='<header id="cahbar"><button data-ca="close" aria-label="Retour aux préparations">← Préparations</button><strong>📚 Cahier de l’élève</strong><select id="cahsel" aria-label="Choisir un cahier"></select><button data-ca="cnew">+ Cahier</button><button data-ca="cdup">Dupliquer</button><button data-ca="cdel">Supprimer</button><button data-ca="cexp">Exporter</button><button data-ca="cimp">Importer</button><button data-ca="print">🖨 Imprimer / PDF</button><button id="cahu" data-ca="hundo" aria-label="Annuler">↶</button><button id="cahr" data-ca="hredo" aria-label="Rétablir">↷</button><button id="cahun" data-ca="cundo" hidden></button><span id="cahst" role="status" aria-live="polite"></span></header><nav id="cahtabs" aria-label="Volets"><button data-ca="tab" data-tab="list">Chapitres</button><button data-ca="tab" data-tab="edit">Édition</button><button data-ca="tab" data-tab="prev">Aperçu</button></nav><div id="cahbody"><aside id="cahL" aria-label="Chapitres"></aside><section id="cahE" aria-label="Éditeur"></section><section id="cahP" aria-label="Aperçu du cahier"></section></div><input type="file" id="cahf" accept=".json,application/json" hidden><input type="file" id="cahimg" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>';
+ el.innerHTML='<header id="cahbar"><button data-ca="close" aria-label="Retour aux préparations">← Préparations</button><strong>📚 Cahier de l’élève</strong><select id="cahsel" aria-label="Choisir un cahier"></select><button data-ca="cnew">+ Cahier</button><button data-ca="cdup">Dupliquer</button><button data-ca="cdel">Supprimer</button><button data-ca="cexp">Exporter</button><button data-ca="cimp">Importer</button><button data-ca="print">🖨 Imprimer / PDF</button><button id="cahu" data-ca="hundo" aria-label="Annuler">↶</button><button id="cahr" data-ca="hredo" aria-label="Rétablir">↷</button><button id="cahun" data-ca="cundo" hidden></button><span id="cahst" role="status" aria-live="polite"></span></header><div id="cahcf" role="alert" hidden></div><nav id="cahtabs" aria-label="Volets"><button data-ca="tab" data-tab="list">Chapitres</button><button data-ca="tab" data-tab="edit">Édition</button><button data-ca="tab" data-tab="prev">Aperçu</button></nav><div id="cahbody"><aside id="cahL" aria-label="Chapitres"></aside><section id="cahE" aria-label="Éditeur"></section><section id="cahP" aria-label="Aperçu du cahier"></section></div><input type="file" id="cahf" accept=".json,application/json" hidden><input type="file" id="cahimg" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>';
  document.body.append(el);
  el.addEventListener('click',onClick);el.addEventListener('input',onInput);el.addEventListener('change',e=>{if(e.target.id==='cahsel')selCah(e.target.value);else if(e.target.id==='cahimg'){const g=S.imgT,fs=[...e.target.files];e.target.value='';if(g)fs.reduce((p,f)=>p.then(()=>addImgFile(f,g.b,g.i)),Promise.resolve())}else if(e.target.id==='cahf'){const f=e.target.files[0];e.target.value='';impFile(f)}else if(e.target.dataset.ca==='mode'){S.mode=e.target.value;prev()}else if(e.target.matches('select,[type=checkbox],[type=color]')&&!e.target.dataset.ca)onInput(e)});
  el.addEventListener('focusin',e=>{if(e.target.tagName==='TEXTAREA')LAST=e.target});el.addEventListener('mousedown',e=>{if(e.target.closest('.ce-tb button'))e.preventDefault()});
@@ -311,6 +360,7 @@ function onClick(e){const b=e.target.closest('[data-ca]');if(!b||b.disabled)retu
   case'bup':case'bdn':case'bdup':case'bdel':blAct(a,id);break;case'fmt':fmtIns(b.dataset.m);break;case'kbd':kbdIns(+b.dataset.i);break;case'imgadd':S.imgT={b:b.dataset.b,i:b.dataset.it||''};$c('cahimg').click();break;case'imgup':case'imgdn':case'imgdel':imgAct(a,b.dataset.b,b.dataset.it||'',id);break;case'exnew':blAct(a,id);break;case'exup':case'exdn':case'exdel':blAct(a,b.dataset.b,id);break;
   case'lkpick':useL(L=>L.pick(ch()));break;case'lkimp':useL(L=>L.importFrom(ch(),id));break;case'chseq':useL(L=>L.newFromSeq());break;case'bkpick':useL(L=>L.bank(ch(),b.dataset.b||''));break;
   case'lkrm':{const h=ch();if(h){h.seqIds=h.seqIds.filter(x=>x!==id);touch({now:1});render()}break}
+  case'cfcmp':case'cfrel':case'cfcopy':case'cfkeep':cfAct(a);break;
   case'colreset':{const c=cc();if(c){c.couleurs={...COL};touch({now:1});render()}break}}}
 async function open(){build();S.opener=document.activeElement;
  try{if(!S.loaded)await load()}catch(e){S.err=e;await info('Cahier indisponible','<p>Impossible d’ouvrir la base des cahiers : '+esc(errMsg(e))+'.</p><p>Vos préparations ne sont pas concernées.</p>');return}
@@ -328,5 +378,5 @@ addEventListener('beforeprint',()=>{if(!S.open)return;const c=cc();if(c)document
 addEventListener('beforeunload',()=>{if(S.db&&(S.dirty.size||S.del.size))flush()});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flush()});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-a="cahier"]');if(b){e.preventDefault();open()}});
-window.CAH={S,backup,rich,addImgFile,imgList,loadL:()=>lz(),api:{mkBloc,mkEx,mkChap,touch,render,cc,ch,LIM,T,COL,CALLR:()=>CALL,rich,hsnap},open,close,flush,cc,ch,normCah,parseImp,reid,T,SCH,FMT,load:()=>load(),render};
+window.CAH={S,diffCah,backup,rich,addImgFile,imgList,loadL:()=>lz(),api:{mkBloc,mkEx,mkChap,touch,render,cc,ch,LIM,T,COL,CALLR:()=>CALL,rich,hsnap},open,close,flush,cc,ch,normCah,parseImp,reid,T,SCH,FMT,load:()=>load(),render};
 })();
